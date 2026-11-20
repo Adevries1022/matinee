@@ -5,8 +5,8 @@
     <field id="closed" type="boolean" onChange="onClosed" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
-  <script type="text/brightscript" uri="PlayerScreen.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <script type="text/brightscript" uri="PlayerScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
     <Rectangle width="1920" height="1080" color="0x000000FF" />
     <Video id="video" width="1920" height="1080" />

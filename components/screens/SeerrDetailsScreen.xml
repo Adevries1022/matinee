@@ -6,8 +6,8 @@
     <field id="refresh" type="boolean" alwaysNotify="true" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
-  <script type="text/brightscript" uri="SeerrDetailsScreen.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <script type="text/brightscript" uri="SeerrDetailsScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
     <Poster id="backdrop" width="1920" height="1080" loadWidth="1920" loadHeight="1080" loadDisplayMode="scaleToZoom" opacity="0" />
     <Group id="shadeLayer" />

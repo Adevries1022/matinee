@@ -57,5 +57,8 @@ Music, Live TV, Collections rows.
 - `components/screens/`: the screens
 - `components/MainMenu.*`: the Side Rail and Top Bar
 - `components/CardItem.*`: the poster and thumbnail card
-- `components/util/Api.brs`: Theme tokens, Jellyfin and Seerr requests, shared drawing helpers
+- `components/util/Api.bs`: Theme tokens, Jellyfin and Seerr requests, shared drawing helpers
 - `CONTEXT.md` and `docs/adr/`: the project glossary and design decisions
+
+## Building from source
+The code is BrighterScript. With Node.js installed, run `npm ci` once, then `scripts/deploy.sh` to compile, package and sideload (or `scripts/deploy.sh --build-only` for just `dist/matinee.zip`). Copy `.env.example` to `.env` first.

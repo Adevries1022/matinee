@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
-# Build the Roku package and sideload it onto the TV.
-# Needs ROKU_IP and ROKU_DEV_PASSWORD in .env (see .env.example).
+# Compile the BrighterScript source, build the Roku package and sideload it onto the TV.
+# Needs Node.js, and ROKU_IP and ROKU_DEV_PASSWORD in .env (see .env.example).
+# Pass --build-only to compile and package without installing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-set -a; source .env; set +a
+
+[ -d node_modules ] || npm ci --no-audit --no-fund
+
+# Type-check, lint and transpile into build/. Errors stop the deploy.
+rm -rf build
+npx bsc
+
 mkdir -p dist
 rm -f dist/matinee.zip
-zip -r -X -q dist/matinee.zip manifest source components images
+(cd build && zip -r -X -q ../dist/matinee.zip .)
+echo "Built dist/matinee.zip"
+[ "${1:-}" = "--build-only" ] && exit 0
+
+set -a; source .env; set +a
 echo "Installing dist/matinee.zip on $ROKU_IP ..."
 curl -sS --fail --user "rokudev:${ROKU_DEV_PASSWORD}" --digest \
   -F "mysubmit=Install" -F "archive=@dist/matinee.zip" \

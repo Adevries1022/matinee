@@ -4,11 +4,11 @@ A Roku app (SceneGraph + BrightScript) for Jellyfin, with Seerr requests. It run
 
 ## Read first
 - `CONTEXT.md`: the glossary. Use its terms (Card, Focused, Hero, Row, Theme, Layout Add-on, Trailer Preview, etc.) in code, comments and conversation.
-- `docs/adr/`: decisions already made. ADR 0003 (BrighterScript) is deferred until package installs are available; this server can install them.
+- `docs/adr/`: decisions already made. ADR 0003: the code is BrighterScript (`.bs`), compiled by `bsc` into `build/`.
 - `README.md`: features and remote controls.
 
 ## Working loop
-- `scripts/deploy.sh` builds `dist/matinee.zip` and sideloads it onto the Roku (Developer Mode must stay on).
+- `scripts/deploy.sh` compiles with `bsc` (stopping on any error), builds `dist/matinee.zip` and sideloads it onto the Roku (Developer Mode must stay on).
 - `scripts/logs.sh` streams the Roku debug log. Matinee prints lines starting with `[Matinee]`.
 - `.env` holds the Roku IP and dev password, the Jellyfin URL and API key, and the Seerr URL. Never commit it or print secrets.
 - Query Jellyfin directly (with `X-Emby-Token: $JELLYFIN_API_KEY`) to check facts, such as whether a title has local trailers, instead of guessing.
@@ -16,7 +16,7 @@ A Roku app (SceneGraph + BrightScript) for Jellyfin, with Seerr requests. It run
 
 ## Conventions
 - Saved data lives in the registry section "Marquee" (the old working name) so existing sign-ins keep working. Don't rename it.
-- Every color, size and shape comes from the Theme tokens in `components/util/Api.brs` (`th()`). No hard-coded colors in screens.
+- Every color, size and shape comes from the Theme tokens in `components/util/Api.bs` (`th()`). No hard-coded colors in screens.
 - Network calls go through `apiRequest` / `seerrRequest` (render thread) and `ApiTask` (task thread). Never use roUrlTransfer on the render thread.
 - Avoid BrightScript reserved words as variable names (pos, type, step, next, stop, box, dim, run, tab).
 - Update `CONTEXT.md` when a term changes, and add an ADR only for hard-to-reverse, surprising trade-offs.

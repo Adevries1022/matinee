@@ -5,9 +5,9 @@
     <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
-  <script type="text/brightscript" uri="SettingsScreen.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.brs" />
+  <script type="text/brightscript" uri="SettingsScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
   <children>
     <Group id="page" />
   </children>

@@ -43,7 +43,7 @@ sub showSignIn()
     m.signInBox.removeChildrenIndex(m.signInBox.getChildCount(), 0)
     m.signInBox.translation = [t.leftPad, 380]
     m.signInBox.visible = true
-    title = makeLabel(m.signInBox, "Request movies and shows", 56, true, t.text)
+    makeLabel(m.signInBox, "Request movies and shows", 56, true, t.text)
     body = makeLabel(m.signInBox, "Sign in to Seerr once with a Quick Connect code, and you can browse what's trending and ask for anything that isn't in the library yet.", 30, false, t.textDim)
     body.translation = [0, 90]
     body.width = 1100
@@ -94,7 +94,6 @@ sub onRow(event as object)
 end sub
 
 sub build()
-    t = th()
     root = CreateObject("roSGNode", "ContentNode")
     sizes = []
     heights = []

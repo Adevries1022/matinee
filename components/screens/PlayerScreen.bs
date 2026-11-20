@@ -548,7 +548,7 @@ sub showUpNext()
     g = m.upNext
     g.removeChildrenIndex(g.getChildCount(), 0)
     g.translation = [1200, 700]
-    bg = makeShape(g, t.fillUri, 640, 290, "0x0B0B0FFF", 0.94)
+    makeShape(g, t.fillUri, 640, 290, "0x0B0B0FFF", 0.94)
     bar = makeShape(g, t.fillUri, 8, 230, t.accent, 1.0)
     bar.translation = [24, 30]
     l1 = makeLabel(g, "UP NEXT", 24, true, t.accent)

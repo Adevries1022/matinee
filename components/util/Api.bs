@@ -48,7 +48,7 @@ sub startRequest(base as string, path as string, query as object, callback as st
     if m.apiTasks.Count() > 48 then m.apiTasks.Shift()
 end sub
 
-sub onIgnore(event as object)
+sub onIgnore(_event as object)
 end sub
 
 ' ================= Values =================
@@ -591,7 +591,7 @@ end function
 
 ' A round avatar: colored circle with an initial, the User's picture on
 ' top if they have one, and a mask that rounds the corners.
-function makeAvatar(userId as string, name as string, imageTag as string, size as integer, symbol = "" as string) as object
+function makeAvatar(userId as string, name as string, avatarTag as string, size as integer, symbol = "" as string) as object
     g = CreateObject("roSGNode", "Group")
     bg = g.CreateChild("Rectangle")
     bg.width = size
@@ -610,14 +610,14 @@ function makeAvatar(userId as string, name as string, imageTag as string, size a
     else
         initial.text = UCase(Left(name, 1))
     end if
-    if userId <> "" and imageTag <> ""
+    if userId <> "" and avatarTag <> ""
         pic = g.CreateChild("Poster")
         pic.width = size
         pic.height = size
         pic.loadWidth = size
         pic.loadHeight = size
         pic.loadDisplayMode = "scaleToZoom"
-        pic.uri = m.global.serverUrl + "/Users/" + userId + "/Images/Primary?tag=" + imageTag + "&fillWidth=" + size.ToStr() + "&fillHeight=" + size.ToStr() + "&quality=90"
+        pic.uri = m.global.serverUrl + "/Users/" + userId + "/Images/Primary?tag=" + avatarTag + "&fillWidth=" + size.ToStr() + "&fillHeight=" + size.ToStr() + "&quality=90"
     end if
     mask = g.CreateChild("Poster")
     mask.width = size

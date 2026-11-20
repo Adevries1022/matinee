@@ -1,0 +1,13 @@
+{
+  "name": "matinee",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "build": "bsc",
+    "lint": "bslint"
+  },
+  "devDependencies": {
+    "@rokucommunity/bslint": "0.8.47",
+    "brighterscript": "0.73.8"
+  }
+}

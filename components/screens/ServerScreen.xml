@@ -5,8 +5,8 @@
     <field id="message" type="string" onChange="onMessage" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
-  <script type="text/brightscript" uri="ServerScreen.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <script type="text/brightscript" uri="ServerScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
     <Label id="brand" text="MATINEE" translation="[96,70]" color="0xE8A33DFF">
       <Font role="font" uri="font:BoldSystemFontFile" size="44" />
