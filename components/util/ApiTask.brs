@@ -1,0 +1,115 @@
+' Runs one HTTP request against the Jellyfin server off the render thread.
+sub init()
+    m.top.functionName = "execute"
+end sub
+
+sub execute()
+    req = m.top.request
+    result = { ok: false, code: 0, data: invalid, error: "", tag: req.tag, cookie: "" }
+
+    xfer = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    xfer.SetMessagePort(port)
+
+    url = req.server + req.path
+    q = req.query
+    if q <> invalid
+        if q.Count() > 0
+            parts = []
+            for each k in q
+                parts.Push(xfer.Escape(k) + "=" + xfer.Escape(toStr(q[k])))
+            end for
+            url = url + "?" + parts.Join("&")
+        end if
+    end if
+
+    xfer.SetUrl(url)
+    if LCase(Left(url, 5)) = "https"
+        xfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        xfer.InitClientCertificates()
+        ' Home servers often use self-signed certificates.
+        xfer.EnablePeerVerification(false)
+        xfer.EnableHostVerification(false)
+    end if
+    xfer.AddHeader("Accept", "application/json")
+    xfer.AddHeader("Content-Type", "application/json")
+    if req.auth <> invalid
+        if req.auth <> "" then xfer.AddHeader("Authorization", req.auth)
+    end if
+    extra = req.headers
+    if extra <> invalid
+        for each k in extra
+            xfer.AddHeader(k, toStr(extra[k]))
+        end for
+    end if
+    xfer.RetainBodyOnError(true)
+
+    method = UCase(req.method)
+    started = false
+    if method = "GET"
+        started = xfer.AsyncGetToString()
+    else if method = "DELETE"
+        xfer.SetRequest("DELETE")
+        started = xfer.AsyncGetToString()
+    else
+        if method <> "POST" then xfer.SetRequest(method)
+        body = req.bodyJson
+        if body = invalid then body = ""
+        started = xfer.AsyncPostFromString(body)
+    end if
+
+    if not started
+        result.error = "request did not start"
+        m.top.response = result
+        return
+    end if
+
+    msg = wait(20000, port)
+    if type(msg) = "roUrlEvent"
+        code = msg.GetResponseCode()
+        result.code = code
+        result.cookie = readCookies(msg)
+        text = msg.GetString()
+        if code >= 200 and code < 300
+            result.ok = true
+            if text <> invalid
+                if text <> "" then result.data = ParseJson(text)
+            end if
+        else
+            result.error = msg.GetFailureReason()
+        end if
+    else
+        xfer.AsyncCancel()
+        result.error = "timeout"
+    end if
+    m.top.response = result
+end sub
+
+function toStr(v as dynamic) as string
+    t = type(v)
+    if t = "String" or t = "roString" then return v
+    if t = "Boolean" or t = "roBoolean"
+        if v then return "true"
+        return "false"
+    end if
+    if t = "Invalid" or t = "roInvalid" or t = "<uninitialized>" then return ""
+    return v.ToStr()
+end function
+
+' Collect "name=value" pairs from any Set-Cookie headers (Seerr sessions).
+function readCookies(msg as object) as string
+    pairs = []
+    headers = msg.GetResponseHeadersArray()
+    if headers = invalid then return ""
+    for each h in headers
+        for each k in h
+            if LCase(k) = "set-cookie"
+                v = toStr(h[k])
+                semi = Instr(1, v, ";")
+                if semi > 0 then v = Left(v, semi - 1)
+                if v <> "" then pairs.Push(v)
+            end if
+        end for
+    end for
+    return pairs.Join("; ")
+end function

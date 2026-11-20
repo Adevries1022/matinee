@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Search: keyboard on the left, a grid of results on the right
+     (library first, then "Not in your library"), and an Info Line. -->
+<component name="SearchScreen" extends="Group">
+  <interface>
+    <field id="refresh" type="boolean" alwaysNotify="true" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="SearchScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.brs" />
+  <children>
+    <Label id="heading" text="Search">
+      <Font role="font" uri="font:BoldSystemFontFile" size="56" />
+    </Label>
+    <MiniKeyboard id="kb" />
+    <MarkupGrid
+      id="grid"
+      itemComponentName="CardItem"
+      drawFocusFeedback="false"
+      vertFocusAnimationStyle="floatingFocus"
+      numRows="2" />
+    <Label id="empty" width="1100" wrap="true" visible="false">
+      <Font role="font" uri="font:SystemFontFile" size="30" />
+    </Label>
+    <Label id="infoTitle" width="1100">
+      <Font role="font" uri="font:BoldSystemFontFile" size="30" />
+    </Label>
+    <Label id="infoMeta" width="1100">
+      <Font role="font" uri="font:SystemFontFile" size="24" />
+    </Label>
+    <Timer id="debounce" duration="0.5" repeat="false" />
+  </children>
+</component>

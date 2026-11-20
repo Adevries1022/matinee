@@ -1,0 +1,197 @@
+sub init()
+    m.layer = m.top.findNode("layer")
+    m.index = 0
+    m.nodes = []
+    m.isRail = (th().navStyle = "rail")
+    m.blur = invalid
+    m.top.observeField("focusedChild", "onFocusChanged")
+end sub
+
+sub build()
+    t = th()
+    m.isRail = (t.navStyle = "rail")
+    m.layer.removeChildrenIndex(m.layer.getChildCount(), 0)
+    m.nodes = []
+    if m.isRail
+        buildRail(t)
+    else
+        buildTop(t)
+    end if
+    paint()
+end sub
+
+' ---------- Side Rail ----------
+
+sub buildRail(t as object)
+    ' Always-visible strip behind the icons.
+    strip = m.layer.CreateChild("Poster")
+    strip.uri = "pkg:/images/grad_left.png"
+    strip.width = 300
+    strip.height = 1080
+    strip.loadDisplayMode = "scaleToFill"
+    strip.blendColor = t.bg
+    strip.opacity = 0.92
+
+    ' Expanded panel, shown when the menu is open.
+    m.panel = m.layer.CreateChild("Group")
+    veil = m.panel.CreateChild("Rectangle")
+    veil.width = 1920
+    veil.height = 1080
+    veil.color = t.bg
+    veil.opacity = 0.55
+    clip = m.panel.CreateChild("Group")
+    clip.clippingRect = [0, 0, 460, 1080]
+    if t.frosted
+        m.blur = clip.CreateChild("Poster")
+        m.blur.width = 1920
+        m.blur.height = 1080
+        m.blur.loadWidth = 480
+        m.blur.loadHeight = 270
+        m.blur.loadDisplayMode = "scaleToZoom"
+        m.blur.uri = blurredUrl(m.top.backdropUri)
+    end if
+    tint = clip.CreateChild("Rectangle")
+    tint.width = 460
+    tint.height = 1080
+    tint.color = t.bg
+    tint.opacity = 0.62
+    if not t.frosted then tint.opacity = 0.97
+    edge = m.panel.CreateChild("Rectangle")
+    edge.translation = [459, 0]
+    edge.width = 1
+    edge.height = 1080
+    edge.color = "0xFFFFFF22"
+    m.highlight = makeShape(m.panel, t.pillUri, 396, 84, "0xFFFFFFFF", 1.0)
+
+    m.brandM = makeLabel(m.layer, "M", 52, true, t.accent)
+    m.brandM.translation = [44, 56]
+    m.brandFull = makeLabel(m.panel, "MATINEE", 52, true, t.accent)
+    m.brandFull.translation = [44, 56]
+
+    items = m.top.items
+    if items = invalid then items = []
+    for i = 0 to items.Count() - 1
+        it = items[i]
+        y = 210 + i * 100
+        icon = m.layer.CreateChild("Poster")
+        icon.uri = "pkg:/images/icon_" + it.icon + ".png"
+        icon.width = 60
+        icon.height = 60
+        icon.translation = [40, y]
+        lbl = makeLabel(m.panel, it.label, 34, true, t.text)
+        lbl.translation = [124, y]
+        lbl.height = 60
+        lbl.width = 300
+        lbl.vertAlign = "center"
+        m.nodes.Push({ icon: icon, label: lbl, y: y })
+    end for
+    m.panel.visible = false
+end sub
+
+' ---------- Top Bar ----------
+
+sub buildTop(t as object)
+    row = m.layer.CreateChild("LayoutGroup")
+    row.translation = [96, 56]
+    row.layoutDirection = "horiz"
+    row.itemSpacings = [52]
+    row.vertAlignment = "center"
+    brand = makeLabel(row, "MATINEE", 38, true, t.accent)
+    items = m.top.items
+    if items = invalid then items = []
+    for each it in items
+        lbl = makeLabel(row, it.label, 32, true, t.textFaint)
+        m.nodes.Push({ icon: invalid, label: lbl, y: 0 })
+    end for
+end sub
+
+' ---------- State ----------
+
+function keyIndex(key as string) as integer
+    items = m.top.items
+    if items = invalid then return 0
+    for i = 0 to items.Count() - 1
+        if items[i].key = key then return i
+    end for
+    return 0
+end function
+
+sub onOpen()
+    if m.top.open then m.index = keyIndex(m.top.currentKey)
+    if m.isRail and m.panel <> invalid
+        m.panel.visible = m.top.open
+        m.brandM.visible = not m.top.open
+    end if
+    paint()
+end sub
+
+sub onBackdrop()
+    if m.blur <> invalid then m.blur.uri = blurredUrl(m.top.backdropUri)
+end sub
+
+sub paint()
+    t = th()
+    items = m.top.items
+    if items = invalid then return
+    cur = keyIndex(m.top.currentKey)
+    isOpen = m.top.open
+    for i = 0 to m.nodes.Count() - 1
+        n = m.nodes[i]
+        focused = isOpen and i = m.index
+        if m.isRail
+            if focused
+                n.icon.blendColor = "0x0B0B0FFF"
+                n.label.color = "0x0B0B0FFF"
+            else if i = cur
+                n.icon.blendColor = t.accent
+                n.label.color = t.accent
+            else
+                n.icon.blendColor = t.textDim
+                n.label.color = t.text
+            end if
+        else
+            if focused
+                n.label.color = t.accent
+            else if i = cur
+                n.label.color = t.text
+            else
+                n.label.color = t.textFaint
+            end if
+        end if
+    end for
+    if m.isRail and m.highlight <> invalid and m.nodes.Count() > 0
+        m.highlight.translation = [20, m.nodes[m.index].y - 12]
+    end if
+end sub
+
+sub onFocusChanged()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press or not m.top.open then return false
+    count = m.nodes.Count()
+    prevKey = "up"
+    nextKey = "down"
+    closeKey = "right"
+    if not m.isRail
+        prevKey = "left"
+        nextKey = "right"
+        closeKey = "down"
+    end if
+    if key = prevKey
+        if m.index > 0 then m.index = m.index - 1
+        paint()
+        return true
+    else if key = nextKey
+        if m.index < count - 1 then m.index = m.index + 1
+        paint()
+        return true
+    else if key = "OK"
+        if count > 0 then m.top.chosen = m.top.items[m.index].key
+        return true
+    else if key = closeKey or key = "back"
+        m.top.closeRequested = true
+        return true
+    end if
+    return true
+end function

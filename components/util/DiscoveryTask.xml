@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Finds Jellyfin servers on the home network (Server Discovery). -->
+<component name="DiscoveryTask" extends="Task">
+  <interface>
+    <field id="servers" type="array" />
+  </interface>
+  <script type="text/brightscript" uri="DiscoveryTask.brs" />
+</component>

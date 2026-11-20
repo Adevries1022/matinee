@@ -1,0 +1,94 @@
+sub init()
+    m.titleLabel = m.top.findNode("titleLabel")
+    m.hintLabel = m.top.findNode("hintLabel")
+    m.kb = m.top.findNode("kb")
+    m.btn = m.top.findNode("btn")
+    m.btnRect = m.top.findNode("btnRect")
+    m.btnLabel = m.top.findNode("btnLabel")
+
+    m.kb.textEditBox.maxTextLength = 200
+    m.onButton = false
+
+    ' Place the keyboard in the middle and the button under it, using the
+    ' keyboard's real size so the two can never overlap.
+    kbW = 1100
+    kbH = 480
+    br = m.kb.boundingRect()
+    if br <> invalid
+        if br.width > 200 then kbW = br.width
+        if br.height > 200 then kbH = br.height
+    end if
+    top = 250
+    m.kb.translation = [Int((1920 - kbW) / 2), top]
+    btnY = top + kbH + 36
+    if btnY > 920 then btnY = 920
+    m.btn.translation = [Int((1920 - 440) / 2), btnY]
+
+    applyLabels()
+    paint()
+    m.top.observeField("focusedChild", "onFocusChanged")
+end sub
+
+sub applyLabels()
+    m.titleLabel.text = m.top.title
+    m.hintLabel.text = m.top.hint
+    m.btnLabel.text = m.top.buttonText
+end sub
+
+sub applyText()
+    t = m.top.text
+    m.kb.text = t
+    m.kb.textEditBox.cursorPosition = Len(t)
+end sub
+
+sub applySecure()
+    m.kb.textEditBox.secureMode = m.top.secure
+end sub
+
+sub paint()
+    if m.onButton
+        m.btnRect.color = "0xFFFFFFFF"
+        m.btnLabel.color = "0x0B0B0FFF"
+    else
+        m.btnRect.color = "0xFFFFFF2E"
+        m.btnLabel.color = "0xFFFFFFFF"
+    end if
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus()
+        if not m.onButton then m.kb.setFocus(true)
+    end if
+end sub
+
+sub submit()
+    m.top.submitted = m.kb.text
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "play"
+        submit()
+        return true
+    else if key = "back"
+        m.top.cancelled = true
+        return true
+    end if
+    if m.onButton
+        if key = "OK"
+            submit()
+        else if key = "up"
+            m.onButton = false
+            paint()
+            m.kb.setFocus(true)
+        end if
+        return true
+    end if
+    if key = "down"
+        m.onButton = true
+        paint()
+        m.top.setFocus(true)
+        return true
+    end if
+    return false
+end function

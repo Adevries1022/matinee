@@ -1,0 +1,642 @@
+' Plays a title, reports progress to Jellyfin, offers the next episode,
+' and has a Track Picker (press *) for audio and subtitles.
+sub init()
+    m.video = m.top.findNode("video")
+    m.status = m.top.findNode("status")
+    m.hint = m.top.findNode("hint")
+    m.upNext = m.top.findNode("upNext")
+    m.picker = m.top.findNode("picker")
+    m.countdown = m.top.findNode("countdown")
+    m.hintTimer = m.top.findNode("hintTimer")
+
+    m.video.notificationInterval = 2
+    m.video.observeField("state", "onState")
+    m.video.observeField("position", "onPosition")
+    m.video.observeField("availableAudioTracks", "onAudioTracks")
+    m.countdown.observeField("fire", "onTick")
+    m.hintTimer.observeField("fire", "hideHint")
+    m.top.observeField("focusedChild", "onFocusChanged")
+
+    m.di = CreateObject("roDeviceInfo")
+    m.started = false
+    m.stopped = false
+    m.nextEp = invalid
+    m.pickerOpen = false
+    m.audioStreams = []
+    m.subStreams = []
+    m.playMethod = ""
+    m.audioIndex = -1
+    m.subIndex = -1
+    m.mediaSourceId = ""
+    m.playSessionId = ""
+    m.item = invalid
+end sub
+
+' ---------- Starting playback ----------
+
+sub start()
+    p = m.top.playItem
+    if p = invalid then return
+    if not isValid(p.itemId) then return
+    m.itemId = p.itemId
+    m.startSeconds = 0
+    if isValid(p.startSeconds) then m.startSeconds = p.startSeconds
+    ' A restart (after changing tracks) asks for specific streams.
+    m.wantAudio = invalid
+    m.wantSub = invalid
+    if isValid(p.audioIndex) then m.wantAudio = p.audioIndex
+    if isValid(p.subIndex) then m.wantSub = p.subIndex
+    m.isRestart = isTrue(p.restart)
+    m.secondPass = false
+    m.started = false
+    m.stopped = false
+    m.lastReport = 0
+    if not m.isRestart then m.nextEp = invalid
+    m.upNextShown = false
+    m.upNextCancelled = false
+    m.upNext.visible = false
+    closePicker()
+    m.countdown.control = "stop"
+    m.status.text = "Loading..."
+    m.status.visible = true
+    if m.isRestart
+        requestPlayback()
+    else
+        apiRequest("/Items/" + m.itemId, { "userId": m.global.userId }, "onItem")
+    end if
+end sub
+
+sub onItem(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data)
+        m.status.text = "Couldn't load this title (error " + res.code.ToStr() + ")."
+        return
+    end if
+    m.item = res.data
+    if safeStr(m.item.Type) = "Episode" and isValid(m.item.SeriesId)
+        apiRequest("/Shows/" + safeStr(m.item.SeriesId) + "/Episodes", { "userId": m.global.userId, "startItemId": m.itemId, "Limit": "3", "EnableTotalRecordCount": "false" }, "onNextEp")
+    end if
+    requestPlayback()
+end sub
+
+sub requestPlayback()
+    query = { "userId": m.global.userId, "IsPlayback": "true", "AutoOpenLiveStream": "true", "MaxStreamingBitrate": "40000000" }
+    if m.wantAudio <> invalid then query["AudioStreamIndex"] = m.wantAudio.ToStr()
+    if m.wantSub <> invalid then query["SubtitleStreamIndex"] = m.wantSub.ToStr()
+    if m.startSeconds > 0 then query["StartTimeTicks"] = (Int(m.startSeconds) * 10000000&).ToStr()
+    apiRequest("/Items/" + m.itemId + "/PlaybackInfo", query, "onPlaybackInfo", "POST", { "DeviceProfile": deviceProfile() })
+end sub
+
+sub onNextEp(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    items = res.data.Items
+    if not isValid(items) then return
+    for i = 0 to items.Count() - 2
+        if safeStr(items[i].Id) = m.itemId then m.nextEp = items[i + 1]
+    end for
+end sub
+
+' Tell Jellyfin what this Roku can play, so it direct-plays when possible
+' and only transcodes when it has to.
+function deviceProfile() as object
+    vc = "h264"
+    if m.di.CanDecodeVideo({ codec: "hevc" }).result = true then vc = vc + ",hevc"
+    if m.di.CanDecodeVideo({ codec: "vp9" }).result = true then vc = vc + ",vp9"
+    ac = "aac,mp3"
+    hasAc3 = false
+    for each a in ["ac3", "eac3", "flac", "opus"]
+        if m.di.CanDecodeAudio({ codec: a }).result = true
+            ac = ac + "," + a
+            if a = "ac3" then hasAc3 = true
+        end if
+    end for
+    tAudio = "aac"
+    tChannels = "2"
+    if hasAc3
+        tAudio = "ac3,aac"
+        tChannels = "6"
+    end if
+    subs = []
+    for each f in ["vtt", "srt", "subrip", "ass", "ssa", "mov_text"]
+        subs.Push({ "Format": f, "Method": "External" })
+    end for
+    ' Picture-based subtitles can't be drawn by the Roku: burn them in.
+    for each f in ["pgssub", "pgs", "dvdsub", "dvbsub", "vobsub"]
+        subs.Push({ "Format": f, "Method": "Encode" })
+    end for
+    return {
+        "MaxStreamingBitrate": 40000000,
+        "MaxStaticBitrate": 100000000,
+        "MusicStreamingTranscodingBitrate": 192000,
+        "DirectPlayProfiles": [{ "Container": "mp4,m4v,mov,mkv", "Type": "Video", "VideoCodec": vc, "AudioCodec": ac }],
+        "TranscodingProfiles": [{ "Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": tAudio, "Context": "Streaming", "Protocol": "hls", "MaxAudioChannels": tChannels, "MinSegments": 1, "BreakOnNonKeyFrames": true }],
+        "ContainerProfiles": [],
+        "CodecProfiles": [],
+        "SubtitleProfiles": subs
+    }
+end function
+
+sub onPlaybackInfo(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data)
+        m.status.text = "Jellyfin couldn't start playback (error " + res.code.ToStr() + ")."
+        return
+    end if
+    data = res.data
+    if isValid(data.ErrorCode)
+        m.status.text = "Jellyfin couldn't start playback: " + safeStr(data.ErrorCode)
+        return
+    end if
+    if not isValid(data.MediaSources)
+        m.status.text = "This title has no playable files."
+        return
+    end if
+    if data.MediaSources.Count() = 0
+        m.status.text = "This title has no playable files."
+        return
+    end if
+
+    ms = data.MediaSources[0]
+    readStreams(ms)
+
+    ' First time through: pick tracks from the User's Jellyfin settings,
+    ' or from what they chose earlier in this binge.
+    if not m.isRestart and not m.secondPass
+        chooseTracks(ms)
+        needsServer = false
+        if not isTrue(ms.SupportsDirectPlay) and m.audioIndex <> safeInt(ms.DefaultAudioStreamIndex) then needsServer = true
+        if isImageSub(m.subIndex) then needsServer = true
+        if needsServer
+            m.secondPass = true
+            m.wantAudio = m.audioIndex
+            m.wantSub = m.subIndex
+            requestPlayback()
+            return
+        end if
+    else if m.isRestart
+        if m.wantAudio <> invalid then m.audioIndex = m.wantAudio
+        if m.wantSub <> invalid then m.subIndex = m.wantSub
+    end if
+
+    m.playSessionId = safeStr(data.PlaySessionId)
+    m.mediaSourceId = safeStr(ms.Id)
+    server = m.global.serverUrl
+    token = m.global.token
+
+    content = CreateObject("roSGNode", "ContentNode")
+    if isTrue(ms.SupportsDirectPlay)
+        url = server + "/Videos/" + m.itemId + "/stream?static=true&MediaSourceId=" + m.mediaSourceId
+        url = url + "&PlaySessionId=" + m.playSessionId + "&api_key=" + token + "&ApiKey=" + token
+        fmt = LCase(safeStr(ms.Container))
+        comma = Instr(1, fmt, ",")
+        if comma > 0 then fmt = Left(fmt, comma - 1)
+        if fmt = "mov" or fmt = "m4v" then fmt = "mp4"
+        content.streamFormat = fmt
+        m.playMethod = "DirectPlay"
+    else if isValid(ms.TranscodingUrl)
+        url = server + safeStr(ms.TranscodingUrl)
+        lu = LCase(url)
+        if Instr(1, lu, "api_key=") = 0 and Instr(1, lu, "apikey=") = 0 then url = url + "&api_key=" + token
+        content.streamFormat = "hls"
+        m.playMethod = "Transcode"
+    else
+        m.status.text = "This file can't be played on your Roku."
+        return
+    end if
+
+    ' Text subtitles are sent as WebVTT files the Roku draws itself.
+    tracks = []
+    for each s in m.subStreams
+        if s.isText
+            tracks.Push({ Language: s.lang, TrackName: subUrl(s.index), Description: s.title })
+        end if
+    end for
+    content.SubtitleTracks = tracks
+
+    content.url = url
+    content.title = playTitle(m.item)
+    content.PlayStart = m.startSeconds
+    m.video.content = content
+    m.video.control = "play"
+    applySubtitle()
+    m.status.visible = false
+    m.started = true
+    if m.top.isInFocusChain() and not m.pickerOpen then m.video.setFocus(true)
+    apiRequest("/Sessions/Playing", {}, "onIgnore", "POST", progressBody(false))
+    showHint()
+end sub
+
+function subUrl(index as integer) as string
+    return m.global.serverUrl + "/Videos/" + m.itemId + "/" + m.mediaSourceId + "/Subtitles/" + index.ToStr() + "/0/Stream.vtt?api_key=" + m.global.token
+end function
+
+function playTitle(item as object) as string
+    if item = invalid then return ""
+    if safeStr(item.Type) = "Episode"
+        return safeStr(item.SeriesName) + "  " + Chr(8226) + "  " + episodeLabel(item)
+    end if
+    return safeStr(item.Name)
+end function
+
+' ---------- Tracks ----------
+
+sub readStreams(ms as object)
+    m.audioStreams = []
+    m.subStreams = []
+    if not isValid(ms.MediaStreams) then return
+    for each s in ms.MediaStreams
+        kind = safeStr(s.Type)
+        title = safeStr(s.DisplayTitle)
+        if title = "" then title = safeStr(s.Language)
+        if title = "" then title = "Track " + safeInt(s.Index).ToStr()
+        info = { index: safeInt(s.Index), lang: LCase(safeStr(s.Language)), title: title, isText: isTrue(s.IsTextSubtitleStream) }
+        if kind = "Audio" then m.audioStreams.Push(info)
+        if kind = "Subtitle" then m.subStreams.Push(info)
+    end for
+end sub
+
+function isImageSub(index as dynamic) as boolean
+    if index = invalid then return false
+    for each s in m.subStreams
+        if s.index = index then return not s.isText
+    end for
+    return false
+end function
+
+function findStream(list as object, index as dynamic) as object
+    if index = invalid then return invalid
+    for each s in list
+        if s.index = index then return s
+    end for
+    return invalid
+end function
+
+sub chooseTracks(ms as object)
+    m.audioIndex = -1
+    if isValid(ms.DefaultAudioStreamIndex) then m.audioIndex = safeInt(ms.DefaultAudioStreamIndex)
+    m.subIndex = -1
+    if isValid(ms.DefaultSubtitleStreamIndex) then m.subIndex = safeInt(ms.DefaultSubtitleStreamIndex)
+    tp = m.global.trackPrefs
+    if tp = invalid then return
+    if not isTrue(tp.set) then return
+    if safeStr(tp.audioLang) <> ""
+        for each s in m.audioStreams
+            if s.lang = tp.audioLang
+                m.audioIndex = s.index
+                exit for
+            end if
+        end for
+    end if
+    if isTrue(tp.subOff)
+        m.subIndex = -1
+    else if safeStr(tp.subLang) <> ""
+        for each s in m.subStreams
+            if s.lang = tp.subLang
+                m.subIndex = s.index
+                exit for
+            end if
+        end for
+    end if
+end sub
+
+' Show the chosen text subtitle, or none.
+sub applySubtitle()
+    s = findStream(m.subStreams, m.subIndex)
+    if s <> invalid
+        if s.isText
+            m.video.subtitleTrack = subUrl(s.index)
+            m.video.globalCaptionMode = "On"
+            return
+        end if
+    end if
+    m.video.globalCaptionMode = "Off"
+end sub
+
+' For direct play the Roku switches audio itself, matched by order.
+sub onAudioTracks()
+    if m.playMethod <> "DirectPlay" then return
+    selectRokuAudio()
+end sub
+
+sub selectRokuAudio()
+    tracks = m.video.availableAudioTracks
+    if tracks = invalid then return
+    trackPos = -1
+    for i = 0 to m.audioStreams.Count() - 1
+        if m.audioStreams[i].index = m.audioIndex then trackPos = i
+    end for
+    if trackPos >= 0 and trackPos < tracks.Count()
+        m.video.audioTrack = tracks[trackPos].Track
+    end if
+end sub
+
+' ---------- Track Picker ----------
+
+sub openPicker()
+    if not m.started then return
+    m.pickerRows = []
+    m.pickerRows.Push({ kind: "header", label: "Audio" })
+    for each s in m.audioStreams
+        m.pickerRows.Push({ kind: "audio", index: s.index, label: s.title })
+    end for
+    m.pickerRows.Push({ kind: "header", label: "Subtitles" })
+    m.pickerRows.Push({ kind: "sub", index: -1, label: "Off" })
+    for each s in m.subStreams
+        lbl = s.title
+        if not s.isText then lbl = lbl + "  (burned in)"
+        m.pickerRows.Push({ kind: "sub", index: s.index, label: lbl })
+    end for
+    m.pickIndex = 1
+    for i = 0 to m.pickerRows.Count() - 1
+        r = m.pickerRows[i]
+        if r.kind = "audio" and r.index = m.audioIndex then m.pickIndex = i
+    end for
+    m.pickerOpen = true
+    drawPicker()
+    m.picker.visible = true
+    m.top.setFocus(true)
+end sub
+
+sub closePicker()
+    m.pickerOpen = false
+    m.picker.visible = false
+    if m.started then m.video.setFocus(true)
+end sub
+
+sub drawPicker()
+    t = th()
+    p = m.picker
+    p.removeChildrenIndex(p.getChildCount(), 0)
+    panelX = 1920 - 680
+    bg = makeShape(p, t.fillUri, 640, 1000, "0x0B0B0FFF", 0.94)
+    bg.translation = [panelX, 40]
+    head = makeLabel(p, "Audio and subtitles", 40, true, "0xFFFFFFFF")
+    head.translation = [panelX + 40, 80]
+
+    maxRows = 11
+    first = 0
+    if m.pickIndex > maxRows - 2 then first = m.pickIndex - (maxRows - 2)
+    y = 160
+    for i = first to m.pickerRows.Count() - 1
+        if y < 980
+            r = m.pickerRows[i]
+            if r.kind = "header"
+                h = makeLabel(p, UCase(r.label), 22, true, t.accent)
+                h.translation = [panelX + 40, y + 16]
+                y = y + 56
+            else
+                focused = (i = m.pickIndex)
+                if focused
+                    hl = makeShape(p, t.pillUri, 580, 64, "0xFFFFFFFF", 1.0)
+                    hl.translation = [panelX + 30, y]
+                end if
+                current = (r.kind = "audio" and r.index = m.audioIndex) or (r.kind = "sub" and r.index = m.subIndex)
+                if current
+                    tick = p.CreateChild("Poster")
+                    tick.uri = "pkg:/images/check.png"
+                    tick.width = 30
+                    tick.height = 30
+                    tick.translation = [panelX + 50, y + 17]
+                    if focused
+                        tick.blendColor = "0x0B0B0FFF"
+                    else
+                        tick.blendColor = t.accent
+                    end if
+                end if
+                color = "0xFFFFFFFF"
+                if focused then color = "0x0B0B0FFF"
+                lbl = makeLabel(p, r.label, 28, focused, color)
+                lbl.translation = [panelX + 96, y]
+                lbl.width = 500
+                lbl.height = 64
+                lbl.vertAlign = "center"
+                y = y + 70
+            end if
+        end if
+    end for
+end sub
+
+sub pickerMove(dirn as integer)
+    i = m.pickIndex + dirn
+    while i >= 0 and i < m.pickerRows.Count()
+        if m.pickerRows[i].kind <> "header" then exit while
+        i = i + dirn
+    end while
+    if i >= 0 and i < m.pickerRows.Count() then m.pickIndex = i
+    drawPicker()
+end sub
+
+sub pickerChoose()
+    r = m.pickerRows[m.pickIndex]
+    tp = m.global.trackPrefs
+    if tp = invalid then tp = {}
+    tp.set = true
+    if r.kind = "audio"
+        m.audioIndex = r.index
+        s = findStream(m.audioStreams, r.index)
+        if s <> invalid then tp.audioLang = s.lang
+        m.global.trackPrefs = tp
+        if m.playMethod = "DirectPlay"
+            selectRokuAudio()
+        else
+            restartWithTracks()
+            return
+        end if
+    else if r.kind = "sub"
+        wasBurned = isImageSub(m.subIndex)
+        m.subIndex = r.index
+        if r.index = -1
+            tp.subOff = true
+            tp.subLang = ""
+        else
+            tp.subOff = false
+            s = findStream(m.subStreams, r.index)
+            if s <> invalid then tp.subLang = s.lang
+        end if
+        m.global.trackPrefs = tp
+        ' Burned-in subtitles need the server to make a new stream.
+        if isImageSub(r.index) or wasBurned
+            restartWithTracks()
+            return
+        end if
+        applySubtitle()
+    end if
+    drawPicker()
+end sub
+
+sub restartWithTracks()
+    curPos = Int(m.video.position)
+    reportStopped()
+    m.video.control = "stop"
+    closePicker()
+    m.top.playItem = { itemId: m.itemId, startSeconds: curPos, audioIndex: m.audioIndex, subIndex: m.subIndex, restart: true }
+end sub
+
+' ---------- Progress reporting ----------
+
+function progressBody(paused as boolean) as object
+    curPos = m.video.position
+    if curPos < 1 then curPos = m.startSeconds
+    ticks = Int(curPos) * 10000000&
+    return {
+        "ItemId": m.itemId,
+        "MediaSourceId": m.mediaSourceId,
+        "PlaySessionId": m.playSessionId,
+        "PositionTicks": ticks,
+        "IsPaused": paused,
+        "PlayMethod": m.playMethod,
+        "AudioStreamIndex": m.audioIndex,
+        "SubtitleStreamIndex": m.subIndex,
+        "CanSeek": true
+    }
+end function
+
+sub onPosition()
+    if not m.started then return
+    curPos = m.video.position
+    if Abs(curPos - m.lastReport) >= 10
+        m.lastReport = curPos
+        apiRequest("/Sessions/Playing/Progress", {}, "onIgnore", "POST", progressBody(false))
+    end if
+    dur = m.video.duration
+    if m.nextEp <> invalid and not m.upNextShown and not m.upNextCancelled and not m.pickerOpen
+        if dur > 120 and (dur - curPos) <= 25 then showUpNext()
+    end if
+end sub
+
+sub onState()
+    st = m.video.state
+    if st = "paused"
+        if m.started then apiRequest("/Sessions/Playing/Progress", {}, "onIgnore", "POST", progressBody(true))
+    else if st = "finished"
+        if m.nextEp <> invalid and not m.upNextCancelled
+            playNext()
+        else
+            reportStopped()
+            m.top.navigate = { action: "back" }
+        end if
+    else if st = "error"
+        m.status.text = "Playback failed: " + safeStr(m.video.errorMsg) + Chr(10) + "Press Back to return."
+        m.status.visible = true
+    end if
+end sub
+
+sub reportStopped()
+    if not m.started or m.stopped then return
+    m.stopped = true
+    apiRequest("/Sessions/Playing/Stopped", {}, "onIgnore", "POST", progressBody(false))
+    m.global.watchVersion = m.global.watchVersion + 1
+end sub
+
+sub showHint()
+    m.hint.visible = true
+    m.hintTimer.control = "stop"
+    m.hintTimer.control = "start"
+end sub
+
+sub hideHint()
+    m.hint.visible = false
+end sub
+
+' ---------- Up Next Prompt ----------
+
+sub showUpNext()
+    t = th()
+    m.upNextShown = true
+    m.countLeft = 10
+    g = m.upNext
+    g.removeChildrenIndex(g.getChildCount(), 0)
+    g.translation = [1200, 700]
+    bg = makeShape(g, t.fillUri, 640, 290, "0x0B0B0FFF", 0.94)
+    bar = makeShape(g, t.fillUri, 8, 230, t.accent, 1.0)
+    bar.translation = [24, 30]
+    l1 = makeLabel(g, "UP NEXT", 24, true, t.accent)
+    l1.translation = [60, 30]
+    m.upTitle = makeLabel(g, episodeLabel(m.nextEp), 32, true, "0xFFFFFFFF")
+    m.upTitle.translation = [60, 68]
+    m.upTitle.width = 550
+    m.upTitle.wrap = true
+    m.upTitle.maxLines = 2
+    m.upCountdown = makeLabel(g, "", 24, false, "0xC9C9D1FF")
+    m.upCountdown.translation = [60, 180]
+    m.upCountdown.width = 550
+    m.upCountdown.wrap = true
+    updateCountdown()
+    g.visible = true
+    m.countdown.control = "start"
+    m.top.setFocus(true)
+end sub
+
+sub updateCountdown()
+    m.upCountdown.text = "Starting in " + m.countLeft.ToStr() + "s. OK to play now, Back to keep watching."
+end sub
+
+sub onTick()
+    m.countLeft = m.countLeft - 1
+    if m.countLeft <= 0
+        playNext()
+    else
+        updateCountdown()
+    end if
+end sub
+
+sub playNext()
+    m.countdown.control = "stop"
+    nxt = m.nextEp
+    reportStopped()
+    m.video.control = "stop"
+    m.upNext.visible = false
+    m.top.playItem = { itemId: safeStr(nxt.Id), startSeconds: 0 }
+    m.video.setFocus(true)
+end sub
+
+sub cancelUpNext()
+    m.upNextCancelled = true
+    m.countdown.control = "stop"
+    m.upNext.visible = false
+    m.video.setFocus(true)
+end sub
+
+' ---------- Focus, keys, closing ----------
+
+sub onFocusChanged()
+    if m.top.hasFocus() and not m.upNext.visible and not m.pickerOpen and m.started then m.video.setFocus(true)
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if m.pickerOpen
+        if key = "up"
+            pickerMove(-1)
+        else if key = "down"
+            pickerMove(1)
+        else if key = "OK"
+            pickerChoose()
+        else if key = "back" or key = "options" or key = "left"
+            closePicker()
+        end if
+        return true
+    end if
+    if m.upNext.visible
+        if key = "OK" or key = "play"
+            playNext()
+            return true
+        else if key = "back"
+            cancelUpNext()
+            return true
+        end if
+    end if
+    if key = "options"
+        openPicker()
+        return true
+    end if
+    return false
+end function
+
+sub onClosed()
+    if not m.top.closed then return
+    m.countdown.control = "stop"
+    reportStopped()
+    m.video.control = "stop"
+end sub

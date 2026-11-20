@@ -1,0 +1,416 @@
+' Owns the screen stack, the chosen server, saved sign-ins and Seerr.
+sub init()
+    m.bg = m.top.findNode("bg")
+    m.screens = m.top.findNode("screens")
+    m.stack = []
+    m.graveyard = []
+
+    di = CreateObject("roDeviceInfo")
+    g = m.global
+    g.addField("serverUrl", "string", false)
+    g.addField("token", "string", false)
+    g.addField("userId", "string", false)
+    g.addField("userName", "string", false)
+    g.addField("isAdmin", "boolean", false)
+    g.addField("deviceId", "string", false)
+    g.addField("watchVersion", "integer", false)
+    g.addField("prefs", "assocarray", false)
+    g.addField("theme", "assocarray", false)
+    g.addField("prefsVersion", "integer", false)
+    g.addField("views", "array", false)
+    g.addField("previewItems", "array", false)
+    g.addField("trackPrefs", "assocarray", false)
+    g.addField("seerrUrl", "string", false)
+    g.addField("seerrCookie", "string", false)
+    g.addField("seerrState", "string", false)
+    g.deviceId = di.GetChannelClientId()
+    g.watchVersion = 0
+    g.prefsVersion = 0
+    g.seerrState = "none"
+    g.views = []
+    g.previewItems = []
+    g.trackPrefs = {}
+
+    migrateV1()
+    m.sessions = readSessions()
+    reg = CreateObject("roRegistrySection", "Marquee")
+    lastId = ""
+    if reg.Exists("lastUserId") then lastId = reg.Read("lastUserId")
+    applyPrefs(readPrefs(lastId))
+    g.observeField("prefsVersion", "onPrefsChanged")
+    onPrefsChanged()
+
+    if reg.Exists("server")
+        g.serverUrl = reg.Read("server")
+        checkServer()
+    else
+        showServerPicker("")
+    end if
+end sub
+
+sub onPrefsChanged()
+    m.bg.color = th().bg
+    m.top.backgroundColor = th().bg
+end sub
+
+' v1 kept a single sign-in; move it into the per-User list.
+sub migrateV1()
+    reg = CreateObject("roRegistrySection", "Marquee")
+    if reg.Exists("token") and reg.Exists("userId")
+        sessions = readSessions()
+        name = ""
+        if reg.Exists("userName") then name = reg.Read("userName")
+        sessions[reg.Read("userId")] = { token: reg.Read("token"), name: name, imageTag: "" }
+        writeSessions(sessions)
+        reg.Write("lastUserId", reg.Read("userId"))
+        reg.Delete("token")
+        reg.Delete("userId")
+        reg.Delete("userName")
+        reg.Delete("lastUser")
+        reg.Flush()
+    end if
+end sub
+
+' ---------- Start-up decisions ----------
+
+sub checkServer()
+    m.global.token = ""
+    apiRequest("/Users/Public", {}, "onPublicUsers")
+end sub
+
+sub onPublicUsers(event as object)
+    res = event.getData()
+    if not res.ok and res.code <= 0
+        showServerPicker("Couldn't reach your server at " + m.global.serverUrl + ". Pick it again, or choose another one.")
+        return
+    end if
+
+    ' Count everyone who could be watching: listed Users plus saved sign-ins.
+    everyone = {}
+    if res.ok and isValid(res.data)
+        if type(res.data) = "roArray"
+            for each u in res.data
+                everyone[safeStr(u.Id)] = true
+            end for
+        end if
+    end if
+    for each id in m.sessions
+        everyone[id] = true
+    end for
+
+    reg = CreateObject("roRegistrySection", "Marquee")
+    last = ""
+    if reg.Exists("lastUserId") then last = reg.Read("lastUserId")
+    alwaysAsk = false
+    if reg.Exists("alwaysAsk") then alwaysAsk = (reg.Read("alwaysAsk") = "true")
+    ' Who's Watching appears when more than one User could be watching,
+    ' or every time if an Administrator chose "Always ask".
+    if not alwaysAsk and last <> "" and m.sessions.DoesExist(last) and everyone.Count() <= 1
+        useSession(last)
+    else
+        showWho("")
+    end if
+end sub
+
+sub useSession(id as string)
+    s = m.sessions[id]
+    m.global.token = safeStr(s.token)
+    m.global.userId = id
+    m.global.userName = safeStr(s.name)
+    apiRequest("/Users/" + id, {}, "onSessionCheck")
+end sub
+
+sub onSessionCheck(event as object)
+    res = event.getData()
+    if res.ok
+        admin = false
+        if isValid(res.data)
+            if isValid(res.data.Policy) then admin = isTrue(res.data.Policy.IsAdministrator)
+        end if
+        startUser(admin)
+    else if res.code = 401 or res.code = 403
+        m.sessions.Delete(m.global.userId)
+        writeSessions(m.sessions)
+        m.global.token = ""
+        showWho("That sign-in has expired. Pick your name to sign in again.")
+    else
+        showServerPicker("Couldn't reach your server. Make sure Jellyfin is running, then try again.")
+    end if
+end sub
+
+' A User is signed in: load their Appearance, find Seerr, go home.
+sub startUser(admin as boolean)
+    m.global.isAdmin = admin
+    m.global.trackPrefs = {}
+    rememberLast(m.global.userId)
+    applyPrefs(readPrefs(m.global.userId))
+    clearStack()
+    showHome()
+    initSeerr()
+end sub
+
+sub rememberLast(id as string)
+    reg = CreateObject("roRegistrySection", "Marquee")
+    reg.Write("lastUserId", id)
+    reg.Flush()
+end sub
+
+' ---------- Seerr ----------
+
+sub initSeerr()
+    m.global.seerrState = "none"
+    reg = CreateObject("roRegistrySection", "Marquee")
+    m.global.seerrCookie = ""
+    cookieKey = "seerr_" + m.global.userId
+    if reg.Exists(cookieKey) then m.global.seerrCookie = reg.Read(cookieKey)
+    url = ""
+    if reg.Exists("seerrUrl") then url = reg.Read("seerrUrl")
+    ' Not set up yet: try Seerr's usual port on the Jellyfin machine.
+    if url = "" then url = hostBase(m.global.serverUrl) + ":5055"
+    m.global.seerrUrl = url
+    seerrRequest("/status", {}, "onSeerrStatus")
+end sub
+
+sub onSeerrStatus(event as object)
+    res = event.getData()
+    found = false
+    if res.ok and isValid(res.data)
+        found = isValid(res.data.version)
+    end if
+    if not found
+        m.global.seerrState = "none"
+        return
+    end if
+    reg = CreateObject("roRegistrySection", "Marquee")
+    if not reg.Exists("seerrUrl")
+        reg.Write("seerrUrl", m.global.seerrUrl)
+        reg.Flush()
+    end if
+    if m.global.seerrCookie = ""
+        m.global.seerrState = "signedOut"
+    else
+        seerrRequest("/auth/me", {}, "onSeerrMe")
+    end if
+end sub
+
+sub onSeerrMe(event as object)
+    res = event.getData()
+    if res.ok
+        m.global.seerrState = "ready"
+    else if res.code = 401 or res.code = 403
+        forgetSeerrSession()
+    else
+        m.global.seerrState = "none"
+    end if
+end sub
+
+sub forgetSeerrSession()
+    reg = CreateObject("roRegistrySection", "Marquee")
+    reg.Delete("seerr_" + m.global.userId)
+    reg.Flush()
+    m.global.seerrCookie = ""
+    m.global.seerrState = "signedOut"
+end sub
+
+sub onSeerrAuthenticated(cookie as string)
+    reg = CreateObject("roRegistrySection", "Marquee")
+    reg.Write("seerr_" + m.global.userId, cookie)
+    reg.Flush()
+    m.global.seerrCookie = cookie
+    m.global.seerrState = "ready"
+    popScreen()
+end sub
+
+' ---------- Screens ----------
+
+sub showServerPicker(msg as string)
+    clearStack()
+    s = CreateObject("roSGNode", "ServerScreen")
+    s.message = msg
+    pushScreen(s)
+end sub
+
+sub showWho(msg as string)
+    clearStack()
+    m.global.token = ""
+    m.global.seerrState = "none"
+    w = CreateObject("roSGNode", "WhoScreen")
+    w.message = msg
+    pushScreen(w)
+end sub
+
+sub showHome()
+    home = CreateObject("roSGNode", "BrowseScreen")
+    pushScreen(home)
+    home.begin = true
+end sub
+
+sub signOut()
+    apiRequest("/Sessions/Logout", {}, "onIgnore", "POST")
+    m.sessions.Delete(m.global.userId)
+    writeSessions(m.sessions)
+    m.global.token = ""
+    showWho("")
+end sub
+
+sub pushScreen(s as object)
+    if m.stack.Count() > 0
+        m.stack.Peek().visible = false
+    end if
+    if s.hasField("navigate") then s.observeField("navigate", "onNavigate")
+    m.screens.appendChild(s)
+    m.stack.Push(s)
+    s.setFocus(true)
+end sub
+
+function popScreen(refreshTop = true as boolean) as boolean
+    if m.stack.Count() <= 1 then return false
+    s = m.stack.Pop()
+    if s.hasField("closed") then s.closed = true
+    s.visible = false
+    m.screens.removeChild(s)
+    ' Keep recently closed screens alive briefly so their final
+    ' network reports (like "playback stopped") can finish.
+    m.graveyard.Push(s)
+    if m.graveyard.Count() > 3 then m.graveyard.Shift()
+    top = m.stack.Peek()
+    top.visible = true
+    if refreshTop
+        top.setFocus(true)
+        if top.hasField("refresh") then top.refresh = true
+    end if
+    return true
+end function
+
+sub popTo(depth as integer)
+    while m.stack.Count() > depth
+        popScreen(false)
+    end while
+    top = m.stack.Peek()
+    if top <> invalid
+        top.setFocus(true)
+        if top.hasField("refresh") then top.refresh = true
+    end if
+end sub
+
+sub clearStack()
+    while m.stack.Count() > 0
+        s = m.stack.Pop()
+        if s.hasField("closed") then s.closed = true
+        s.visible = false
+        m.screens.removeChild(s)
+        m.graveyard.Push(s)
+        if m.graveyard.Count() > 3 then m.graveyard.Shift()
+    end while
+end sub
+
+sub onNavigate(event as object)
+    nav = event.getData()
+    if nav = invalid then return
+    a = nav.action
+    if a = "details"
+        d = CreateObject("roSGNode", "DetailsScreen")
+        if isValid(nav.seasonId) then d.seasonId = nav.seasonId
+        pushScreen(d)
+        d.itemId = nav.itemId
+    else if a = "play"
+        p = CreateObject("roSGNode", "PlayerScreen")
+        pushScreen(p)
+        p.playItem = { itemId: nav.itemId, startSeconds: nav.startSeconds }
+    else if a = "search"
+        popTo(1)
+        pushScreen(CreateObject("roSGNode", "SearchScreen"))
+    else if a = "discover"
+        popTo(1)
+        dv = CreateObject("roSGNode", "DiscoverScreen")
+        pushScreen(dv)
+        dv.begin = true
+    else if a = "settings"
+        popTo(1)
+        pushScreen(CreateObject("roSGNode", "SettingsScreen"))
+    else if a = "library"
+        popTo(1)
+        b = CreateObject("roSGNode", "BrowseScreen")
+        b.library = nav.library
+        pushScreen(b)
+        b.begin = true
+    else if a = "seerrDetails"
+        sd = CreateObject("roSGNode", "SeerrDetailsScreen")
+        pushScreen(sd)
+        sd.media = { tmdbId: nav.tmdbId, mediaType: nav.mediaType }
+    else if a = "seerrSignIn"
+        si = CreateObject("roSGNode", "SignInScreen")
+        si.mode = "seerr"
+        pushScreen(si)
+        si.user = { id: m.global.userId, name: m.global.userName, imageTag: "", hasPassword: true }
+    else if a = "seerrAuthenticated"
+        onSeerrAuthenticated(nav.cookie)
+    else if a = "seerrSignedOut"
+        forgetSeerrSession()
+    else if a = "seerrChanged"
+        initSeerr()
+    else if a = "rebuildHome"
+        clearStack()
+        showHome()
+    else if a = "home"
+        popTo(1)
+    else if a = "back"
+        popScreen()
+    else if a = "signout"
+        signOut()
+    else if a = "switchUser"
+        showWho("")
+    else if a = "changeServer"
+        showServerPicker("")
+    else if a = "serverChosen"
+        onServerChosen(nav)
+    else if a = "userChosen"
+        onUserChosen(nav.user)
+    else if a = "authenticated"
+        onAuthenticated(nav)
+    end if
+end sub
+
+sub onServerChosen(nav as object)
+    reg = CreateObject("roRegistrySection", "Marquee")
+    previous = ""
+    if reg.Exists("server") then previous = reg.Read("server")
+    ' Saved sign-ins and Seerr belong to one server.
+    if previous <> nav.url
+        m.sessions = {}
+        writeSessions(m.sessions)
+        reg.Delete("lastUserId")
+        reg.Delete("seerrUrl")
+    end if
+    reg.Write("server", nav.url)
+    reg.Write("serverName", safeStr(nav.name))
+    reg.Flush()
+    m.global.serverUrl = nav.url
+    checkServer()
+end sub
+
+sub onUserChosen(u as object)
+    id = safeStr(u.id)
+    if id <> "" then applyPrefs(readPrefs(id))
+    if id <> "" and m.sessions.DoesExist(id)
+        useSession(id)
+        return
+    end if
+    s = CreateObject("roSGNode", "SignInScreen")
+    pushScreen(s)
+    s.user = u
+end sub
+
+sub onAuthenticated(nav as object)
+    m.sessions[nav.userId] = { token: nav.token, name: nav.userName, imageTag: safeStr(nav.imageTag) }
+    writeSessions(m.sessions)
+    m.global.token = nav.token
+    m.global.userId = nav.userId
+    m.global.userName = nav.userName
+    startUser(isTrue(nav.isAdmin))
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press and key = "back" then return popScreen()
+    return false
+end function

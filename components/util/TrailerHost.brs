@@ -1,0 +1,172 @@
+' Trailer Preview: after a title has been Focused for a few seconds, its
+' trailer fades in, muted, behind the Hero text. Only trailer files stored
+' on the server are used (for example ones downloaded by Trailarr).
+' Play toggles the sound. Moving focus, leaving the screen, or turning on
+' Reduce Motion stops it.
+
+sub setupTrailer(layer as object, insertIndex as integer, hintY as integer)
+    v = CreateObject("roSGNode", "Video")
+    v.id = "trailerVideo"
+    v.width = 1920
+    v.height = 1080
+    v.enableUI = false
+    v.mute = true
+    v.opacity = 0
+    v.visible = false
+    v.observeField("state", "onTrailerState")
+    layer.insertChild(v, insertIndex)
+    m.trailerVideo = v
+
+    ' A quiet hint so people know the sound is one press away.
+    m.trailerHint = makeLabel(layer, "Press Play for sound", 24, true, th().textDim)
+    m.trailerHint.translation = [1920 - 96 - 400, hintY]
+    m.trailerHint.width = 400
+    m.trailerHint.horizAlign = "right"
+    m.trailerHint.visible = false
+
+    m.trailerFade = layer.CreateChild("Animation")
+    m.trailerFade.duration = 0.8
+    m.trailerFade.easeFunction = "outQuad"
+    interp = m.trailerFade.CreateChild("FloatFieldInterpolator")
+    interp.key = [0.0, 1.0]
+    interp.keyValue = [0.0, 1.0]
+    interp.fieldToInterp = "trailerVideo.opacity"
+
+    m.trailerTimer = layer.CreateChild("Timer")
+    m.trailerTimer.duration = 3
+    m.trailerTimer.repeat = false
+    m.trailerTimer.observeField("fire", "trailerFetch")
+
+    m.trailerFor = ""
+    m.trailerItem = invalid
+    m.trailerTry = ""
+    m.trailerPlaying = false
+    m.top.observeField("visible", "onTrailerScreenVisible")
+end sub
+
+' Start the countdown for a Card. Episodes use their show's trailer.
+sub trailerSchedule(c as object)
+    trailerStop()
+    if c = invalid or th().reduceMotion then return
+    if Left(c.itemType, 6) = "seerr-" then return
+    id = c.itemId
+    if c.itemType = "Episode" and c.seriesId <> "" then id = c.seriesId
+    trailerScheduleId(id)
+end sub
+
+sub trailerScheduleId(id as string)
+    trailerStop()
+    if id = "" or th().reduceMotion then return
+    m.trailerFor = id
+    m.trailerTimer.control = "start"
+end sub
+
+sub trailerFetch()
+    if m.trailerFor = "" then return
+    m.trailerLegacy = false
+    print "[Matinee] trailer: looking for local trailers of "; m.trailerFor
+    apiRequest("/Items/" + m.trailerFor + "/LocalTrailers", { "userId": m.global.userId }, "onTrailers", "GET", invalid, m.trailerFor)
+end sub
+
+sub onTrailers(event as object)
+    res = event.getData()
+    if safeStr(res.tag) <> m.trailerFor then return
+    ' Servers older than 10.9 use the per-user path.
+    if not res.ok and res.code = 404 and not m.trailerLegacy
+        m.trailerLegacy = true
+        apiRequest("/Users/" + m.global.userId + "/Items/" + m.trailerFor + "/LocalTrailers", {}, "onTrailers", "GET", invalid, m.trailerFor)
+        return
+    end if
+    if not res.ok or not isValid(res.data)
+        print "[Matinee] trailer: request failed, HTTP "; res.code
+        return
+    end if
+    if type(res.data) <> "roArray" then return
+    print "[Matinee] trailer: server has "; res.data.Count(); " local trailer(s)"
+    if res.data.Count() = 0 then return
+    m.trailerItem = res.data[0]
+    playTrailer("direct")
+end sub
+
+sub playTrailer(how as string)
+    tr = m.trailerItem
+    if tr = invalid then return
+    id = safeStr(tr.Id)
+    token = m.global.token
+    content = CreateObject("roSGNode", "ContentNode")
+    fmt = LCase(safeStr(tr.Container))
+    comma = Instr(1, fmt, ",")
+    if comma > 0 then fmt = Left(fmt, comma - 1)
+    if fmt = "mov" or fmt = "m4v" then fmt = "mp4"
+    if how = "direct" and (fmt = "mp4" or fmt = "mkv")
+        content.url = m.global.serverUrl + "/Videos/" + id + "/stream?static=true&api_key=" + token
+        content.streamFormat = fmt
+    else
+        ' Fall back to a light HLS stream the Roku can always play.
+        how = "hls"
+        url = m.global.serverUrl + "/Videos/" + id + "/master.m3u8?MediaSourceId=" + id
+        url = url + "&VideoCodec=h264&AudioCodec=aac&MaxStreamingBitrate=8000000&TranscodingMaxAudioChannels=2"
+        url = url + "&SegmentContainer=ts&DeviceId=" + m.global.deviceId + "&api_key=" + token
+        content.url = url
+        content.streamFormat = "hls"
+    end if
+    m.trailerTry = how
+    print "[Matinee] trailer: playing ("; how; ") "; content.url
+    m.trailerVideo.mute = true
+    m.trailerHint.text = "Press Play for sound"
+    m.trailerVideo.content = content
+    m.trailerVideo.control = "play"
+end sub
+
+sub onTrailerState()
+    st = m.trailerVideo.state
+    if st = "playing"
+        if not m.trailerPlaying
+            m.trailerPlaying = true
+            m.trailerVideo.visible = true
+            m.trailerHint.visible = true
+            m.trailerFade.control = "start"
+        end if
+    else if st = "error"
+        print "[Matinee] trailer: playback error: "; m.trailerVideo.errorMsg
+        if m.trailerTry = "direct"
+            playTrailer("hls")
+        else
+            trailerStop()
+        end if
+    else if st = "finished"
+        trailerStop()
+    end if
+end sub
+
+sub trailerStop()
+    if m.trailerTimer = invalid then return
+    m.trailerTimer.control = "stop"
+    m.trailerFor = ""
+    m.trailerItem = invalid
+    if m.trailerPlaying or m.trailerVideo.state = "buffering" or m.trailerVideo.state = "playing"
+        m.trailerVideo.control = "stop"
+    end if
+    m.trailerPlaying = false
+    m.trailerFade.control = "stop"
+    m.trailerVideo.opacity = 0
+    m.trailerVideo.visible = false
+    m.trailerHint.visible = false
+end sub
+
+' Play toggles the trailer's sound. Returns true if a trailer was playing.
+function toggleTrailerSound() as boolean
+    if m.trailerVideo = invalid then return false
+    if not m.trailerPlaying then return false
+    m.trailerVideo.mute = not m.trailerVideo.mute
+    if m.trailerVideo.mute
+        m.trailerHint.text = "Press Play for sound"
+    else
+        m.trailerHint.text = "Press Play to mute"
+    end if
+    return true
+end function
+
+sub onTrailerScreenVisible()
+    if not m.top.visible then trailerStop()
+end sub

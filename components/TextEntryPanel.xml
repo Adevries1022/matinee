@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Full-screen typing panel: keyboard centered, button underneath it. -->
+<component name="TextEntryPanel" extends="Group">
+  <interface>
+    <field id="title" type="string" onChange="applyLabels" />
+    <field id="hint" type="string" onChange="applyLabels" />
+    <field id="buttonText" type="string" value="Continue" onChange="applyLabels" />
+    <field id="text" type="string" onChange="applyText" />
+    <field id="secure" type="boolean" onChange="applySecure" />
+    <field id="submitted" type="string" alwaysNotify="true" />
+    <field id="cancelled" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="TextEntryPanel.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x0B0B0FF7" />
+    <Label id="titleLabel" translation="[0,110]" width="1920" horizAlign="center" color="0xFFFFFFFF">
+      <Font role="font" uri="font:BoldSystemFontFile" size="48" />
+    </Label>
+    <Label id="hintLabel" translation="[260,180]" width="1400" horizAlign="center" wrap="true" color="0xB0B0B8FF">
+      <Font role="font" uri="font:SystemFontFile" size="28" />
+    </Label>
+    <Keyboard id="kb" translation="[400,260]" />
+    <Group id="btn">
+      <Rectangle id="btnRect" width="440" height="76" color="0xFFFFFF2E" />
+      <Label id="btnLabel" width="440" height="76" horizAlign="center" vertAlign="center" color="0xFFFFFFFF">
+        <Font role="font" uri="font:BoldSystemFontFile" size="32" />
+      </Label>
+    </Group>
+    <Label id="tip" translation="[0,1010]" width="1920" horizAlign="center" color="0x6E6E78FF" text="Press Down to reach the button, or press Play on your remote to continue. Back cancels.">
+      <Font role="font" uri="font:SystemFontFile" size="24" />
+    </Label>
+  </children>
+</component>

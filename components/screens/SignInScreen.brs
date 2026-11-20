@@ -1,0 +1,239 @@
+sub init()
+    m.top.findNode("brand").color = th().accent
+    m.avatar = m.top.findNode("avatar")
+    m.nameLabel = m.top.findNode("nameLabel")
+    m.code = m.top.findNode("code")
+    m.code.color = th().accent
+    m.instr = m.top.findNode("instr")
+    m.status = m.top.findNode("status")
+    m.poll = m.top.findNode("poll")
+    m.poll.observeField("fire", "onPoll")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.panel = invalid
+    m.secret = ""
+    m.triedGet = false
+    m.done = false
+    m.isSeerr = false
+end sub
+
+sub start()
+    u = m.top.user
+    m.avatar.removeChildrenIndex(m.avatar.getChildCount(), 0)
+    m.avatar.appendChild(makeAvatar(safeStr(u.id), safeStr(u.name), safeStr(u.imageTag), 180))
+    m.nameLabel.text = safeStr(u.name)
+    m.code.text = ""
+    m.instr.text = ""
+    m.isSeerr = (m.top.mode = "seerr")
+    if m.isSeerr
+        m.nameLabel.text = "Sign in to Seerr as " + safeStr(u.name)
+        m.status.text = "Starting Quick Connect..."
+        initiate()
+        return
+    end if
+
+    ' Accounts without a password sign in with one press.
+    if safeStr(u.id) <> "" and not isTrue(u.hasPassword)
+        m.status.text = "Signing in..."
+        passwordAuth("")
+        return
+    end if
+    m.status.text = "Starting Quick Connect..."
+    apiRequest("/QuickConnect/Enabled", {}, "onQcEnabled")
+end sub
+
+' ---------- Quick Connect ----------
+
+sub onQcEnabled(event as object)
+    res = event.getData()
+    enabled = false
+    if res.ok then enabled = isTrue(res.data)
+    if enabled
+        initiate()
+    else
+        m.instr.text = "Quick Connect is turned off on this server, so sign in with your password. An administrator can turn it on in the Jellyfin dashboard under General."
+        m.status.text = ""
+        openPassword()
+    end if
+end sub
+
+sub initiate()
+    if m.isSeerr
+        seerrRequest("/auth/jellyfin/quickconnect/initiate", {}, "onInitiate", "POST")
+    else
+        apiRequest("/QuickConnect/Initiate", {}, "onInitiate", "POST")
+    end if
+end sub
+
+sub onInitiate(event as object)
+    res = event.getData()
+    ' Older Jellyfin servers start Quick Connect with GET instead of POST.
+    if not m.isSeerr and not res.ok and not m.triedGet and (res.code = 404 or res.code = 405)
+        m.triedGet = true
+        apiRequest("/QuickConnect/Initiate", {}, "onInitiate", "GET")
+        return
+    end if
+    if res.ok and isValid(res.data)
+        if isValid(res.data.Code) and isValid(res.data.Secret)
+            m.secret = safeStr(res.data.Secret)
+            m.code.text = spacedCode(safeStr(res.data.Code))
+            m.instr.text = "On your phone or computer, open Jellyfin, go to your profile, choose Quick Connect, and enter this code."
+            m.status.text = "Waiting for approval..."
+            m.poll.control = "start"
+            return
+        end if
+    end if
+    m.instr.text = "Couldn't start Quick Connect. Sign in with your password instead."
+    m.status.text = ""
+    openPassword()
+end sub
+
+function spacedCode(c as string) as string
+    out = ""
+    for i = 1 to Len(c)
+        if i > 1 then out = out + " "
+        out = out + Mid(c, i, 1)
+    end for
+    return out
+end function
+
+sub onPoll()
+    if m.secret = "" or m.done then return
+    if m.isSeerr
+        seerrRequest("/auth/jellyfin/quickconnect/check", { "secret": m.secret }, "onPollResult")
+    else
+        apiRequest("/QuickConnect/Connect", { "secret": m.secret }, "onPollResult")
+    end if
+end sub
+
+sub onPollResult(event as object)
+    if m.done then return
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        if isTrue(res.data.Authenticated)
+            m.poll.control = "stop"
+            m.status.text = "Approved. Signing in..."
+            if m.isSeerr
+                seerrRequest("/auth/jellyfin/quickconnect/authenticate", {}, "onAuth", "POST", { "secret": m.secret })
+            else
+                apiRequest("/Users/AuthenticateWithQuickConnect", {}, "onAuth", "POST", { "Secret": m.secret })
+            end if
+        end if
+    else if res.code = 404 or res.code = 401
+        ' The code expired; get a fresh one.
+        m.poll.control = "stop"
+        m.secret = ""
+        m.triedGet = false
+        initiate()
+    end if
+end sub
+
+' ---------- Password ----------
+
+sub openPassword()
+    if m.panel <> invalid or m.done then return
+    p = CreateObject("roSGNode", "TextEntryPanel")
+    p.title = "Password for " + safeStr(m.top.user.name)
+    p.hint = "Leave it blank if this account doesn't have a password."
+    p.buttonText = "Sign In"
+    p.secure = true
+    p.text = ""
+    p.observeField("submitted", "onPassword")
+    p.observeField("cancelled", "closePanel")
+    m.top.appendChild(p)
+    m.panel = p
+    p.setFocus(true)
+end sub
+
+sub onPassword()
+    pw = m.panel.submitted
+    closePanel()
+    m.status.text = "Signing in..."
+    passwordAuth(pw)
+end sub
+
+sub closePanel()
+    if m.panel = invalid then return
+    m.top.removeChild(m.panel)
+    m.panel = invalid
+    m.top.setFocus(true)
+end sub
+
+sub passwordAuth(pw as string)
+    if m.isSeerr
+        seerrRequest("/auth/jellyfin", {}, "onAuth", "POST", { "username": safeStr(m.top.user.name), "password": pw })
+    else
+        apiRequest("/Users/AuthenticateByName", {}, "onAuth", "POST", { "Username": safeStr(m.top.user.name), "Pw": pw })
+    end if
+end sub
+
+' ---------- Result ----------
+
+sub onAuth(event as object)
+    res = event.getData()
+    if m.isSeerr
+        if res.ok and res.cookie <> ""
+            m.done = true
+            m.poll.control = "stop"
+            m.top.navigate = { action: "seerrAuthenticated", cookie: res.cookie }
+            return
+        end if
+        if res.code = 403
+            m.status.text = "Seerr didn't allow this account. An administrator may need to import it in Seerr's Users page."
+        else if res.code = 401
+            m.status.text = "That didn't work. Check the password and try again."
+        else
+            m.status.text = "Seerr sign-in failed (error " + res.code.ToStr() + ")."
+        end if
+        if m.secret <> "" then m.poll.control = "start"
+        return
+    end if
+    if res.ok and isValid(res.data)
+        if isValid(res.data.AccessToken) and isValid(res.data.User)
+            m.done = true
+            m.poll.control = "stop"
+            usr = res.data.User
+            m.top.navigate = {
+                action: "authenticated",
+                token: safeStr(res.data.AccessToken),
+                userId: safeStr(usr.Id),
+                userName: safeStr(usr.Name),
+                imageTag: safeStr(usr.PrimaryImageTag),
+                isAdmin: isAdminUser(usr)
+            }
+            return
+        end if
+    end if
+    if res.code = 401
+        m.status.text = "That didn't work. Check the password and try again."
+    else
+        m.status.text = "Sign-in failed (error " + res.code.ToStr() + ")."
+    end if
+    if m.secret <> "" then m.poll.control = "start"
+end sub
+
+' ---------- Focus, keys, closing ----------
+
+sub onFocusChanged()
+    if m.top.hasFocus() and m.panel <> invalid then m.panel.setFocus(true)
+end sub
+
+sub onClosed()
+    if m.top.closed
+        m.done = true
+        m.poll.control = "stop"
+    end if
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press or m.panel <> invalid then return false
+    if key = "OK" or key = "play"
+        openPassword()
+        return true
+    end if
+    return false
+end function
+
+function isAdminUser(usr as object) as boolean
+    if not isValid(usr.Policy) then return false
+    return isTrue(usr.Policy.IsAdministrator)
+end function

@@ -1,0 +1,85 @@
+' Shared main-menu handling for screens that show the Side Rail or Top Bar.
+' A screen calls setupMenu(currentKey) in init and defines
+' restoreContentFocus() to put focus back on its own content.
+
+sub setupMenu(currentKey as string)
+    m.menuKey = currentKey
+    m.menu = CreateObject("roSGNode", "MainMenu")
+    m.menu.items = menuItems()
+    m.menu.currentKey = currentKey
+    m.menu.observeField("chosen", "onMenuChosen")
+    m.menu.observeField("closeRequested", "onMenuClose")
+    m.top.appendChild(m.menu)
+    m.global.observeField("seerrState", "onMenuSourcesChanged")
+    m.global.observeField("views", "onMenuSourcesChanged")
+end sub
+
+function menuItems() as object
+    items = [{ key: "home", label: "Home", icon: "home" }, { key: "search", label: "Search", icon: "search" }]
+    if m.global.seerrState <> "none" and m.global.seerrState <> ""
+        items.Push({ key: "discover", label: "Discover", icon: "discover" })
+    end if
+    views = m.global.views
+    if views <> invalid
+        for each v in views
+            icon = "library"
+            if v.collectionType = "movies" then icon = "movies"
+            if v.collectionType = "tvshows" then icon = "shows"
+            items.Push({ key: "lib:" + v.id, label: v.name, icon: icon })
+        end for
+    end if
+    items.Push({ key: "settings", label: "Settings", icon: "settings" })
+    items.Push({ key: "switch", label: "Switch User", icon: "switch" })
+    return items
+end function
+
+sub onMenuSourcesChanged()
+    if m.menu = invalid then return
+    m.menu.items = menuItems()
+end sub
+
+function menuOpenKey() as string
+    if th().navStyle = "top" then return "up"
+    return "left"
+end function
+
+function menuIsOpen() as boolean
+    if m.menu = invalid then return false
+    return m.menu.open
+end function
+
+sub openMenu()
+    m.menu.open = true
+    m.menu.setFocus(true)
+end sub
+
+sub onMenuClose()
+    m.menu.open = false
+    restoreContentFocus()
+end sub
+
+sub onMenuChosen()
+    key = m.menu.chosen
+    m.menu.open = false
+    if key = m.menuKey
+        restoreContentFocus()
+        return
+    end if
+    restoreContentFocus()
+    if key = "home"
+        m.top.navigate = { action: "home" }
+    else if key = "search"
+        m.top.navigate = { action: "search" }
+    else if key = "discover"
+        m.top.navigate = { action: "discover" }
+    else if key = "settings"
+        m.top.navigate = { action: "settings" }
+    else if key = "switch"
+        m.top.navigate = { action: "switchUser" }
+    else if Left(key, 4) = "lib:"
+        id = Mid(key, 5)
+        for each v in m.global.views
+            if v.id = id then m.top.navigate = { action: "library", library: v }
+        end for
+    end if
+end sub

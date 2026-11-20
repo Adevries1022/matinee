@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Who's Watching: pick a User. -->
+<component name="WhoScreen" extends="Group">
+  <interface>
+    <field id="message" type="string" onChange="onMessage" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="WhoScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <children>
+    <Label id="brand" text="MATINEE" translation="[96,70]" color="0xE8A33DFF">
+      <Font role="font" uri="font:BoldSystemFontFile" size="44" />
+    </Label>
+    <Label translation="[0,210]" width="1920" horizAlign="center" color="0xFFFFFFFF" text="Who's watching?">
+      <Font role="font" uri="font:BoldSystemFontFile" size="64" />
+    </Label>
+    <Group id="strip" translation="[96,380]" />
+    <Label id="status" translation="[160,760]" width="1600" horizAlign="center" wrap="true" color="0xB0B0B8FF">
+      <Font role="font" uri="font:SystemFontFile" size="28" />
+    </Label>
+    <Label translation="[0,1000]" width="1920" horizAlign="center" color="0x6E6E78FF" text="Press * on your remote to change server">
+      <Font role="font" uri="font:SystemFontFile" size="24" />
+    </Label>
+  </children>
+</component>

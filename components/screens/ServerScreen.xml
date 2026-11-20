@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Pick a Jellyfin server: found automatically, or typed in. -->
+<component name="ServerScreen" extends="Group">
+  <interface>
+    <field id="message" type="string" onChange="onMessage" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="ServerScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <children>
+    <Label id="brand" text="MATINEE" translation="[96,70]" color="0xE8A33DFF">
+      <Font role="font" uri="font:BoldSystemFontFile" size="44" />
+    </Label>
+    <Label translation="[96,165]" width="1700" color="0xFFFFFFFF" text="Choose your server">
+      <Font role="font" uri="font:BoldSystemFontFile" size="56" />
+    </Label>
+    <Label id="status" translation="[96,250]" width="1700" wrap="true" color="0xB0B0B8FF">
+      <Font role="font" uri="font:SystemFontFile" size="30" />
+    </Label>
+    <Group id="list" translation="[96,340]" />
+  </children>
+</component>

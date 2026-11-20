@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The main menu, drawn as the Side Rail or the Top Bar (Navigation Style). -->
+<component name="MainMenu" extends="Group">
+  <interface>
+    <!-- items: [{ key, label, icon }] -->
+    <field id="items" type="array" onChange="build" />
+    <field id="currentKey" type="string" onChange="paint" />
+    <field id="backdropUri" type="string" onChange="onBackdrop" />
+    <field id="open" type="boolean" onChange="onOpen" />
+    <field id="chosen" type="string" alwaysNotify="true" />
+    <field id="closeRequested" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="MainMenu.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <children>
+    <Group id="layer" />
+  </children>
+</component>

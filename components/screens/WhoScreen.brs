@@ -1,0 +1,185 @@
+sub init()
+    m.top.findNode("brand").color = th().accent
+    m.strip = m.top.findNode("strip")
+    m.status = m.top.findNode("status")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.users = []
+    m.tiles = []
+    m.index = 0
+    m.panel = invalid
+    m.tileSize = 240
+    m.gap = 72
+    m.status.text = "Loading..."
+    apiRequest("/Users/Public", {}, "onUsers")
+end sub
+
+sub onMessage()
+    if m.top.message <> "" then m.status.text = m.top.message
+end sub
+
+sub onUsers(event as object)
+    res = event.getData()
+    users = []
+    ids = {}
+    if res.ok and isValid(res.data)
+        if type(res.data) = "roArray"
+            for each u in res.data
+                id = safeStr(u.Id)
+                ids[id] = true
+                users.Push({ id: id, name: safeStr(u.Name), imageTag: safeStr(u.PrimaryImageTag), hasPassword: isTrue(u.HasPassword) })
+            end for
+        end if
+    end if
+    ' Hidden accounts that signed in on this TV before still get a tile.
+    sessions = readSessions()
+    for each id in sessions
+        if not ids.DoesExist(id)
+            s = sessions[id]
+            users.Push({ id: id, name: safeStr(s.name), imageTag: safeStr(s.imageTag), hasPassword: true })
+        end if
+    end for
+    users.Push({ id: "", name: "Someone else", imageTag: "", hasPassword: true, other: true })
+    m.users = users
+
+    if m.top.message = ""
+        if res.ok
+            m.status.text = ""
+        else
+            m.status.text = "Couldn't load the list of users from your server."
+        end if
+    end if
+
+    ' Start on the person who used the TV last.
+    reg = CreateObject("roRegistrySection", "Marquee")
+    m.index = 0
+    if reg.Exists("lastUserId")
+        last = reg.Read("lastUserId")
+        for i = 0 to users.Count() - 1
+            if users[i].id = last then m.index = i
+        end for
+    end if
+    render()
+end sub
+
+sub render()
+    m.strip.removeChildrenIndex(m.strip.getChildCount(), 0)
+    m.tiles = []
+    size = m.tileSize
+    n = m.users.Count()
+    total = n * size + (n - 1) * m.gap
+    m.centered = total <= 1728
+    startX = 96
+    if m.centered then startX = Int((1920 - total) / 2)
+    m.startX = startX
+
+    for i = 0 to n - 1
+        u = m.users[i]
+        g = m.strip.CreateChild("Group")
+        g.translation = [i * (size + m.gap), 0]
+        g.scaleRotateCenter = [size / 2, size / 2]
+
+        ring = g.CreateChild("Poster")
+        ring.uri = "pkg:/images/avatar_ring.png"
+        ring.width = size + 28
+        ring.height = size + 28
+        ring.translation = [-14, -14]
+        ring.loadDisplayMode = "scaleToFill"
+
+        symbol = ""
+        if isTrue(u.other) then symbol = "+"
+        g.appendChild(makeAvatar(u.id, u.name, u.imageTag, size, symbol))
+
+        name = g.CreateChild("Label")
+        name.translation = [-40, size + 30]
+        name.width = size + 80
+        name.horizAlign = "center"
+        name.font = makeFont(30, true)
+        name.text = u.name
+        m.tiles.Push({ group: g, ring: ring, name: name })
+    end for
+    paint()
+end sub
+
+sub paint()
+    for i = 0 to m.tiles.Count() - 1
+        t = m.tiles[i]
+        if i = m.index
+            t.ring.visible = true
+            t.group.scale = [1.08, 1.08]
+            t.name.color = "0xFFFFFFFF"
+        else
+            t.ring.visible = false
+            t.group.scale = [1.0, 1.0]
+            t.name.color = "0x8E8E99FF"
+        end if
+    end for
+    ' With many Users, slide the row so the focused tile stays on screen.
+    x = m.startX
+    if not m.centered
+        step2 = m.tileSize + m.gap
+        x = 96 - (m.index - 2) * step2
+        if x > 96 then x = 96
+    end if
+    m.strip.translation = [x, 380]
+end sub
+
+sub choose()
+    if m.users.Count() = 0 then return
+    u = m.users[m.index]
+    if isTrue(u.other)
+        openPanel()
+    else
+        m.top.navigate = { action: "userChosen", user: u }
+    end if
+end sub
+
+sub openPanel()
+    p = CreateObject("roSGNode", "TextEntryPanel")
+    p.title = "Username"
+    p.hint = "Type the Jellyfin username to sign in with."
+    p.buttonText = "Next"
+    p.text = ""
+    p.observeField("submitted", "onUsername")
+    p.observeField("cancelled", "closePanel")
+    m.top.appendChild(p)
+    m.panel = p
+    p.setFocus(true)
+end sub
+
+sub onUsername()
+    name = m.panel.submitted.Trim()
+    closePanel()
+    if name = "" then return
+    m.top.navigate = { action: "userChosen", user: { id: "", name: name, imageTag: "", hasPassword: true } }
+end sub
+
+sub closePanel()
+    if m.panel = invalid then return
+    m.top.removeChild(m.panel)
+    m.panel = invalid
+    m.top.setFocus(true)
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() and m.panel <> invalid then m.panel.setFocus(true)
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press or m.panel <> invalid then return false
+    if key = "left"
+        if m.index > 0 then m.index = m.index - 1
+        paint()
+        return true
+    else if key = "right"
+        if m.index < m.users.Count() - 1 then m.index = m.index + 1
+        paint()
+        return true
+    else if key = "OK"
+        choose()
+        return true
+    else if key = "options"
+        m.top.navigate = { action: "changeServer" }
+        return true
+    end if
+    return false
+end function

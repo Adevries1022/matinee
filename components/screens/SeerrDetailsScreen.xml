@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- A title from Seerr: what it is, its Request Status, and Request buttons. -->
+<component name="SeerrDetailsScreen" extends="Group">
+  <interface>
+    <field id="media" type="assocarray" onChange="load" />
+    <field id="refresh" type="boolean" alwaysNotify="true" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="SeerrDetailsScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <children>
+    <Poster id="backdrop" width="1920" height="1080" loadWidth="1920" loadHeight="1080" loadDisplayMode="scaleToZoom" opacity="0" />
+    <Group id="shadeLayer" />
+    <LayoutGroup id="info" layoutDirection="vert" itemSpacings="[14,20,18]">
+      <Label id="title" width="1150" wrap="true" maxLines="2">
+        <Font role="font" uri="font:BoldSystemFontFile" size="72" />
+      </Label>
+      <Label id="meta" width="1400">
+        <Font role="font" uri="font:SystemFontFile" size="28" />
+      </Label>
+      <Label id="overview" width="1000" wrap="true" maxLines="5" lineSpacing="6">
+        <Font role="font" uri="font:SystemFontFile" size="30" />
+      </Label>
+      <Label id="statusLine" width="1200">
+        <Font role="font" uri="font:BoldSystemFontFile" size="28" />
+      </Label>
+    </LayoutGroup>
+    <Group id="buttons" />
+    <Label id="toast" width="1500" wrap="true">
+      <Font role="font" uri="font:SystemFontFile" size="28" />
+    </Label>
+    <Group id="picker" visible="false" />
+    <Animation id="fadeIn" duration="0.45" easeFunction="outQuad">
+      <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="backdrop.opacity" />
+    </Animation>
+  </children>
+</component>

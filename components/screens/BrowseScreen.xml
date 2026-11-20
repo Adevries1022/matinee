@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Home screen, and each library (Movies, Shows) when "library" is set. -->
+<component name="BrowseScreen" extends="Group">
+  <interface>
+    <field id="library" type="assocarray" />
+    <field id="begin" type="boolean" onChange="load" />
+    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="BrowseScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/TrailerHost.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.brs" />
+  <script type="text/brightscript" uri="pkg:/components/util/HeroHost.brs" />
+  <children>
+    <Group id="heroLayer" />
+    <Label id="status" wrap="true" text="Loading...">
+      <Font role="font" uri="font:SystemFontFile" size="34" />
+    </Label>
+    <RowList
+      id="rows"
+      itemComponentName="CardItem"
+      numRows="4"
+      drawFocusFeedback="false"
+      vertFocusAnimationStyle="fixedFocus"
+      rowFocusAnimationStyle="floatingFocus"
+      showRowLabel="[true]"
+      rowLabelOffset="[[0,14]]"
+      visible="false" />
+  </children>
+</component>
