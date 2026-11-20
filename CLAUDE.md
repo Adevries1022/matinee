@@ -20,3 +20,7 @@ A Roku app (SceneGraph + BrightScript) for Jellyfin, with Seerr requests. It run
 - Network calls go through `apiRequest` / `seerrRequest` (render thread) and `ApiTask` (task thread). Never use roUrlTransfer on the render thread.
 - Avoid BrightScript reserved words as variable names (pos, type, step, next, stop, box, dim, run, tab).
 - Update `CONTEXT.md` when a term changes, and add an ADR only for hard-to-reverse, surprising trade-offs.
+
+## Git and releases
+- The repo lives on GitHub (private for now, GPL-3.0). Commit each working change with a clear message and push.
+- Bump `minor_version`/`build_version` in `manifest` for each release, tag it (`v2.4`), and attach `dist/matinee.zip` to a GitHub release so the install zip always matches a tag.
