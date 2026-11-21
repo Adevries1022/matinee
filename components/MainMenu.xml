@@ -10,8 +10,8 @@
     <field id="chosen" type="string" alwaysNotify="true" />
     <field id="closeRequested" type="boolean" alwaysNotify="true" />
   </interface>
-  <script type="text/brightscript" uri="MainMenu.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <script type="text/brightscript" uri="MainMenu.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
     <Group id="layer" />
   </children>

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rokucommunity/brighterscript/master/bsconfig.schema.json",
+  "rootDir": ".",
+  "files": [
+    "manifest",
+    "source/**/*",
+    "components/**/*",
+    "images/**/*"
+  ],
+  "stagingDir": "dist/staging",
+  "retainStagingDir": false,
+  "createPackage": true,
+  "outFile": "dist/matinee.zip",
+  "sourceMap": false,
+  "autoImportComponentScript": false,
+  "plugins": ["@rokucommunity/bslint"],
+  "lintConfig": "bslint.json",
+  "diagnosticFilters": []
+}

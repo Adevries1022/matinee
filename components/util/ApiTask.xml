@@ -4,5 +4,5 @@
     <field id="request" type="assocarray" />
     <field id="response" type="assocarray" />
   </interface>
-  <script type="text/brightscript" uri="ApiTask.brs" />
+  <script type="text/brightscript" uri="ApiTask.bs" />
 </component>

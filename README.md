@@ -57,5 +57,19 @@ Music, Live TV, Collections rows.
 - `components/screens/`: the screens
 - `components/MainMenu.*`: the Side Rail and Top Bar
 - `components/CardItem.*`: the poster and thumbnail card
-- `components/util/Api.brs`: Theme tokens, Jellyfin and Seerr requests, shared drawing helpers
+- `components/util/Api.bs`: Theme tokens, Jellyfin and Seerr requests, shared drawing helpers
 - `CONTEXT.md` and `docs/adr/`: the project glossary and design decisions
+
+## Building from source
+Matinee is written in [BrighterScript](https://github.com/rokucommunity/brighterscript) (`.bs` files) and compiled to plain BrightScript before it goes on the TV. You need Node.js 20.12 or newer; it works the same on Windows, macOS and Linux.
+
+1. `npm install`
+2. Copy `.env.example` to `.env` and fill in your Roku's IP address and developer password (plus the Jellyfin and Seerr details if you use them). `.env` is never committed.
+3. Use these commands:
+
+| Command | What it does |
+|---|---|
+| `npm run build` | Compiles and lints, then writes `dist/matinee.zip`. Stops on any error. |
+| `npm run lint` | Compiles and lints without making the zip. |
+| `npm run deploy` | Builds, then installs the zip on the Roku. |
+| `npm run logs` | Streams the Roku's debug log. Ctrl+C to stop. |

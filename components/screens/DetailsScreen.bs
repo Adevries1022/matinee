@@ -331,7 +331,7 @@ sub doButton()
     end if
 end sub
 
-sub onPlayedChanged(event as object)
+sub onPlayedChanged(_event as object)
     m.global.watchVersion = m.global.watchVersion + 1
     m.seenVersion = m.global.watchVersion
     reloadKeepingPlace()

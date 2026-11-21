@@ -8,9 +8,19 @@
     "type": "git",
     "url": "git+https://github.com/Adevries1022/matinee.git"
   },
-  "scripts": {},
+  "scripts": {
+    "build": "bsc",
+    "lint": "bslint",
+    "deploy": "npm run build && node scripts/sideload.mjs",
+    "sideload": "node scripts/sideload.mjs",
+    "logs": "node scripts/logs.mjs"
+  },
   "devDependencies": {
     "@rokucommunity/bslint": "0.8.47",
-    "brighterscript": "0.73.8"
+    "brighterscript": "0.73.8",
+    "roku-deploy": "3.18.4"
+  },
+  "engines": {
+    "node": ">=20.12"
   }
 }

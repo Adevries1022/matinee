@@ -4,5 +4,5 @@
   <interface>
     <field id="servers" type="array" />
   </interface>
-  <script type="text/brightscript" uri="DiscoveryTask.brs" />
+  <script type="text/brightscript" uri="DiscoveryTask.bs" />
 </component>

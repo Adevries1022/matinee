@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "assign-all-paths": "error",
+    "unsafe-path-loop": "error",
+    "unsafe-iterators": "error",
+    "unreachable-code": "warn",
+    "case-sensitivity": "warn",
+    "unused-variable": "warn",
+    "consistent-return": "error",
+    "no-stop": "error",
+    "no-todo": "off",
+    "no-print": "off",
+    "named-function-style": "off",
+    "anon-function-style": "off",
+    "type-annotations": "off",
+    "inline-if-style": "off",
+    "block-if-style": "off",
+    "condition-style": "off",
+    "aa-comma-style": "off",
+    "eol-last": "off",
+    "no-assocarray-component-field-type": "off",
+    "no-array-component-field-type": "off"
+  }
+}

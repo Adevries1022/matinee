@@ -6,9 +6,9 @@
     <field id="refresh" type="boolean" alwaysNotify="true" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
-  <script type="text/brightscript" uri="SearchScreen.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.brs" />
+  <script type="text/brightscript" uri="SearchScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
   <children>
     <Label id="heading" text="Search">
       <Font role="font" uri="font:BoldSystemFontFile" size="56" />

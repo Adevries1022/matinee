@@ -155,7 +155,6 @@ sub buildRows()
     sizes = []
     heights = []
     m.rowActions = []
-    t = th()
     for i = 0 to m.rowDefs.Count() - 1
         items = m.rowResults[i]
         d = m.rowDefs[i]

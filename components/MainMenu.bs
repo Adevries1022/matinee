@@ -96,7 +96,7 @@ sub buildTop(t as object)
     row.layoutDirection = "horiz"
     row.itemSpacings = [52]
     row.vertAlignment = "center"
-    brand = makeLabel(row, "MATINEE", 38, true, t.accent)
+    makeLabel(row, "MATINEE", 38, true, t.accent)
     items = m.top.items
     if items = invalid then items = []
     for each it in items

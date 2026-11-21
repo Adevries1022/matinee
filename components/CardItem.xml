@@ -12,8 +12,8 @@
     <field id="rowListHasFocus" type="boolean" onChange="updateFocus" />
     <field id="gridHasFocus" type="boolean" onChange="updateFocus" />
   </interface>
-  <script type="text/brightscript" uri="CardItem.brs" />
-  <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
+  <script type="text/brightscript" uri="CardItem.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
     <Group id="card">
       <Poster id="placeholder" />
