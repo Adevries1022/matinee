@@ -1,21 +1,14 @@
 {
   "name": "matinee",
-  "version": "1.0.0",
-  "description": "## Install or update (sideload) 1. **Turn on Developer Mode on the Roku** (first time only). On the remote, press Home 3 times, Up 2 times, then Right, Left, Right, Left, Right. Accept the terms, set a password, and let the Roku restart. Write down the IP address it shows. 2. On a computer on the same network, open `http://<roku-ip>` in a browser. Sign in with the username `rokudev` and your password. 3. Click **Upload**, choose `matinee-v2.3.zip`, then click **Install with zip** (or **Replace**). Your server and sign-ins are kept. 4. If Matinee asks, pick your server, then pick your name on **Who's watching?**. Approve the code it shows: in Jellyfin on your phone, go to your profile → **Quick Connect** and enter it. You can also press OK to use your password.",
-  "directories": {
-    "doc": "docs"
-  },
-  "scripts": {},
+  "version": "2.3.1",
+  "description": "Matinee: a Roku app for Jellyfin, with Seerr requests",
+  "private": true,
+  "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Adevries1022/matinee.git"
   },
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/Adevries1022/matinee/issues"
-  },
-  "homepage": "https://github.com/Adevries1022/matinee#readme",
-  "private": true,
+  "scripts": {},
   "devDependencies": {
     "@rokucommunity/bslint": "0.8.47",
     "brighterscript": "0.73.8"
