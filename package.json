@@ -13,7 +13,9 @@
     "lint": "bslint",
     "deploy": "npm run build && node scripts/sideload.mjs",
     "sideload": "node scripts/sideload.mjs",
-    "logs": "node scripts/logs.mjs"
+    "logs": "node scripts/logs.mjs",
+    "screenshot": "node scripts/screenshot.mjs",
+    "key": "node scripts/key.mjs"
   },
   "devDependencies": {
     "@rokucommunity/bslint": "0.8.47",

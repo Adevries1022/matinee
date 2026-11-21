@@ -13,6 +13,7 @@ A Roku app (SceneGraph + BrighterScript, compiled to BrightScript) for Jellyfin,
 - `npm run build` compiles and lints (bslint runs as a `bsc` plugin, rules in `bslint.json`) and writes `dist/matinee.zip`. It fails on any compiler or lint error. `npm run lint` checks without packaging.
 - `npm run deploy` builds, then sideloads `dist/matinee.zip` onto the Roku with roku-deploy (Developer Mode must stay on). Ask the user before deploying: others may be watching the TV.
 - `npm run logs` streams the Roku debug log (port 8085). Matinee prints lines starting with `[Matinee]`.
+- `npm run screenshot -- <name>` saves what the TV shows to `screenshots/<name>.jpg` (gitignored); it only works while Matinee is on screen and never includes video, so a playing Trailer Preview shows as black. `npm run key -- Left Down OK` presses remote buttons; it needs the TV's Settings → System → Advanced system settings → Control by mobile apps → Network access set to Permissive. Back from a top-level screen exits the app; relaunch with a POST to `http://<roku-ip>:8060/launch/dev`.
 - Keep the build free of warnings. For an unused callback parameter, prefix it with `_` (e.g. `_event`) rather than disabling the rule.
 - `.env` holds the Roku IP and dev password, the Jellyfin URL and API key, and the Seerr URL. Never commit it or print secrets.
 - Query Jellyfin directly (with `X-Emby-Token: $JELLYFIN_API_KEY`) to check facts, such as whether a title has local trailers, instead of guessing.
