@@ -21,6 +21,9 @@ sub init()
     m.reduceMotion = t.reduceMotion
     m.padX = t.cellPadX
     m.padY = t.cellPadY
+    m.ringOut = t.ringInset + t.ringStroke + t.ringGap
+    m.w = 0
+    m.h = 0
     m.placeholder.uri = t.fillUri
     m.placeholder.blendColor = t.surface
     m.placeholder.opacity = t.surfaceOpacity * 1.6
@@ -72,12 +75,8 @@ sub layout()
     h = c.cardH
     if w = 0 or h = 0 then return
     m.card.translation = [m.padX, m.padY]
-
-    ' The focus ring sits just outside the Card with a small gap.
-    ro = 7
-    m.ring.translation = [-ro, -ro]
-    m.ring.width = w + ro * 2
-    m.ring.height = h + ro * 2
+    m.w = w
+    m.h = h
     m.placeholder.width = w
     m.placeholder.height = h
     m.poster.width = w
@@ -132,6 +131,7 @@ sub layout()
     end if
 
     m.card.scaleRotateCenter = [w / 2, h / 2]
+    updateFocus()
 end sub
 
 sub updateFocus()
@@ -140,6 +140,16 @@ sub updateFocus()
         pct = m.top.focusPercent * m.top.rowFocusPercent
     end if
     m.ring.opacity = pct
-    s = 1 + (m.focusScale - 1) * pct
-    m.card.scale = [s, s]
+    if m.w = 0 or m.h = 0 then return
+    ' Grow by whole pixels on each side, so the Card's rounded corners and the
+    ' ring line up exactly instead of landing on fractional pixels.
+    gx = Int((m.focusScale - 1) * m.w / 2 * pct + 0.5)
+    gy = Int((m.focusScale - 1) * m.h / 2 * pct + 0.5)
+    m.card.scale = [(m.w + gx * 2) / m.w, (m.h + gy * 2) / m.h]
+    ' The focus ring sits just outside the grown Card with a small, even gap.
+    ox = gx + m.ringOut
+    oy = gy + m.ringOut
+    m.ring.translation = [m.padX - ox, m.padY - oy]
+    m.ring.width = m.w + ox * 2
+    m.ring.height = m.h + oy * 2
 end sub

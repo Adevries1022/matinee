@@ -145,12 +145,17 @@ function themeTokens(prefs as object) as object
         t.pillUri = "pkg:/images/pill.9.png"
         t.ringUri = "pkg:/images/ring_round.9.png"
         t.cornerUri = "pkg:/images/corners_round.9.png"
+        t.ringInset = 2   ' transparent margin around the stroke in ring_round.9.png
     else
         t.fillUri = "pkg:/images/fill_square.9.png"
         t.pillUri = "pkg:/images/fill_square.9.png"
         t.ringUri = "pkg:/images/ring_square.9.png"
         t.cornerUri = ""
+        t.ringInset = 0
     end if
+    ' The focus ring: its stroke width in the ring images, and the gap between it and the Card.
+    t.ringStroke = 4
+    t.ringGap = 3
 
     ' Layout Add-ons, Navigation Style and Reduce Motion
     t.reduceMotion = isTrue(prefs.reduceMotion)

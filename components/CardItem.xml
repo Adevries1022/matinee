@@ -16,7 +16,6 @@
   <script type="text/brightscript" uri="pkg:/components/util/Api.brs" />
   <children>
     <Group id="card">
-      <Poster id="ring" opacity="0" />
       <Poster id="placeholder" />
       <Label id="fallback" horizAlign="center" vertAlign="center" wrap="true" maxLines="3">
         <Font role="font" uri="font:BoldSystemFontFile" size="24" />
@@ -36,6 +35,10 @@
         </Label>
       </Group>
     </Group>
+    <!-- The ring sits outside the scaled Card so it stays crisp and lands on whole pixels.
+         It is drawn above the Card: its curved corners pass over the square tips of the
+         Card's corner covers, which would otherwise show as square corners. -->
+    <Poster id="ring" opacity="0" />
     <Animation id="fadeIn" duration="0.25" easeFunction="linear">
       <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="poster.opacity" />
     </Animation>
