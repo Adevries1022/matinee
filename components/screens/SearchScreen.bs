@@ -19,18 +19,20 @@ sub init()
     cell = cellSize(false)
     cols = Int((1920 - rx - 40) / cell[0])
     if cols < 3 then cols = 3
-    m.grid.translation = [rx - t.cellPadX, 150 - t.cellPadY]
+    m.gridHeading = m.top.findNode("gridHeading")
+    m.gridHeading.translation = [rx, 150]
+    m.gridHeading.height = 56
+    m.gridHeading.vertAlign = "center"
+    m.gridHeading.font = makeFont(30, true)
+    m.gridHeading.color = t.text
+    m.grid.translation = [rx - t.cellPadX, 150 + 56 + 14 - t.cellPadY]
     m.grid.itemSize = cell
     m.grid.itemSpacing = [0, 0]
     m.grid.numColumns = cols
-    m.grid.sectionDividerFont = makeFont(30, true)
-    m.grid.sectionDividerTextColor = t.text
-    m.grid.sectionDividerHeight = 56
-    m.grid.sectionDividerSpacing = 14
 
     m.empty.translation = [rx, 200]
     m.empty.color = t.textDim
-    infoY = 150 + 56 + t.posterH * 2 + t.cellPadY * 2 + 30
+    infoY = 150 + 56 + 14 + t.posterH * 2 + t.cellPadY * 2 + 30
     if infoY > 990 then infoY = 990
     m.infoTitle.translation = [rx, infoY]
     m.infoTitle.color = t.text
@@ -129,41 +131,41 @@ sub onSeerrResults(event as object)
     render()
 end sub
 
+' Library matches first, then titles that can be Requested. The grid is flat;
+' the heading names the first group and the Info Line marks the rest.
 sub render()
     root = CreateObject("roSGNode", "ContentNode")
     m.flat = []
-    if m.libItems.Count() > 0
-        section = root.CreateChild("ContentNode")
-        if m.query = ""
-            section.title = "Popular in your library"
-        else
-            section.title = "In your library"
-        end if
-        for each it in m.libItems
-            c = itemToContent(it, false)
-            section.appendChild(c)
-            m.flat.Push(c)
-        end for
-    end if
+    for each it in m.libItems
+        c = itemToContent(it, false)
+        root.appendChild(c)
+        m.flat.Push(c)
+    end for
+    libCount = m.flat.Count()
     if m.query <> "" and m.seerrItems.Count() > 0
-        section = root.CreateChild("ContentNode")
-        section.title = "Not in your library"
         for each r in m.seerrItems
             c = seerrToContent(r)
-            section.appendChild(c)
+            root.appendChild(c)
             m.flat.Push(c)
         end for
     else if m.query <> "" and m.global.seerrState = "signedOut"
-        section = root.CreateChild("ContentNode")
-        section.title = "Not in your library"
         c = newContent()
         c.itemType = "seerr-signin"
         c.heading = "Sign in to Seerr to request titles"
         c.meta = "Opens a Quick Connect code"
         setCardSize(c, false)
-        section.appendChild(c)
+        root.appendChild(c)
         m.flat.Push(c)
     end if
+
+    if libCount > 0 and m.query = ""
+        m.gridHeading.text = "Popular in your library"
+    else if libCount > 0
+        m.gridHeading.text = "In your library"
+    else
+        m.gridHeading.text = "Not in your library"
+    end if
+    m.gridHeading.visible = m.flat.Count() > 0
 
     q = Chr(34)
     if m.flat.Count() = 0
@@ -194,16 +196,18 @@ sub onItemFocused(event as object)
     if m.area <> "grid" then return
     c = itemAt(event.getData())
     if c = invalid then return
+    showInfo(c)
+end sub
+
+sub showInfo(c as object)
     m.infoTitle.text = c.heading
-    meta = c.meta
-    if c.badge <> ""
-        if meta <> ""
-            meta = c.badge + dot() + meta
-        else
-            meta = c.badge
-        end if
+    parts = []
+    if Left(c.itemType, 6) = "seerr-" and m.gridHeading.text <> "Not in your library"
+        parts.Push("Not in your library")
     end if
-    m.infoMeta.text = meta
+    if c.badge <> "" then parts.Push(c.badge)
+    if c.meta <> "" then parts.Push(c.meta)
+    m.infoMeta.text = parts.Join(dot())
 end sub
 
 sub onSelected(event as object)
@@ -224,10 +228,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         m.area = "grid"
         m.grid.setFocus(true)
         c = itemAt(m.grid.itemFocused)
-        if c <> invalid
-            m.infoTitle.text = c.heading
-            m.infoMeta.text = c.meta
-        end if
+        if c <> invalid then showInfo(c)
         return true
     else if key = "left" and m.grid.isInFocusChain()
         m.area = "kb"

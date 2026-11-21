@@ -14,6 +14,9 @@
       <Font role="font" uri="font:BoldSystemFontFile" size="56" />
     </Label>
     <MiniKeyboard id="kb" />
+    <!-- One flat grid with a heading above it. MarkupGrid sections aren't used:
+         some Roku firmware hands the section node to CardItem as if it were a title. -->
+    <Label id="gridHeading" visible="false" />
     <MarkupGrid
       id="grid"
       itemComponentName="CardItem"

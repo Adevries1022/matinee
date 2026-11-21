@@ -45,6 +45,17 @@ end sub
 sub showContent()
     c = m.top.itemContent
     if c = invalid then return
+    ' Only MediaContent has a Card size. Some firmware hands a grid's section
+    ' node to its item component; draw nothing rather than crash on it.
+    if c.cardW = invalid or c.cardH = invalid
+        m.card.visible = false
+        m.ring.visible = false
+        m.w = 0
+        m.h = 0
+        return
+    end if
+    m.card.visible = true
+    m.ring.visible = true
     if m.poster.uri = c.HDPosterUrl and m.poster.loadStatus = "ready"
         m.poster.opacity = 1
     else
@@ -73,7 +84,7 @@ sub layout()
     if c = invalid then return
     w = c.cardW
     h = c.cardH
-    if w = 0 or h = 0 then return
+    if w = invalid or h = invalid or w = 0 or h = 0 then return
     m.card.translation = [m.padX, m.padY]
     m.w = w
     m.h = h
