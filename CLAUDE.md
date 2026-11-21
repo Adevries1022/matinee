@@ -1,6 +1,6 @@
 # Matinee
 
-A Roku app (SceneGraph + BrighterScript, compiled to BrightScript) for Jellyfin, with Seerr requests. It runs on a TCL 4-Series 55S435 (2021), an entry-level Roku TV, so keep motion and image sizes light.
+A Roku app (SceneGraph + BrighterScript, compiled to BrightScript) for Jellyfin, with Seerr requests. It's tested on a TCL 55R655 Roku TV ("Living Room"), but it's meant for other households' Roku TVs too, including entry-level ones, so keep motion and image sizes light.
 
 ## Read first
 - `CONTEXT.md`: the glossary. Use its terms (Card, Focused, Hero, Row, Theme, Layout Add-on, Trailer Preview, etc.) in code, comments and conversation.
