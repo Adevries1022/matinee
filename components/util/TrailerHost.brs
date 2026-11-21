@@ -111,7 +111,10 @@ sub playTrailer(how as string)
         content.streamFormat = "hls"
     end if
     m.trailerTry = how
-    print "[Matinee] trailer: playing ("; how; ") "; content.url
+    ' Never write the access token to the debug log (anyone on the LAN can read port 8085).
+    logUrl = content.url
+    if token <> "" then logUrl = logUrl.Replace(token, "***")
+    print "[Matinee] trailer: playing ("; how; ") "; logUrl
     m.trailerVideo.mute = true
     m.trailerHint.text = "Press Play for sound"
     m.trailerVideo.content = content
