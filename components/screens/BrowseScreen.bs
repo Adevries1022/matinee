@@ -9,6 +9,7 @@ sub init()
     m.chrome = m.top.findNode("chrome")
     m.status = m.top.findNode("status")
     m.rows = m.top.findNode("rows")
+    m.sink = m.top.findNode("sink")
     m.status.font = makeFont(26)
     m.status.color = t.muted
     m.status.translation = [t.leftPad, t.rowsTop + 20]
@@ -462,7 +463,7 @@ sub setZone(zone as string)
     if zone = "rows"
         restoreRows()
     else
-        m.top.setFocus(true)
+        m.sink.setFocus(true)
     end if
 end sub
 
@@ -470,7 +471,7 @@ sub restoreRows()
     if m.rows.content <> invalid and m.rows.visible
         m.rows.setFocus(true)
     else
-        m.top.setFocus(true)
+        m.sink.setFocus(true)
     end if
 end sub
 

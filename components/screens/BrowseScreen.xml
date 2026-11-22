@@ -27,5 +27,7 @@
       showRowLabel="[true]"
       visible="false" />
     <Group id="chrome" />
+    <!-- Takes focus for the Hero buttons and badges, so the RowList lets go. -->
+    <Group id="sink" focusable="true" />
   </children>
 </component>
