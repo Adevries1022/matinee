@@ -37,6 +37,10 @@ _Avoid_: Hover, hovered, selected (selecting means pressing OK)
 The large area at the top of Home, Series and Movies showing the Focused title's artwork, name, details and actions.
 _Avoid_: Banner, billboard, spotlight
 
+**Logo**:
+A title's own name artwork from Jellyfin (a transparent image), drawn in place of the text title in the Hero and on Detail. Episodes use their show's Logo; titles without one, such as Seerr results, keep the text title.
+_Avoid_: Title art, clear logo, wordmark
+
 **Row**:
 A titled, horizontally scrolling list of Cards.
 _Avoid_: Shelf, carousel, lane

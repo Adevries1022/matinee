@@ -212,6 +212,11 @@ function themeTokens(prefs as object) as object
     t.epW = 400
     t.epH = 225
     t.cardRadius = 14
+    ' Title Logos: the box each one is fitted into, bottom left.
+    t.heroLogoW = 640
+    t.heroLogoH = 124
+    t.detailLogoW = 600
+    t.detailLogoH = 116
     t.cellPadX = 12
     t.cellPadY = 16
 
@@ -395,6 +400,22 @@ function imageUrl(itemId as string, imgType as string, width as integer) as stri
     return m.global.serverUrl + "/Items/" + itemId + "/Images/" + imgType + "?fillWidth=" + width.ToStr() + "&quality=85"
 end function
 
+' The title's Logo (its own transparent title artwork), sized to fit a
+' w by h box without cropping. Episodes use their show's Logo. "" when
+' there is none, so the title is drawn as text.
+function logoUrl(item as object, w as integer, h as integer) as string
+    id = ""
+    tag = imageTag(item, "Logo")
+    if tag <> ""
+        id = safeStr(item.Id)
+    else if safeStr(item.ParentLogoImageTag) <> ""
+        id = safeStr(item.ParentLogoItemId)
+        tag = safeStr(item.ParentLogoImageTag)
+    end if
+    if id = "" then return ""
+    return m.global.serverUrl + "/Items/" + id + "/Images/Logo?maxWidth=" + w.ToStr() + "&maxHeight=" + h.ToStr() + "&tag=" + tag + "&quality=90"
+end function
+
 function imageTag(item as object, name as string) as string
     tags = item.ImageTags
     if not isValid(tags) then return ""
@@ -560,6 +581,9 @@ function itemToContent(item as object, landscape as boolean, rowKind = "" as str
             c.backdropUrl = imageUrl(safeStr(item.ParentBackdropItemId), "Backdrop", 1920)
         end if
     end if
+
+    t = th()
+    c.logoUrl = logoUrl(item, t.heroLogoW, t.heroLogoH)
 
     setCardSize(c, landscape)
     img = ""

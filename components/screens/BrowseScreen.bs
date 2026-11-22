@@ -79,6 +79,9 @@ sub buildHero()
     m.heroTitle.width = 1200
     m.heroTitle.height = 116
     m.heroTitle.vertAlign = "center"
+    m.heroLogoBox = [x, 226, t.heroLogoW, t.heroLogoH]
+    m.heroLogo = makeLogo(layer)
+    m.heroLogo.observeField("loadStatus", "onHeroLogoStatus")
     m.heroMetaHost = layer.CreateChild("Group")
     m.heroMetaHost.translation = [x, 360]
     m.heroBlurb = makeLabel(layer, "", 26, "regular", t.soft)
@@ -125,6 +128,7 @@ sub applyHero()
     if size = 80 and measureText(title, 80, "display") > 1200 then size = 64
     m.heroTitle.font = makeFont(size, "display")
     m.heroTitle.text = title
+    showLogo(m.heroLogo, m.heroTitle, c.logoUrl, m.heroLogoBox)
 
     m.heroMetaHost.removeChildrenIndex(m.heroMetaHost.getChildCount(), 0)
     parts = []
@@ -175,6 +179,10 @@ sub paintListButton()
     else
         setBtnIcon(m.btnList, "plus")
     end if
+end sub
+
+sub onHeroLogoStatus()
+    placeLogo(m.heroLogo, m.heroTitle, m.heroLogoBox)
 end sub
 
 sub onHeroArtStatus()

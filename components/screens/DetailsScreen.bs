@@ -24,6 +24,9 @@ sub init()
     m.title.width = 1100
     m.title.height = 110
     m.title.vertAlign = "center"
+    m.logoBox = [m.x, 204, t.detailLogoW, t.detailLogoH]
+    m.logo = makeLogo(m.layer)
+    m.logo.observeField("loadStatus", "onLogoStatus")
     m.metaHost = m.layer.CreateChild("Group")
     m.metaHost.translation = [m.x, 330]
     m.blurb = makeLabel(m.layer, "", 24, "regular", t.soft)
@@ -110,6 +113,8 @@ sub onItem(event as object)
     if size = 76 and measureText(title, 76, "display") > 1100 then size = 60
     m.title.font = makeFont(size, "display")
     m.title.text = title
+    t = th()
+    showLogo(m.logo, m.title, logoUrl(item, t.detailLogoW, t.detailLogoH), m.logoBox)
 
     m.metaHost.removeChildrenIndex(m.metaHost.getChildCount(), 0)
     parts = []
@@ -187,6 +192,10 @@ function accessText(item as object) as string
     if ad then parts.Push("AD")
     return parts.Join(" " + Chr(183) + " ")
 end function
+
+sub onLogoStatus()
+    placeLogo(m.logo, m.title, m.logoBox)
+end sub
 
 sub onArtStatus()
     if m.art.loadStatus = "ready" then m.fadeIn.control = "start"

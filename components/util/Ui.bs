@@ -279,6 +279,58 @@ function makeToggleRow(parent as object, text as string, w as integer, h = 72 as
     return { group: g, bg: bg, ring: ring, label: l, toggle: tg, w: w, h: h }
 end function
 
+' ================= Title Logos =================
+
+' A Poster for a title's Logo, drawn in place of its text title.
+function makeLogo(parent as object) as object
+    p = parent.CreateChild("Poster")
+    p.loadDisplayMode = "scaleToFit"
+    p.visible = false
+    return p
+end function
+
+' Show the Logo at url, or the text title when there is none. The text
+' also comes back if the Logo fails to load (see placeLogo).
+sub showLogo(logo as object, label as object, url as string, area as object)
+    if url = ""
+        logo.visible = false
+        logo.uri = ""
+        label.visible = true
+        return
+    end if
+    label.visible = false
+    if logo.uri = url
+        placeLogo(logo, label, area)
+        return
+    end if
+    logo.visible = false
+    logo.uri = url
+end sub
+
+' Call when the Logo's loadStatus changes. area is [x, y, w, h]: the Logo
+' keeps its shape, as large as fits, and sits on its bottom left.
+sub placeLogo(logo as object, label as object, area as object)
+    st = logo.loadStatus
+    if st = "ready"
+        bw = logo.bitmapWidth
+        bh = logo.bitmapHeight
+        if bw <= 0 or bh <= 0 then return
+        h = area[3]
+        w = Int(h * bw / bh)
+        if w > area[2]
+            w = area[2]
+            h = Int(w * bh / bw)
+        end if
+        logo.width = w
+        logo.height = h
+        logo.translation = [area[0], area[1] + area[3] - h]
+        logo.visible = true
+    else if st = "failed"
+        logo.visible = false
+        label.visible = true
+    end if
+end sub
+
 ' ================= Fields =================
 
 ' A text field drawn like an input. OK opens the on-screen keyboard.

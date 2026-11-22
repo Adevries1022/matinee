@@ -16,6 +16,8 @@
     <field id="epCode" type="string" />
     <field id="rowTitle" type="string" />
     <field id="backdropUrl" type="string" />
+    <!-- The title's own Logo artwork, drawn in place of the title text. -->
+    <field id="logoUrl" type="string" />
     <field id="progress" type="float" />
     <field id="resumeSeconds" type="integer" />
     <field id="cardW" type="integer" />
