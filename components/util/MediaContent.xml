@@ -22,6 +22,8 @@
     <field id="cardH" type="integer" />
     <field id="played" type="boolean" />
     <field id="favorite" type="boolean" />
+    <!-- Episode Cards: title and description under the artwork, not over it. -->
+    <field id="textBelow" type="boolean" />
     <field id="badge" type="string" />
     <field id="requestStatus" type="integer" />
   </interface>

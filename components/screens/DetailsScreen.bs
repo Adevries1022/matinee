@@ -1,63 +1,79 @@
-' Movie or show details. Shows get a season picker and an episode row.
+' A movie or show, laid out like the Detail board: artwork on the right
+' two-thirds, a back pill, eyebrow, title, meta, blurb and buttons on the
+' left; then season pills and episode Cards for shows, or "More like this"
+' for movies. Focus zones: back, buttons, seasons, cards.
+
 sub init()
-    m.backdrop = m.top.findNode("backdrop")
-    m.title = m.top.findNode("title")
-    m.meta = m.top.findNode("meta")
-    m.overview = m.top.findNode("overview")
-    m.cast = m.top.findNode("cast")
-    m.btnGroup = m.top.findNode("buttons")
-    m.seasonBar = m.top.findNode("seasonBar")
-    m.episodes = m.top.findNode("episodes")
-    m.epInfo = m.top.findNode("epInfo")
-    m.status = m.top.findNode("status")
-    m.fadeIn = m.top.findNode("fadeIn")
-
     t = th()
-    x = t.leftPad
-    addBackdropShade(m.top.findNode("shadeLayer"), 760)
-    setupTrailer(m.top, 1, 620)
-    m.top.findNode("info").translation = [x, 110]
-    m.title.color = t.text
-    m.meta.color = t.textDim
-    m.overview.color = t.textDim
-    m.cast.color = t.textFaint
-    m.btnGroup.translation = [x, 600]
-    m.seasonBar.translation = [x, 700]
-    m.episodes.translation = [x - t.cellPadX, 784 - t.cellPadY]
-    m.episodes.itemSize = [t.contentWidth + t.cellPadX, t.landH + t.cellPadY * 2]
-    m.episodes.rowItemSize = [cellSize(true)]
-    m.episodes.rowItemSpacing = [[0, 0]]
-    m.epInfo.translation = [x, 1020]
-    m.epInfo.color = t.textDim
-    if t.miniCards then m.epInfo.translation = [x, 990]
-    m.status.translation = [x, 500]
-    m.status.color = t.textDim
-    m.episodes.observeField("rowItemSelected", "onEpisodeSelected")
-    m.episodes.observeField("rowItemFocused", "onEpisodeFocused")
-    m.backdrop.observeField("loadStatus", "onBackdropStatus")
-    m.top.observeField("focusedChild", "onFocusChanged")
+    m.art = m.top.findNode("art")
+    m.layer = m.top.findNode("layer")
+    m.cards = m.top.findNode("cards")
+    m.sink = m.top.findNode("sink")
+    m.fadeIn = m.top.findNode("fadeIn")
+    m.x = 120
 
-    m.area = "buttons"
+    makeFade(m.layer, "detail", 1920, 1080)
+    m.back = makeBackPill(m.layer, m.top.backLabel)
+
+    m.eyebrow = makeLabel(m.layer, "", 18, "semibold", t.accent)
+    m.eyebrow.translation = [m.x, 176]
+    m.eyebrow.height = 22
+    m.eyebrow.vertAlign = "center"
+    m.title = makeLabel(m.layer, "", 96, "display", t.text)
+    m.title.translation = [m.x, 206]
+    m.title.width = 1100
+    m.title.height = 110
+    m.title.vertAlign = "center"
+    m.metaHost = m.layer.CreateChild("Group")
+    m.metaHost.translation = [m.x, 330]
+    m.blurb = makeLabel(m.layer, "", 24, "regular", t.soft)
+    m.blurb.translation = [m.x, 384]
+    m.blurb.width = 760
+    m.blurb.wrap = true
+    m.blurb.maxLines = 3
+    m.blurb.lineSpacing = 10
+    m.btnHost = m.layer.CreateChild("Group")
+    m.pillHost = m.layer.CreateChild("Group")
+    m.pillHost.translation = [m.x, 636]
+    m.rowLabel = makeLabel(m.layer, "More like this", 26, "semibold", t.heading)
+    m.rowLabel.translation = [m.x, 636]
+    m.rowLabel.visible = false
+    m.status = makeLabel(m.layer, "Loading...", 26, "regular", t.muted)
+    m.status.translation = [m.x, 400]
+
+    m.cards.observeField("rowItemSelected", "onCardSelected")
+    m.art.observeField("loadStatus", "onArtStatus")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.top.observeField("backLabel", "onBackLabel")
+
+    m.zone = "buttons"
     m.btnIndex = 0
     m.buttons = []
-    m.btnNodes = []
+    m.actions = []
+    m.pills = []
     m.seasons = []
-    m.seasonLabels = []
     m.seasonIndex = 0
     m.playTarget = invalid
     m.nextUpSeasonId = ""
     m.epGen = 0
-    m.restoreEp = -1
+    m.restoreCard = -1
     m.isSeries = false
     m.played = false
+    m.favorite = false
+    m.trailerCount = 0
     m.item = invalid
     m.seenVersion = m.global.watchVersion
+    paintAll()
+end sub
+
+sub onBackLabel()
+    setBtnText(m.back, m.top.backLabel)
 end sub
 
 sub load()
     id = m.top.itemId
     if id = "" then return
-    apiRequest("/Items/" + id, { "userId": m.global.userId, "Fields": "Overview,Genres,People" }, "onItem")
+    apiRequest("/Items/" + id, { "userId": m.global.userId, "Fields": "Overview,Genres,ChildCount,MediaStreams,DateLastMediaAdded" }, "onItem")
 end sub
 
 sub onItem(event as object)
@@ -78,47 +94,102 @@ sub onItem(event as object)
 
     m.item = item
     m.status.visible = false
-    m.title.text = safeStr(item.Name)
-    m.meta.text = metaLine(item)
-    m.overview.text = safeStr(item.Overview)
-
-    m.cast.text = ""
-    if isValid(item.People)
-        names = []
-        for each p in item.People
-            if safeStr(p.Type) = "Actor" and names.Count() < 4 then names.Push(safeStr(p.Name))
-        end for
-        if names.Count() > 0 then m.cast.text = "Starring  " + names.Join(", ")
+    m.isSeries = (safeStr(item.Type) = "Series")
+    m.played = false
+    m.favorite = false
+    if isValid(item.UserData)
+        m.played = isTrue(item.UserData.Played)
+        m.favorite = isTrue(item.UserData.IsFavorite)
     end if
+    m.trailerCount = safeInt(item.LocalTrailerCount)
+
+    m.eyebrow.text = UCase(eyebrowText(item))
+    title = safeStr(item.Name)
+    size = 96
+    if measureText(title, 96, "display") > 1100 then size = 76
+    if size = 76 and measureText(title, 76, "display") > 1100 then size = 60
+    m.title.font = makeFont(size, "display")
+    m.title.text = title
+
+    m.metaHost.removeChildrenIndex(m.metaHost.getChildCount(), 0)
+    parts = []
+    if isValid(item.ProductionYear) then parts.Push(item.ProductionYear.ToStr())
+    if safeStr(item.OfficialRating) <> "" then parts.Push({ text: safeStr(item.OfficialRating), boxed: true })
+    parts.Push(lengthText(item))
+    parts.Push(firstGenre(item))
+    access = accessText(item)
+    if access <> "" then parts.Push(access)
+    makeMeta(m.metaHost, parts, 22)
+    m.blurb.text = safeStr(item.Overview)
 
     if hasBackdrop(item)
-        uri = imageUrl(safeStr(item.Id), "Backdrop", 1920)
-        if uri <> m.backdrop.uri
-            m.backdrop.opacity = 0
-            m.backdrop.uri = uri
+        uri = m.global.serverUrl + "/Items/" + safeStr(item.Id) + "/Images/Backdrop?fillWidth=1280&quality=85"
+        if uri <> m.art.uri
+            m.art.opacity = 0
+            m.art.uri = uri
         end if
     end if
-
-    m.isSeries = (safeStr(item.Type) = "Series")
-    trailerScheduleId(safeStr(item.Id))
-    m.played = false
-    if isValid(item.UserData) then m.played = isTrue(item.UserData.Played)
 
     if m.isSeries
         m.playTarget = invalid
         m.nextUpSeasonId = ""
-        apiRequest("/Shows/NextUp", { "userId": m.global.userId, "seriesId": safeStr(item.Id), "Limit": "1", "EnableTotalRecordCount": "false" }, "onNextUp")
+        m.pillHost.visible = true
+        m.rowLabel.visible = false
+        apiRequest("/Shows/NextUp", { "userId": m.global.userId, "seriesId": safeStr(item.Id), "Limit": "1", "EnableResumable": "true", "EnableTotalRecordCount": "false" }, "onNextUp")
     else
         resume = 0
         if isValid(item.UserData) then resume = ticksToSeconds(item.UserData.PlaybackPositionTicks)
         m.playTarget = { itemId: safeStr(item.Id), startSeconds: resume, code: "" }
+        m.pillHost.visible = false
+        m.rowLabel.visible = true
+        apiRequest("/Items/" + safeStr(item.Id) + "/Similar", { "userId": m.global.userId, "Limit": "12", "Fields": "Overview,Genres,ChildCount" }, "onSimilar")
     end if
     buildButtons()
     if m.top.isInFocusChain() then restoreFocus()
 end sub
 
-sub onBackdropStatus()
-    if m.backdrop.loadStatus = "ready" then m.fadeIn.control = "start"
+' "Shows library · New episode added", "Movies library · Watched"
+function eyebrowText(item as object) as string
+    if safeStr(item.Type) = "Series"
+        s = "Shows library"
+        added = safeStr(item.DateLastMediaAdded)
+        if added <> ""
+            d = CreateObject("roDateTime")
+            d.FromISO8601String(added)
+            now = CreateObject("roDateTime")
+            if now.AsSeconds() - d.AsSeconds() < 14 * 86400 then return s + " " + Chr(183) + " New episode added"
+        end if
+        if isValid(item.UserData)
+            n = safeInt(item.UserData.UnplayedItemCount)
+            if n = 1 then return s + " " + Chr(183) + " 1 episode to watch"
+            if n > 1 then return s + " " + Chr(183) + " " + n.ToStr() + " episodes to watch"
+        end if
+        return s
+    end if
+    if m.played then return "Movies library " + Chr(183) + " Watched"
+    return "Movies library"
+end function
+
+' "CC" when there are subtitles, "AD" when there is an audio description track.
+function accessText(item as object) as string
+    if not isValid(item.MediaStreams) then return ""
+    cc = false
+    ad = false
+    for each s in item.MediaStreams
+        if safeStr(s.Type) = "Subtitle" then cc = true
+        if safeStr(s.Type) = "Audio"
+            title = LCase(safeStr(s.DisplayTitle) + " " + safeStr(s.Title))
+            if Instr(1, title, "descri") > 0 then ad = true
+        end if
+    end for
+    parts = []
+    if cc then parts.Push("CC")
+    if ad then parts.Push("AD")
+    return parts.Join(" " + Chr(183) + " ")
+end function
+
+sub onArtStatus()
+    if m.art.loadStatus = "ready" then m.fadeIn.control = "start"
 end sub
 
 ' ---------- Shows: next up, seasons, episodes ----------
@@ -146,23 +217,18 @@ sub onSeasons(event as object)
     if res.ok and isValid(res.data)
         if isValid(res.data.Items) then m.seasons = res.data.Items
     end if
-
     pref = m.top.seasonId
     if pref = "" then pref = m.nextUpSeasonId
     m.seasonIndex = 0
     for i = 0 to m.seasons.Count() - 1
         if safeStr(m.seasons[i].Id) = pref then m.seasonIndex = i
     end for
-
-    m.seasonBar.removeChildrenIndex(m.seasonBar.getChildCount(), 0)
-    m.seasonLabels = []
-    x = 0
-    for each season in m.seasons
-        chip = makeChip(m.seasonBar, safeStr(season.Name))
-        chip.group.translation = [x, 0]
-        x = x + chip.width + 14
-        m.seasonLabels.Push(chip)
+    m.pillHost.removeChildrenIndex(m.pillHost.getChildCount(), 0)
+    names = []
+    for each s in m.seasons
+        names.Push(safeStr(s.Name))
     end for
+    m.pills = makePills(m.pillHost, names, m.seasonIndex)
     paintAll()
     loadEpisodes()
 end sub
@@ -178,158 +244,183 @@ end sub
 sub onEpisodes(event as object)
     res = event.getData()
     if res.tag <> m.epGen then return
+    t = th()
     items = []
     if res.ok and isValid(res.data)
         if isValid(res.data.Items) then items = res.data.Items
     end if
-
     root = CreateObject("roSGNode", "ContentNode")
     row = root.CreateChild("ContentNode")
     targetIndex = -1
     for i = 0 to items.Count() - 1
         ep = items[i]
         c = itemToContent(ep, true)
+        c.cardW = t.epW
+        c.cardH = t.epH
+        c.textBelow = true
         num = ""
-        if isValid(ep.IndexNumber) then num = ep.IndexNumber.ToStr() + ".  "
+        if isValid(ep.IndexNumber) then num = ep.IndexNumber.ToStr() + ". "
         c.heading = num + safeStr(ep.Name)
+        c.badge = formatRuntime(ep.RunTimeTicks)
+        if c.played then c.resumeSeconds = 0
         row.appendChild(c)
         if m.playTarget <> invalid
             if safeStr(ep.Id) = m.playTarget.itemId then targetIndex = i
         end if
     end for
-
-    m.episodes.content = root
-    m.episodes.visible = items.Count() > 0
-    m.epInfo.text = ""
-
     if m.playTarget = invalid and items.Count() > 0
         first = items[0]
         m.playTarget = { itemId: safeStr(first.Id), startSeconds: 0, code: epCode(first) }
         buildButtons()
     end if
-
-    if items.Count() > 0
-        jump = 0
-        if m.restoreEp >= 0
-            jump = m.restoreEp
-            if jump > items.Count() - 1 then jump = items.Count() - 1
-            m.restoreEp = -1
-        else if targetIndex >= 0
-            jump = targetIndex
-        end if
-        m.episodes.jumpToRowItem = [0, jump]
+    jump = 0
+    if m.restoreCard >= 0
+        jump = m.restoreCard
+        m.restoreCard = -1
+    else if targetIndex >= 0
+        jump = targetIndex
     end if
+    showCards(root, [t.epW + t.cellPadX * 2, t.epH + t.cellPadY * 2 + 110], 710, jump)
+end sub
 
-    if m.area = "episodes"
-        if items.Count() = 0 then m.area = "seasons"
-        if m.top.isInFocusChain() then restoreFocus()
+' ---------- Movies: more like this ----------
+
+sub onSimilar(event as object)
+    res = event.getData()
+    t = th()
+    items = []
+    if res.ok and isValid(res.data)
+        if isValid(res.data.Items) then items = res.data.Items
+    end if
+    m.rowLabel.visible = items.Count() > 0
+    root = CreateObject("roSGNode", "ContentNode")
+    row = root.CreateChild("ContentNode")
+    for each it in items
+        row.appendChild(itemToContent(it, true))
+    end for
+    jump = 0
+    if m.restoreCard >= 0
+        jump = m.restoreCard
+        m.restoreCard = -1
+    end if
+    showCards(root, [t.landW + t.cellPadX * 2, t.landH + t.cellPadY * 2], 686, jump)
+end sub
+
+sub showCards(root as object, cell as object, top as integer, jump as integer)
+    t = th()
+    count = root.getChild(0).getChildCount()
+    m.cards.translation = [m.x - t.cellPadX, top - t.cellPadY]
+    m.cards.itemSize = [1920 - m.x + t.cellPadX, cell[1]]
+    m.cards.rowItemSize = [cell]
+    m.cards.rowItemSpacing = [[0, 0]]
+    m.cards.content = root
+    m.cards.visible = count > 0
+    if count > 0
+        if jump > count - 1 then jump = count - 1
+        m.cards.jumpToRowItem = [0, jump]
+    end if
+    if m.zone = "cards" and count = 0
+        m.zone = "buttons"
         paintAll()
     end if
+    if m.top.isInFocusChain() then restoreFocus()
 end sub
 
-sub onEpisodeFocused(event as object)
+sub onCardSelected(event as object)
     idx = event.getData()
-    if m.episodes.content = invalid then return
-    row = m.episodes.content.getChild(0)
-    if row = invalid then return
+    row = m.cards.content.getChild(0)
     c = row.getChild(idx[1])
     if c = invalid then return
-    text = c.subtitle
-    if c.description <> "" then text = text + "   " + Chr(8212) + "   " + c.description
-    m.epInfo.text = text
-end sub
-
-sub onEpisodeSelected(event as object)
-    idx = event.getData()
-    row = m.episodes.content.getChild(0)
-    c = row.getChild(idx[1])
-    if c = invalid then return
-    m.restoreEp = idx[1]
-    m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
+    m.restoreCard = idx[1]
+    if m.isSeries
+        m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
+    else
+        m.top.navigate = { action: "details", itemId: c.itemId }
+    end if
 end sub
 
 ' ---------- Buttons ----------
 
 sub buildButtons()
+    m.btnHost.removeChildrenIndex(m.btnHost.getChildCount(), 0)
     m.buttons = []
+    m.actions = []
     t = m.playTarget
-    if m.isSeries
-        lbl = "Play"
-        if t <> invalid
-            if t.startSeconds > 0
-                lbl = "Resume"
-            end if
-            if t.code <> "" then lbl = lbl + " " + t.code
-        end if
-        m.buttons.Push({ label: lbl, action: "play" })
-    else
-        resume = 0
-        if t <> invalid then resume = t.startSeconds
-        if resume > 0
-            m.buttons.Push({ label: "Resume from " + formatClock(resume), action: "play" })
-            m.buttons.Push({ label: "Play from Start", action: "start" })
-        else
-            m.buttons.Push({ label: "Play", action: "play" })
-        end if
+    resume = 0
+    if t <> invalid then resume = t.startSeconds
+    lbl = "Play"
+    if resume > 0 then lbl = "Resume"
+    if m.isSeries and t <> invalid
+        if t.code <> "" then lbl = lbl + " " + t.code
     end if
-    if m.played
-        m.buttons.Push({ label: "Watched", action: "unwatch" })
-    else
-        m.buttons.Push({ label: "Mark as Watched", action: "watch" })
-    end if
-    renderButtons()
-end sub
+    addButton({ kind: "primary", icon: "play", text: lbl }, "play")
+    if not m.isSeries and resume > 0 then addButton({ kind: "secondary", text: "Start over", size: 22, padX: 30 }, "start")
+    listIcon = "mylist"
+    if m.favorite then listIcon = "mylist_on"
+    addButton({ kind: "secondary", icon: listIcon, text: "My List", size: 22, padX: 30, iconSize: 24 }, "mylist")
+    if m.trailerCount > 0 then addButton({ kind: "secondary", icon: "trailer", text: "Trailer", size: 22, padX: 30, iconSize: 24 }, "trailer")
+    addButton({ kind: "square", icon: "check", selected: m.played, iconSize: 28 }, "watched")
 
-sub renderButtons()
-    m.btnGroup.removeChildrenIndex(m.btnGroup.getChildCount(), 0)
-    m.btnNodes = []
-    x = 0
-    for each b in m.buttons
-        btn = makeButton(m.btnGroup, b.label, 180)
-        btn.group.translation = [x, 0]
-        m.btnNodes.Push(btn)
-        x = x + btn.width + 20
-    end for
+    ' Sit the buttons under the blurb, above the season pills.
+    y = 384
+    if m.blurb.text <> ""
+        rect = m.blurb.boundingRect()
+        y = 384 + Int(rect.height) + 32
+    end if
+    if y > 540 then y = 540
+    rowBtns(m.buttons, m.x, y, 20)
     if m.btnIndex >= m.buttons.Count() then m.btnIndex = 0
     paintAll()
 end sub
 
+sub addButton(opts as object, action as string)
+    m.buttons.Push(makeBtn(m.btnHost, opts))
+    m.actions.Push(action)
+end sub
+
 sub paintAll()
-    t = th()
-    for i = 0 to m.btnNodes.Count() - 1
-        paintButton(m.btnNodes[i], m.area = "buttons" and i = m.btnIndex)
-    end for
-    for i = 0 to m.seasonLabels.Count() - 1
-        chip = m.seasonLabels[i]
-        if i = m.seasonIndex and m.area = "seasons"
-            chip.bg.blendColor = t.focusBg
-            chip.bg.opacity = 1.0
-            chip.label.color = t.onFocus
-        else if i = m.seasonIndex
-            chip.bg.blendColor = t.surface
-            chip.bg.opacity = t.surfaceHiOpacity * 2
-            chip.label.color = t.text
-        else
-            chip.bg.blendColor = t.surface
-            chip.bg.opacity = t.surfaceOpacity
-            chip.label.color = t.textDim
-        end if
-    end for
+    focusBtn = -1
+    if m.zone = "buttons" then focusBtn = m.btnIndex
+    paintBtns(m.buttons, focusBtn)
+    paintBtn(m.back, m.zone = "back")
+    focusPill = -1
+    if m.zone = "seasons" then focusPill = m.seasonIndex
+    selectPill(m.pills, m.seasonIndex, focusPill)
 end sub
 
 sub doButton()
-    if m.buttons.Count() = 0 then return
-    b = m.buttons[m.btnIndex]
+    if m.actions.Count() = 0 then return
+    action = m.actions[m.btnIndex]
     t = m.playTarget
-    if b.action = "play"
+    if action = "play"
         if t <> invalid then m.top.navigate = { action: "play", itemId: t.itemId, startSeconds: t.startSeconds }
-    else if b.action = "start"
+    else if action = "start"
         if t <> invalid then m.top.navigate = { action: "play", itemId: t.itemId, startSeconds: 0 }
-    else if b.action = "watch"
-        apiRequest("/UserPlayedItems/" + safeStr(m.item.Id), { "userId": m.global.userId }, "onPlayedChanged", "POST")
-    else if b.action = "unwatch"
-        apiRequest("/UserPlayedItems/" + safeStr(m.item.Id), { "userId": m.global.userId }, "onPlayedChanged", "DELETE")
+    else if action = "mylist"
+        m.favorite = not m.favorite
+        setFavorite(safeStr(m.item.Id), m.favorite)
+        if m.favorite
+            setBtnIcon(m.buttons[m.btnIndex], "mylist_on")
+        else
+            setBtnIcon(m.buttons[m.btnIndex], "mylist")
+        end if
+        m.global.watchVersion = m.global.watchVersion + 1
+        m.seenVersion = m.global.watchVersion
+    else if action = "trailer"
+        apiRequest("/Items/" + safeStr(m.item.Id) + "/LocalTrailers", { "userId": m.global.userId }, "onTrailerList")
+    else if action = "watched"
+        method = "POST"
+        if m.played then method = "DELETE"
+        apiRequest("/UserPlayedItems/" + safeStr(m.item.Id), { "userId": m.global.userId }, "onPlayedChanged", method)
     end if
+end sub
+
+sub onTrailerList(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    if type(res.data) <> "roArray" then return
+    if res.data.Count() = 0 then return
+    m.top.navigate = { action: "play", itemId: safeStr(res.data[0].Id), startSeconds: 0, trailer: true }
 end sub
 
 sub onPlayedChanged(_event as object)
@@ -339,9 +430,9 @@ sub onPlayedChanged(_event as object)
 end sub
 
 sub reloadKeepingPlace()
-    if m.isSeries and m.episodes.content <> invalid
-        f = m.episodes.rowItemFocused
-        if f <> invalid then m.restoreEp = f[1]
+    if m.cards.content <> invalid
+        f = m.cards.rowItemFocused
+        if f <> invalid then m.restoreCard = f[1]
     end if
     load()
 end sub
@@ -356,11 +447,17 @@ end sub
 ' ---------- Focus & keys ----------
 
 sub restoreFocus()
-    if m.area = "episodes" and m.episodes.visible
-        m.episodes.setFocus(true)
-    else if not m.top.hasFocus()
-        m.top.setFocus(true)
+    if m.zone = "cards" and m.cards.visible
+        m.cards.setFocus(true)
+    else
+        m.sink.setFocus(true)
     end if
+end sub
+
+sub setZone(zone as string)
+    m.zone = zone
+    paintAll()
+    restoreFocus()
 end sub
 
 sub onFocusChanged()
@@ -369,63 +466,63 @@ end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
-    if m.area = "buttons"
+    hasSeasons = m.isSeries and m.seasons.Count() > 0
+    if m.zone = "back"
+        if key = "OK"
+            m.top.navigate = { action: "back" }
+        else if key = "down"
+            setZone("buttons")
+        end if
+        return key <> "back"
+    else if m.zone = "buttons"
         if key = "left"
             if m.btnIndex > 0 then m.btnIndex = m.btnIndex - 1
             paintAll()
-            return true
         else if key = "right"
             if m.btnIndex < m.buttons.Count() - 1 then m.btnIndex = m.btnIndex + 1
             paintAll()
-            return true
-        else if key = "OK" or key = "play"
-            ' Play turns the Trailer Preview's sound on and off while it runs.
-            if key = "play"
-                if toggleTrailerSound() then return true
-            end if
+        else if key = "OK"
             doButton()
-            return true
+        else if key = "play"
+            m.btnIndex = 0
+            doButton()
+        else if key = "up"
+            setZone("back")
         else if key = "down"
-            if m.isSeries and m.seasons.Count() > 0
-                m.area = "seasons"
-                paintAll()
+            if hasSeasons
+                setZone("seasons")
+            else if m.cards.visible
+                setZone("cards")
             end if
-            return true
-        else if key = "up"
-            return true
+        else
+            return false
         end if
-    else if m.area = "seasons"
-        if key = "left"
-            if m.seasonIndex > 0
-                m.seasonIndex = m.seasonIndex - 1
+        return true
+    else if m.zone = "seasons"
+        if key = "left" or key = "right"
+            dirn = 1
+            if key = "left" then dirn = -1
+            n = m.seasonIndex + dirn
+            if n >= 0 and n < m.seasons.Count()
+                m.seasonIndex = n
                 paintAll()
                 loadEpisodes()
             end if
-            return true
-        else if key = "right"
-            if m.seasonIndex < m.seasons.Count() - 1
-                m.seasonIndex = m.seasonIndex + 1
-                paintAll()
-                loadEpisodes()
-            end if
-            return true
         else if key = "up"
-            m.area = "buttons"
-            paintAll()
-            return true
+            setZone("buttons")
         else if key = "down" or key = "OK"
-            if m.episodes.visible
-                m.area = "episodes"
-                paintAll()
-                m.episodes.setFocus(true)
-            end if
-            return true
+            if m.cards.visible then setZone("cards")
+        else
+            return false
         end if
-    else if m.area = "episodes"
+        return true
+    else if m.zone = "cards"
         if key = "up"
-            m.area = "seasons"
-            paintAll()
-            m.top.setFocus(true)
+            if hasSeasons
+                setZone("seasons")
+            else
+                setZone("buttons")
+            end if
             return true
         end if
     end if

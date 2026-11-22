@@ -1,29 +1,33 @@
-' Plays a title, reports progress to Jellyfin, offers the next episode,
-' and has a Track Picker (press *) for audio and subtitles.
+' Plays a title and reports progress to Jellyfin. The Player OSD (from the
+' Player board) replaces Roku's trickplay bar: a header with the title, a
+' pause badge, the Up next card, the seek bar, and a row of controls with
+' -10 s, play/pause, +10 s, Subtitles, Audio and Next episode.
+' Keys: OK or Play/Pause toggles; Left/Right seek 10 s on the seek bar
+' (presses add up before the jump); Rewind/Fast-forward seek 30 s;
+' Up/Down move between the header, seek bar and controls; * opens subtitles.
+
 sub init()
     m.video = m.top.findNode("video")
     m.status = m.top.findNode("status")
-    m.hint = m.top.findNode("hint")
+    m.osd = m.top.findNode("osd")
     m.upNext = m.top.findNode("upNext")
     m.picker = m.top.findNode("picker")
+    m.sink = m.top.findNode("sink")
     m.countdown = m.top.findNode("countdown")
-    m.hintTimer = m.top.findNode("hintTimer")
+    m.hideTimer = m.top.findNode("hideTimer")
+    m.seekTimer = m.top.findNode("seekTimer")
 
     t = th()
+    m.status.font = makeFont(30)
     m.status.color = t.text
-    m.hint.color = t.textDim
-    ' The seek bar and buffering bar take the Accent.
-    m.video.trickPlayBar.filledBarBlendColor = t.accent
-    m.video.trickPlayBar.currentTimeMarkerBlendColor = t.accent
-    m.video.bufferingBar.filledBarBlendColor = t.accent
-    m.video.retrievingBar.filledBarBlendColor = t.accent
 
-    m.video.notificationInterval = 2
+    m.video.notificationInterval = 1
     m.video.observeField("state", "onState")
     m.video.observeField("position", "onPosition")
     m.video.observeField("availableAudioTracks", "onAudioTracks")
     m.countdown.observeField("fire", "onTick")
-    m.hintTimer.observeField("fire", "hideHint")
+    m.hideTimer.observeField("fire", "hideOsd")
+    m.seekTimer.observeField("fire", "applySeek")
     m.top.observeField("focusedChild", "onFocusChanged")
 
     m.di = CreateObject("roDeviceInfo")
@@ -39,6 +43,10 @@ sub init()
     m.mediaSourceId = ""
     m.playSessionId = ""
     m.item = invalid
+    m.zone = "seek"
+    m.ctlIndex = 1
+    m.seekTarget = -1
+    buildOsd()
 end sub
 
 ' ---------- Starting playback ----------
@@ -82,14 +90,34 @@ sub onItem(event as object)
         return
     end if
     m.item = res.data
+    setHeader()
+    refreshNextUi()
     if safeStr(m.item.Type) = "Episode" and isValid(m.item.SeriesId)
         apiRequest("/Shows/" + safeStr(m.item.SeriesId) + "/Episodes", { "userId": m.global.userId, "startItemId": m.itemId, "Limit": "3", "EnableTotalRecordCount": "false" }, "onNextEp")
     end if
     requestPlayback()
 end sub
 
+function prefValue(key as string, fallback as dynamic) as dynamic
+    p = m.global.prefs
+    if p = invalid then return fallback
+    v = p[key]
+    if v = invalid then return fallback
+    return v
+end function
+
+function maxBitrate() as integer
+    b = safeInt(prefValue("maxBitrate", 0))
+    if b <= 0 then b = 40000000
+    return b
+end function
+
 sub requestPlayback()
-    query = { "userId": m.global.userId, "IsPlayback": "true", "AutoOpenLiveStream": "true", "MaxStreamingBitrate": "40000000" }
+    query = { "userId": m.global.userId, "IsPlayback": "true", "AutoOpenLiveStream": "true", "MaxStreamingBitrate": maxBitrate().ToStr() }
+    if prefValue("directPlay", "prefer") = "off"
+        query["EnableDirectPlay"] = "false"
+        query["EnableDirectStream"] = "false"
+    end if
     if m.wantAudio <> invalid then query["AudioStreamIndex"] = m.wantAudio.ToStr()
     if m.wantSub <> invalid then query["SubtitleStreamIndex"] = m.wantSub.ToStr()
     if m.startSeconds > 0 then query["StartTimeTicks"] = (Int(m.startSeconds) * 10000000&).ToStr()
@@ -104,6 +132,7 @@ sub onNextEp(event as object)
     for i = 0 to items.Count() - 2
         if safeStr(items[i].Id) = m.itemId then m.nextEp = items[i + 1]
     end for
+    refreshNextUi()
 end sub
 
 ' Tell Jellyfin what this Roku can play, so it direct-plays when possible
@@ -135,7 +164,7 @@ function deviceProfile() as object
         subs.Push({ "Format": f, "Method": "Encode" })
     end for
     return {
-        "MaxStreamingBitrate": 40000000,
+        "MaxStreamingBitrate": maxBitrate(),
         "MaxStaticBitrate": 100000000,
         "MusicStreamingTranscodingBitrate": 192000,
         "DirectPlayProfiles": [{ "Container": "mp4,m4v,mov,mkv", "Type": "Video", "VideoCodec": vc, "AudioCodec": ac }],
@@ -169,8 +198,8 @@ sub onPlaybackInfo(event as object)
     ms = data.MediaSources[0]
     readStreams(ms)
 
-    ' First time through: pick tracks from the User's Jellyfin settings,
-    ' or from what they chose earlier in this binge.
+    ' First time through: pick tracks from the User's settings, or from
+    ' what they chose earlier in this binge.
     if not m.isRestart and not m.secondPass
         chooseTracks(ms)
         needsServer = false
@@ -194,7 +223,7 @@ sub onPlaybackInfo(event as object)
     token = m.global.token
 
     content = CreateObject("roSGNode", "ContentNode")
-    if isTrue(ms.SupportsDirectPlay)
+    if isTrue(ms.SupportsDirectPlay) and prefValue("directPlay", "prefer") <> "off"
         url = server + "/Videos/" + m.itemId + "/stream?static=true&MediaSourceId=" + m.mediaSourceId
         url = url + "&PlaySessionId=" + m.playSessionId + "&api_key=" + token + "&ApiKey=" + token
         fmt = LCase(safeStr(ms.Container))
@@ -229,11 +258,12 @@ sub onPlaybackInfo(event as object)
     m.video.content = content
     m.video.control = "play"
     applySubtitle()
+    refreshTrackPills()
     m.status.visible = false
     m.started = true
-    if m.top.isInFocusChain() and not m.pickerOpen then m.video.setFocus(true)
+    if m.top.isInFocusChain() and not m.pickerOpen then m.sink.setFocus(true)
     apiRequest("/Sessions/Playing", {}, "onIgnore", "POST", progressBody(false))
-    showHint()
+    showOsd()
 end sub
 
 function subUrl(index as integer) as string
@@ -242,13 +272,26 @@ end function
 
 function playTitle(item as object) as string
     if item = invalid then return ""
-    if safeStr(item.Type) = "Episode"
-        return safeStr(item.SeriesName) + "  " + Chr(8226) + "  " + episodeLabel(item)
-    end if
+    if safeStr(item.Type) = "Episode" then return safeStr(item.SeriesName)
     return safeStr(item.Name)
 end function
 
 ' ---------- Tracks ----------
+
+function languageName(code as string) as string
+    names = { eng: "English", en: "English", spa: "Spanish", es: "Spanish", fre: "French", fra: "French", fr: "French", ger: "German", deu: "German", de: "German", ita: "Italian", it: "Italian", jpn: "Japanese", ja: "Japanese", kor: "Korean", ko: "Korean", chi: "Chinese", zho: "Chinese", zh: "Chinese", por: "Portuguese", pt: "Portuguese", rus: "Russian", ru: "Russian", dut: "Dutch", nld: "Dutch", nl: "Dutch", swe: "Swedish", sv: "Swedish", nor: "Norwegian", nob: "Norwegian", dan: "Danish", fin: "Finnish", pol: "Polish", tur: "Turkish", ara: "Arabic", hin: "Hindi", heb: "Hebrew", gre: "Greek", ell: "Greek", hun: "Hungarian", cze: "Czech", ces: "Czech", tha: "Thai", vie: "Vietnamese", ind: "Indonesian", ukr: "Ukrainian" }
+    if names.DoesExist(code) then return names[code]
+    return ""
+end function
+
+function channelText(n as integer) as string
+    if n = 1 then return "Mono"
+    if n = 2 then return "Stereo"
+    if n = 6 then return "5.1"
+    if n = 8 then return "7.1"
+    if n > 0 then return n.ToStr() + " ch"
+    return ""
+end function
 
 sub readStreams(ms as object)
     m.audioStreams = []
@@ -259,7 +302,14 @@ sub readStreams(ms as object)
         title = safeStr(s.DisplayTitle)
         if title = "" then title = safeStr(s.Language)
         if title = "" then title = "Track " + safeInt(s.Index).ToStr()
-        info = { index: safeInt(s.Index), lang: LCase(safeStr(s.Language)), title: title, isText: isTrue(s.IsTextSubtitleStream) }
+        lang = LCase(safeStr(s.Language))
+        short = languageName(lang)
+        if short = "" then short = title
+        if kind = "Audio"
+            ch = channelText(safeInt(s.Channels))
+            if ch <> "" and short <> title then short = short + " " + ch
+        end if
+        info = { index: safeInt(s.Index), lang: lang, title: title, short: short, isText: isTrue(s.IsTextSubtitleStream) }
         if kind = "Audio" then m.audioStreams.Push(info)
         if kind = "Subtitle" then m.subStreams.Push(info)
     end for
@@ -281,11 +331,24 @@ function findStream(list as object, index as dynamic) as object
     return invalid
 end function
 
+' Server defaults, then the Subtitles settings, then what was chosen earlier.
 sub chooseTracks(ms as object)
     m.audioIndex = -1
     if isValid(ms.DefaultAudioStreamIndex) then m.audioIndex = safeInt(ms.DefaultAudioStreamIndex)
     m.subIndex = -1
     if isValid(ms.DefaultSubtitleStreamIndex) then m.subIndex = safeInt(ms.DefaultSubtitleStreamIndex)
+    mode = safeStr(prefValue("subtitles", "auto"))
+    lang = safeStr(prefValue("subtitleLang", ""))
+    if mode = "off"
+        m.subIndex = -1
+    else if mode = "on"
+        pick = -1
+        for each s in m.subStreams
+            if pick = -1 and s.isText and (lang = "" or s.lang = lang) then pick = s.index
+        end for
+        if pick = -1 and m.subStreams.Count() > 0 then pick = m.subStreams[0].index
+        m.subIndex = pick
+    end if
     tp = m.global.trackPrefs
     if tp = invalid then return
     if not isTrue(tp.set) then return
@@ -340,100 +403,348 @@ sub selectRokuAudio()
     end if
 end sub
 
-' ---------- Track Picker ----------
+' ---------- The OSD ----------
 
-sub openPicker()
+sub buildOsd()
+    t = th()
+    o = m.osd
+    top = makeShape(o, "pkg:/images/grad_vd.png", 1920, 260, t.black, 0.75)
+    top.loadDisplayMode = "scaleToFill"
+    bottom = makeFadeUp(o, 1920, 420, t.black, 0.88)
+    bottom.translation = [0, 660]
+
+    ' Header: round back button, title and episode.
+    m.backBtn = makeBtn(o, { kind: "round", icon: "back", h: 64, iconSize: 28 })
+    m.backBtn.group.translation = [80, 56]
+    m.hTitle = makeLabel(o, "", 32, "display", t.text)
+    m.hTitle.translation = [172, 54]
+    m.hTitle.height = 40
+    m.hTitle.vertAlign = "center"
+    m.hSub = makeLabel(o, "", 20, "regular", t.meta)
+    m.hSub.translation = [172, 96]
+
+    ' Pause badge in the middle.
+    m.pauseBadge = o.CreateChild("Group")
+    m.pauseBadge.translation = [860, 440]
+    makeShape(m.pauseBadge, "pkg:/images/circle.png", 200, 200, t.black, 0.45)
+    ic = makeIcon(m.pauseBadge, "play", 84, t.text)
+    ic.translation = [62, 58]
+
+    ' Up next card.
+    m.nextCard = o.CreateChild("Group")
+    m.nextCard.translation = [1920 - 80 - 440, 1080 - 236 - 122]
+    makeBox(m.nextCard, 440, 122, 18, "0x141820FF", 0.85)
+    m.nextThumb = m.nextCard.CreateChild("Poster")
+    m.nextThumb.translation = [16, 16]
+    m.nextThumb.width = 160
+    m.nextThumb.height = 90
+    m.nextThumb.loadWidth = 160
+    m.nextThumb.loadHeight = 90
+    m.nextThumb.loadDisplayMode = "scaleToZoom"
+    corners = makeShape(m.nextCard, "pkg:/images/corners_r10.9.png", 160, 90, "0x141820FF")
+    corners.translation = [16, 16]
+    lbl = makeLabel(m.nextCard, "UP NEXT", 15, "semibold", t.accent)
+    lbl.translation = [194, 22]
+    m.nextTitle = makeLabel(m.nextCard, "", 20, "semibold", t.text)
+    m.nextTitle.translation = [194, 46]
+    m.nextTitle.width = 230
+    m.nextInfo = makeLabel(m.nextCard, "", 16, "regular", t.muted)
+    m.nextInfo.translation = [194, 76]
+    m.nextInfo.width = 230
+    m.nextCard.visible = false
+
+    ' Seek bar row: elapsed, bar with Accent fill and white thumb, remaining.
+    m.barX = 80 + 84
+    m.barW = 1920 - 80 - 96 - m.barX
+    barY = 874
+    m.elapsed = makeLabel(o, "0:00", 20, "regular", t.heading)
+    m.elapsed.translation = [80, barY - 15]
+    m.elapsed.height = 30
+    m.elapsed.vertAlign = "center"
+    m.remaining = makeLabel(o, "", 20, "regular", t.muted)
+    m.remaining.translation = [1920 - 80 - 84, barY - 15]
+    m.remaining.width = 84
+    m.remaining.height = 30
+    m.remaining.horizAlign = "right"
+    m.remaining.vertAlign = "center"
+    m.barBg = o.CreateChild("Rectangle")
+    m.barBg.translation = [m.barX, barY - 4]
+    m.barBg.width = m.barW
+    m.barBg.height = 8
+    m.barBg.color = "0xFFFFFF40"
+    m.barFill = o.CreateChild("Rectangle")
+    m.barFill.translation = [m.barX, barY - 4]
+    m.barFill.height = 8
+    m.barFill.color = t.accent
+    m.thumbRing = makeShape(o, "pkg:/images/circle.png", 40, 40, t.accent)
+    m.thumb = makeShape(o, "pkg:/images/circle.png", 28, 28, t.white)
+    m.barY = barY
+
+    ' Controls: -10, play/pause, +10 on the left; pills on the right.
+    m.btnBack10 = makeBtn(o, { kind: "round", icon: "rewind10", h: 72, iconSize: 32 })
+    m.btnBack10.group.translation = [80, 932]
+    m.btnPlay = makeBtn(o, { kind: "round", icon: "pause", h: 96, iconSize: 40 })
+    m.btnPlay.kind = "primary"
+    m.btnPlay.group.translation = [172, 920]
+    m.btnFwd10 = makeBtn(o, { kind: "round", icon: "forward10", h: 72, iconSize: 32 })
+    m.btnFwd10.group.translation = [288, 932]
+    m.btnSubs = makeBtn(o, { kind: "pill", icon: "subtitles", text: "Subtitles", h: 64, size: 20, style: "medium", padX: 24 })
+    m.btnAudio = makeBtn(o, { kind: "pill", icon: "audio", text: "Audio", h: 64, size: 20, style: "medium", padX: 24 })
+    m.btnNext = makeBtn(o, { kind: "pill", icon: "next", text: "Next episode", h: 64, size: 20, padX: 28, iconSize: 24, iconAfter: true })
+    m.btnNext.kind = "primary"
+    m.controls = [m.btnBack10, m.btnPlay, m.btnFwd10, m.btnSubs, m.btnAudio, m.btnNext]
+    layoutPills()
+    paintOsd()
+end sub
+
+sub layoutPills()
+    x = 1920 - 80
+    for i = m.controls.Count() - 1 to 3 step -1
+        b = m.controls[i]
+        if b.group.visible
+            x = x - b.w
+            b.group.translation = [x, 936]
+            x = x - 20
+        end if
+    end for
+end sub
+
+sub setHeader()
+    it = m.item
+    if it = invalid then return
+    m.hTitle.text = playTitle(it)
+    if safeStr(it.Type) = "Episode"
+        parts = []
+        if isValid(it.ParentIndexNumber) then parts.Push("Season " + it.ParentIndexNumber.ToStr())
+        if isValid(it.IndexNumber) then parts.Push("Episode " + it.IndexNumber.ToStr())
+        parts.Push(safeStr(it.Name))
+        m.hSub.text = parts.Join(" " + Chr(183) + " ")
+    else
+        parts = []
+        if isValid(it.ProductionYear) then parts.Push(it.ProductionYear.ToStr())
+        r = formatRuntime(it.RunTimeTicks)
+        if r <> "" then parts.Push(r)
+        m.hSub.text = parts.Join(" " + Chr(183) + " ")
+    end if
+end sub
+
+sub refreshNextUi()
+    has = m.nextEp <> invalid
+    m.nextCard.visible = has
+    m.btnNext.group.visible = has
+    if has
+        ep = m.nextEp
+        code = ""
+        if isValid(ep.IndexNumber) then code = "E" + ep.IndexNumber.ToStr() + " " + Chr(183) + " "
+        m.nextTitle.text = code + safeStr(ep.Name)
+        m.nextInfo.text = formatRuntime(ep.RunTimeTicks)
+        m.nextThumb.uri = imageUrl(safeStr(ep.Id), "Primary", 320)
+    end if
+    if not has and m.ctlIndex = 5 then m.ctlIndex = 1
+    layoutPills()
+end sub
+
+sub refreshTrackPills()
+    subText = "Subtitles " + Chr(183) + " Off"
+    s = findStream(m.subStreams, m.subIndex)
+    if s <> invalid then subText = "Subtitles " + Chr(183) + " " + s.short
+    setBtnText(m.btnSubs, subText)
+    a = findStream(m.audioStreams, m.audioIndex)
+    audioText = "Audio"
+    if a <> invalid then audioText = "Audio " + Chr(183) + " " + a.short
+    setBtnText(m.btnAudio, audioText)
+    m.btnSubs.group.visible = m.subStreams.Count() > 0
+    m.btnAudio.group.visible = m.audioStreams.Count() > 1
+    if not m.controls[m.ctlIndex].group.visible then m.ctlIndex = 1
+    layoutPills()
+    paintOsd()
+end sub
+
+sub paintOsd()
+    paused = (m.video.state = "paused")
+    m.pauseBadge.visible = paused
+    if paused
+        setBtnIcon(m.btnPlay, "play")
+    else
+        setBtnIcon(m.btnPlay, "pause")
+    end if
+    focus = -1
+    if m.zone = "controls" then focus = m.ctlIndex
+    paintBtns(m.controls, focus)
+    paintBtn(m.backBtn, m.zone = "header")
+    m.thumbRing.visible = (m.zone = "seek")
+    updateBar()
+end sub
+
+sub updateBar()
+    dur = m.video.duration
+    curPos = m.video.position
+    if m.seekTarget >= 0 then curPos = m.seekTarget
+    if dur <= 0
+        dur = 0
+        if m.item <> invalid then dur = ticksToSeconds(m.item.RunTimeTicks)
+    end if
+    frac = 0.0
+    if dur > 0 then frac = curPos / dur
+    if frac < 0 then frac = 0
+    if frac > 1 then frac = 1
+    m.barFill.width = Int(m.barW * frac)
+    tx = m.barX + Int(m.barW * frac)
+    m.thumb.translation = [tx - 14, m.barY - 14]
+    m.thumbRing.translation = [tx - 20, m.barY - 20]
+    m.elapsed.text = formatClock(Int(curPos))
+    remain = Int(dur - curPos)
+    if remain < 0 then remain = 0
+    m.remaining.text = Chr(8722) + formatClock(remain)
+end sub
+
+sub showOsd()
     if not m.started then return
+    m.osd.visible = true
+    paintOsd()
+    restartHideTimer()
+end sub
+
+sub restartHideTimer()
+    m.hideTimer.control = "stop"
+    if m.video.state = "playing" and not m.pickerOpen then m.hideTimer.control = "start"
+end sub
+
+sub hideOsd()
+    if m.video.state <> "playing" or m.pickerOpen or m.seekTarget >= 0 then return
+    m.osd.visible = false
+    m.zone = "seek"
+end sub
+
+sub togglePause()
+    if m.video.state = "paused"
+        m.video.control = "resume"
+    else if m.video.state = "playing"
+        m.video.control = "pause"
+    end if
+    showOsd()
+end sub
+
+' Presses add up; the jump happens once they stop.
+sub seekBy(secs as integer)
+    if not m.started then return
+    base = m.video.position
+    if m.seekTarget >= 0 then base = m.seekTarget
+    target = base + secs
+    if target < 0 then target = 0
+    dur = m.video.duration
+    if dur > 0 and target > dur - 2 then target = dur - 2
+    m.seekTarget = target
+    showOsd()
+    m.seekTimer.control = "stop"
+    m.seekTimer.control = "start"
+end sub
+
+sub applySeek()
+    if m.seekTarget < 0 then return
+    m.video.seek = m.seekTarget
+    m.seekTarget = -1
+    restartHideTimer()
+end sub
+
+sub doControl(index as integer)
+    if index = 0
+        seekBy(-10)
+    else if index = 1
+        togglePause()
+    else if index = 2
+        seekBy(10)
+    else if index = 3
+        openPicker("sub")
+    else if index = 4
+        openPicker("audio")
+    else if index = 5
+        if m.nextEp <> invalid then playNext()
+    end if
+end sub
+
+sub moveControl(dirn as integer)
+    i = m.ctlIndex + dirn
+    while i >= 0 and i < m.controls.Count()
+        if m.controls[i].group.visible then exit while
+        i = i + dirn
+    end while
+    if i >= 0 and i < m.controls.Count() then m.ctlIndex = i
+    paintOsd()
+end sub
+
+' ---------- Track picker ----------
+
+sub openPicker(kind as string)
+    if not m.started then return
+    m.pickKind = kind
     m.pickerRows = []
-    m.pickerRows.Push({ kind: "header", label: "Audio" })
-    for each s in m.audioStreams
-        m.pickerRows.Push({ kind: "audio", index: s.index, label: s.title })
-    end for
-    m.pickerRows.Push({ kind: "header", label: "Subtitles" })
-    m.pickerRows.Push({ kind: "sub", index: -1, label: "Off" })
-    for each s in m.subStreams
-        lbl = s.title
-        if not s.isText then lbl = lbl + "  (burned in)"
-        m.pickerRows.Push({ kind: "sub", index: s.index, label: lbl })
-    end for
-    m.pickIndex = 1
+    if kind = "audio"
+        for each s in m.audioStreams
+            m.pickerRows.Push({ kind: "audio", index: s.index, label: s.title })
+        end for
+    else
+        m.pickerRows.Push({ kind: "sub", index: -1, label: "Off" })
+        for each s in m.subStreams
+            lbl = s.title
+            if not s.isText then lbl = lbl + " (burned in)"
+            m.pickerRows.Push({ kind: "sub", index: s.index, label: lbl })
+        end for
+    end if
+    m.pickIndex = 0
     for i = 0 to m.pickerRows.Count() - 1
         r = m.pickerRows[i]
-        if r.kind = "audio" and r.index = m.audioIndex then m.pickIndex = i
+        if (r.kind = "audio" and r.index = m.audioIndex) or (r.kind = "sub" and r.index = m.subIndex) then m.pickIndex = i
     end for
     m.pickerOpen = true
+    m.hideTimer.control = "stop"
     drawPicker()
     m.picker.visible = true
-    m.top.setFocus(true)
+    m.sink.setFocus(true)
 end sub
 
 sub closePicker()
     m.pickerOpen = false
     m.picker.visible = false
-    if m.started then m.video.setFocus(true)
+    restartHideTimer()
 end sub
 
 sub drawPicker()
     t = th()
     p = m.picker
     p.removeChildrenIndex(p.getChildCount(), 0)
-    panelX = 1920 - 680
-    bg = makeShape(p, t.fillUri, 640, 1000, t.panel, 0.96)
-    bg.translation = [panelX, 40]
-    head = makeLabel(p, "Audio and subtitles", 40, true, t.text)
-    head.translation = [panelX + 40, 80]
-
-    maxRows = 11
+    px = 1920 - 80 - 560
+    makeBox(p, 560, 840, 24, t.panel, 0.96).translation = [px, 80]
+    head = "Subtitles"
+    if m.pickKind = "audio" then head = "Audio"
+    makeTitle(p, head, 34).translation = [px + 40, 120]
+    maxRows = 9
     first = 0
-    if m.pickIndex > maxRows - 2 then first = m.pickIndex - (maxRows - 2)
-    y = 160
+    if m.pickIndex > maxRows - 1 then first = m.pickIndex - (maxRows - 1)
+    y = 200
     for i = first to m.pickerRows.Count() - 1
-        if y < 980
+        if y < 860
             r = m.pickerRows[i]
-            if r.kind = "header"
-                h = makeLabel(p, UCase(r.label), 22, true, t.accent)
-                h.translation = [panelX + 40, y + 16]
-                y = y + 56
-            else
-                focused = (i = m.pickIndex)
-                if focused
-                    hl = makeShape(p, t.fillUri, 580, 64, t.focusBg, 1.0)
-                    hl.translation = [panelX + 30, y]
-                end if
-                current = (r.kind = "audio" and r.index = m.audioIndex) or (r.kind = "sub" and r.index = m.subIndex)
-                if current
-                    tick = p.CreateChild("Poster")
-                    tick.uri = "pkg:/images/check.png"
-                    tick.width = 30
-                    tick.height = 30
-                    tick.translation = [panelX + 50, y + 17]
-                    if focused
-                        tick.blendColor = t.onFocus
-                    else
-                        tick.blendColor = t.accent
-                    end if
-                end if
-                color = t.text
-                if focused then color = t.onFocus
-                lbl = makeLabel(p, r.label, 28, focused, color)
-                lbl.translation = [panelX + 96, y]
-                lbl.width = 500
-                lbl.height = 64
-                lbl.vertAlign = "center"
-                y = y + 70
+            focused = (i = m.pickIndex)
+            if focused then makeBox(p, 500, 64, 14, t.solid).translation = [px + 30, y]
+            current = (r.kind = "audio" and r.index = m.audioIndex) or (r.kind = "sub" and r.index = m.subIndex)
+            color = t.text
+            if focused then color = t.onSolid
+            if current
+                tickColor = t.accent
+                if focused then tickColor = t.onSolid
+                makeIcon(p, "check", 28, tickColor).translation = [px + 50, y + 18]
             end if
+            style = "regular"
+            if focused then style = "semibold"
+            lbl = makeLabel(p, r.label, 22, style, color)
+            lbl.translation = [px + 96, y]
+            lbl.width = 420
+            lbl.height = 64
+            lbl.vertAlign = "center"
+            y = y + 72
         end if
     end for
-end sub
-
-sub pickerMove(dirn as integer)
-    i = m.pickIndex + dirn
-    while i >= 0 and i < m.pickerRows.Count()
-        if m.pickerRows[i].kind <> "header" then exit while
-        i = i + dirn
-    end while
-    if i >= 0 and i < m.pickerRows.Count() then m.pickIndex = i
-    drawPicker()
 end sub
 
 sub pickerChoose()
@@ -471,7 +782,8 @@ sub pickerChoose()
         end if
         applySubtitle()
     end if
-    drawPicker()
+    closePicker()
+    refreshTrackPills()
 end sub
 
 sub restartWithTracks()
@@ -504,22 +816,37 @@ end function
 sub onPosition()
     if not m.started then return
     curPos = m.video.position
+    if m.osd.visible then updateBar()
     if Abs(curPos - m.lastReport) >= 10
         m.lastReport = curPos
         apiRequest("/Sessions/Playing/Progress", {}, "onIgnore", "POST", progressBody(false))
     end if
     dur = m.video.duration
-    if m.nextEp <> invalid and not m.upNextShown and not m.upNextCancelled and not m.pickerOpen
+    if m.nextEp <> invalid and not m.upNextShown and not m.upNextCancelled and not m.pickerOpen and autoplayNext()
         if dur > 120 and (dur - curPos) <= 25 then showUpNext()
     end if
 end sub
+
+function autoplayNext() as boolean
+    return prefValue("autoplayNext", true) <> false
+end function
 
 sub onState()
     st = m.video.state
     if st = "paused"
         if m.started then apiRequest("/Sessions/Playing/Progress", {}, "onIgnore", "POST", progressBody(true))
+        showOsd()
+    else if st = "playing"
+        m.status.visible = false
+        if m.osd.visible then paintOsd()
+        restartHideTimer()
+    else if st = "buffering"
+        if m.started
+            m.status.text = "Buffering..."
+            m.status.visible = true
+        end if
     else if st = "finished"
-        if m.nextEp <> invalid and not m.upNextCancelled
+        if m.nextEp <> invalid and not m.upNextCancelled and autoplayNext()
             playNext()
         else
             reportStopped()
@@ -538,17 +865,7 @@ sub reportStopped()
     m.global.watchVersion = m.global.watchVersion + 1
 end sub
 
-sub showHint()
-    m.hint.visible = true
-    m.hintTimer.control = "stop"
-    m.hintTimer.control = "start"
-end sub
-
-sub hideHint()
-    m.hint.visible = false
-end sub
-
-' ---------- Up Next Prompt ----------
+' ---------- Up next at the end of an episode ----------
 
 sub showUpNext()
     t = th()
@@ -556,27 +873,25 @@ sub showUpNext()
     m.countLeft = 10
     g = m.upNext
     g.removeChildrenIndex(g.getChildCount(), 0)
-    g.translation = [1200, 700]
-    makeShape(g, t.fillUri, 640, 290, t.panel, 0.94)
-    l1 = makeLabel(g, "UP NEXT", 22, true, t.accent)
-    l1.translation = [40, 34]
-    m.upTitle = makeLabel(g, episodeLabel(m.nextEp), 32, true, t.text)
-    m.upTitle.translation = [40, 70]
-    m.upTitle.width = 550
-    m.upTitle.wrap = true
-    m.upTitle.maxLines = 2
-    m.upCountdown = makeLabel(g, "", 24, false, t.textDim)
-    m.upCountdown.translation = [40, 180]
-    m.upCountdown.width = 550
+    g.translation = [1920 - 80 - 520, 1080 - 80 - 190]
+    makeBox(g, 520, 190, 18, t.panel, 0.94)
+    l1 = makeLabel(g, "UP NEXT", 15, "semibold", t.accent)
+    l1.translation = [32, 28]
+    title = makeLabel(g, m.nextTitle.text, 26, "display", t.text)
+    title.translation = [32, 54]
+    title.width = 456
+    m.upCountdown = makeLabel(g, "", 18, "regular", t.muted)
+    m.upCountdown.translation = [32, 100]
+    m.upCountdown.width = 456
     m.upCountdown.wrap = true
     updateCountdown()
     g.visible = true
     m.countdown.control = "start"
-    m.top.setFocus(true)
+    m.sink.setFocus(true)
 end sub
 
 sub updateCountdown()
-    m.upCountdown.text = "Starting in " + m.countLeft.ToStr() + "s. OK to play now, Back to keep watching."
+    m.upCountdown.text = "Starting in " + m.countLeft.ToStr() + " s. OK plays it now, Back keeps watching."
 end sub
 
 sub onTick()
@@ -591,33 +906,35 @@ end sub
 sub playNext()
     m.countdown.control = "stop"
     nxt = m.nextEp
+    if nxt = invalid then return
     reportStopped()
     m.video.control = "stop"
     m.upNext.visible = false
+    m.osd.visible = false
     m.top.playItem = { itemId: safeStr(nxt.Id), startSeconds: 0 }
-    m.video.setFocus(true)
 end sub
 
 sub cancelUpNext()
     m.upNextCancelled = true
     m.countdown.control = "stop"
     m.upNext.visible = false
-    m.video.setFocus(true)
 end sub
 
 ' ---------- Focus, keys, closing ----------
 
 sub onFocusChanged()
-    if m.top.hasFocus() and not m.upNext.visible and not m.pickerOpen and m.started then m.video.setFocus(true)
+    if m.top.hasFocus() then m.sink.setFocus(true)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
     if m.pickerOpen
         if key = "up"
-            pickerMove(-1)
+            if m.pickIndex > 0 then m.pickIndex = m.pickIndex - 1
+            drawPicker()
         else if key = "down"
-            pickerMove(1)
+            if m.pickIndex < m.pickerRows.Count() - 1 then m.pickIndex = m.pickIndex + 1
+            drawPicker()
         else if key = "OK"
             pickerChoose()
         else if key = "back" or key = "options" or key = "left"
@@ -634,8 +951,66 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
     end if
+    if key = "back" then return false
     if key = "options"
-        openPicker()
+        openPicker("sub")
+        return true
+    else if key = "play"
+        togglePause()
+        return true
+    else if key = "rewind"
+        seekBy(-30)
+        return true
+    else if key = "fastforward"
+        seekBy(30)
+        return true
+    end if
+    if not m.osd.visible
+        ' The first press only brings up the OSD, except for seeking.
+        if key = "left"
+            seekBy(-10)
+        else if key = "right"
+            seekBy(10)
+        else
+            showOsd()
+        end if
+        return true
+    end if
+    restartHideTimer()
+    if m.zone = "header"
+        if key = "OK"
+            m.top.navigate = { action: "back" }
+        else if key = "down"
+            m.zone = "seek"
+            paintOsd()
+        end if
+        return true
+    else if m.zone = "seek"
+        if key = "left"
+            seekBy(-10)
+        else if key = "right"
+            seekBy(10)
+        else if key = "OK"
+            togglePause()
+        else if key = "up"
+            m.zone = "header"
+            paintOsd()
+        else if key = "down"
+            m.zone = "controls"
+            paintOsd()
+        end if
+        return true
+    else if m.zone = "controls"
+        if key = "left"
+            moveControl(-1)
+        else if key = "right"
+            moveControl(1)
+        else if key = "OK"
+            doControl(m.ctlIndex)
+        else if key = "up"
+            m.zone = "seek"
+            paintOsd()
+        end if
         return true
     end if
     return false
@@ -644,6 +1019,7 @@ end function
 sub onClosed()
     if not m.top.closed then return
     m.countdown.control = "stop"
+    m.hideTimer.control = "stop"
     reportStopped()
     m.video.control = "stop"
 end sub

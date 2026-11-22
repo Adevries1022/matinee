@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!-- Plays a title with Matinee's own on-screen controls (the Player OSD)
+     instead of Roku's trickplay bar. See ADR 0004. -->
 <component name="PlayerScreen" extends="Group">
   <interface>
     <field id="playItem" type="assocarray" onChange="start" />
@@ -7,18 +9,17 @@
   </interface>
   <script type="text/brightscript" uri="PlayerScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <children>
     <Rectangle width="1920" height="1080" color="0x000000FF" />
-    <Video id="video" width="1920" height="1080" />
-    <Label id="status" translation="[160,500]" width="1600" horizAlign="center" wrap="true" text="Loading...">
-      <Font role="font" uri="font:SystemFontFile" size="34" />
-    </Label>
-    <Label id="hint" translation="[0,40]" width="1880" horizAlign="right" visible="false" text="* Audio and subtitles">
-      <Font role="font" uri="font:SystemFontFile" size="24" />
-    </Label>
+    <Video id="video" width="1920" height="1080" enableUI="false" />
+    <Label id="status" translation="[160,500]" width="1600" horizAlign="center" wrap="true" text="Loading..." />
+    <Group id="osd" visible="false" />
     <Group id="upNext" visible="false" />
     <Group id="picker" visible="false" />
+    <Group id="sink" focusable="true" />
     <Timer id="countdown" duration="1" repeat="true" />
-    <Timer id="hintTimer" duration="4" repeat="false" />
+    <Timer id="hideTimer" duration="5" repeat="false" />
+    <Timer id="seekTimer" duration="0.6" repeat="false" />
   </children>
 </component>

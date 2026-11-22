@@ -257,7 +257,8 @@ for (const r of RADII) {
 }
 for (const r of [10, 12, 14]) corners(r);
 
-// Circles for avatars and the profile focus ring.
+// Circles: a solid dot (seek thumb, status dots), avatars and the profile focus ring.
+save('circle.png', 64, 64, raster(64, 64, 1, [P.fillCircle(32, 32, 31.5)]));
 save('circle_ring.png', 248, 248, raster(248, 248, 1, [P.circle(124, 124, 120, 4)]));
 save('circle_mask.png', 240, 240, raster(240, 240, 1, [(x, y) => hypot(x - 120, y - 120) > 119.5]));
 save('circle_dashed.png', 216, 216, raster(216, 216, 1, [(x, y) => {
@@ -271,7 +272,8 @@ save('circle_dashed.png', 216, 216, raster(216, 216, 1, [(x, y) => {
 gradient('grad_hero.png', 256, 2, stops([[0, 1], [0.32, 0.88], [0.68, 0]]));
 gradient('grad_detail.png', 256, 2, stops([[0, 1], [0.36, 1], [0.52, 0.7], [0.78, 0]]));
 gradient('grad_h.png', 256, 2, (t) => 1 - t);
-// Vertical: clear at the top to solid at the bottom.
+// Vertical: clear at the top to solid at the bottom, and the reverse.
 gradient('grad_v.png', 2, 256, (_t, s) => s);
+gradient('grad_vd.png', 2, 256, (_t, s) => 1 - s);
 
 console.log('Images written to images/');

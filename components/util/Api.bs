@@ -613,8 +613,8 @@ function itemToContent(item as object, landscape as boolean, rowKind = "" as str
     if rowKind = "resume"
         parts = []
         if code <> "" then parts.Push(code)
-        left = timeLeft(item)
-        if left <> "" then parts.Push(left)
+        remain = timeLeft(item)
+        if remain <> "" then parts.Push(remain)
         c.subtitle = parts.Join(" " + Chr(183) + " ")
     end if
     c.title = c.heading

@@ -1,49 +1,31 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!-- A movie or show: artwork on the right, details and buttons on the left,
+     then season pills and episode Cards (shows) or "More like this" (movies). -->
 <component name="DetailsScreen" extends="Group">
   <interface>
     <field id="itemId" type="string" onChange="load" />
     <field id="seasonId" type="string" />
+    <field id="backLabel" type="string" value="Home" />
     <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="DetailsScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
-  <script type="text/brightscript" uri="pkg:/components/util/TrailerHost.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <children>
-    <Poster id="backdrop" width="1920" height="1080" loadWidth="1920" loadHeight="1080" loadDisplayMode="scaleToZoom" opacity="0" />
-    <Group id="shadeLayer" />
-    <LayoutGroup id="info" layoutDirection="vert" itemSpacings="[14,20,18]">
-      <Label id="title" width="1150" wrap="true" maxLines="2">
-        <Font role="font" uri="font:BoldSystemFontFile" size="72" />
-      </Label>
-      <Label id="meta" width="1400">
-        <Font role="font" uri="font:SystemFontFile" size="28" />
-      </Label>
-      <Label id="overview" width="1000" wrap="true" maxLines="4" lineSpacing="6">
-        <Font role="font" uri="font:SystemFontFile" size="30" />
-      </Label>
-      <Label id="cast" width="1000">
-        <Font role="font" uri="font:SystemFontFile" size="24" />
-      </Label>
-    </LayoutGroup>
-    <Group id="buttons" />
-    <Group id="seasonBar" />
+    <Poster id="art" translation="[640,0]" width="1280" height="1080" loadWidth="1280" loadHeight="1080" loadDisplayMode="scaleToZoom" opacity="0" />
+    <Group id="layer" />
     <RowList
-      id="episodes"
+      id="cards"
       itemComponentName="CardItem"
       numRows="1"
       showRowLabel="[false]"
       drawFocusFeedback="false"
       rowFocusAnimationStyle="floatingFocus"
       visible="false" />
-    <Label id="epInfo" width="1700">
-      <Font role="font" uri="font:SystemFontFile" size="26" />
-    </Label>
-    <Label id="status" width="1700" text="Loading...">
-      <Font role="font" uri="font:SystemFontFile" size="34" />
-    </Label>
-    <Animation id="fadeIn" duration="0.45" easeFunction="outQuad">
-      <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="backdrop.opacity" />
+    <Group id="sink" focusable="true" />
+    <Animation id="fadeIn" duration="0.35" easeFunction="outQuad">
+      <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="art.opacity" />
     </Animation>
   </children>
 </component>

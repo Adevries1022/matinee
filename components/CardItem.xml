@@ -30,6 +30,10 @@
       </Group>
       <Poster id="corners" />
     </Group>
+    <Group id="below" visible="false">
+      <Label id="belowTitle" vertAlign="center" />
+      <Label id="belowText" wrap="true" maxLines="2" lineSpacing="6" />
+    </Group>
     <Poster id="ring" opacity="0" />
     <Animation id="fadeIn" duration="0.2" easeFunction="linear">
       <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="poster.opacity" />

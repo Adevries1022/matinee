@@ -311,6 +311,7 @@ sub onNavigate(event as object)
     if a = "details"
         d = CreateObject("roSGNode", "DetailsScreen")
         if isValid(nav.seasonId) then d.seasonId = nav.seasonId
+        d.backLabel = screenLabel(m.stack.Peek())
         pushScreen(d)
         d.itemId = nav.itemId
     else if a = "play"
@@ -370,6 +371,24 @@ sub onNavigate(event as object)
         onAuthenticated(nav)
     end if
 end sub
+
+' The name on a back pill that returns to this screen.
+function screenLabel(s as object) as string
+    if s = invalid then return "Back"
+    kind = s.subtype()
+    if kind = "BrowseScreen"
+        lib = s.library
+        if lib <> invalid
+            if lib.kind = "series" then return "Series"
+            if lib.kind = "movies" then return "Movies"
+        end if
+        return "Home"
+    end if
+    if kind = "SearchScreen" then return "Search"
+    if kind = "MyListScreen" then return "My List"
+    if kind = "RequestsScreen" then return "Requests"
+    return "Back"
+end function
 
 sub onServerChosen(nav as object)
     reg = CreateObject("roRegistrySection", "Marquee")

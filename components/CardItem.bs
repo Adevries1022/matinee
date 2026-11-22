@@ -14,6 +14,9 @@ sub init()
     m.badgeBg = m.top.findNode("badgeBg")
     m.badgeText = m.top.findNode("badgeText")
     m.fadeIn = m.top.findNode("fadeIn")
+    m.below = m.top.findNode("below")
+    m.belowTitle = m.top.findNode("belowTitle")
+    m.belowText = m.top.findNode("belowText")
     m.poster.observeField("loadStatus", "onPosterStatus")
 
     t = th()
@@ -44,6 +47,10 @@ sub init()
     m.badgeBg.opacity = 0.6
     m.badgeText.font = makeFont(16, "semibold")
     m.badgeText.color = t.text
+    m.belowTitle.font = makeFont(22, "semibold")
+    m.belowTitle.color = t.text
+    m.belowText.font = makeFont(18)
+    m.belowText.color = t.muted
 end sub
 
 sub showContent()
@@ -71,6 +78,8 @@ sub showContent()
     m.caption.text = c.heading
     m.captionSub.text = c.subtitle
     m.badgeText.text = c.badge
+    m.belowTitle.text = c.heading
+    m.belowText.text = c.description
     layout()
 end sub
 
@@ -100,8 +109,18 @@ sub layout()
     m.fallback.height = h
 
     landscape = w > h
-    showCap = landscape and c.heading <> ""
-    showTrack = c.progress > 0.01 and c.progress < 0.97
+    m.below.visible = c.textBelow
+    if c.textBelow
+        m.below.translation = [m.padX, m.padY + h + 14]
+        m.belowTitle.width = w
+        m.belowTitle.height = 30
+        m.belowText.translation = [0, 40]
+        m.belowText.width = w
+    end if
+    showCap = landscape and c.heading <> "" and not c.textBelow
+    ' Episode Cards show watched episodes as a full bar, like the board.
+    fullBar = c.textBelow and c.played
+    showTrack = (c.progress > 0.01 and c.progress < 0.97) or fullBar
     showSub = showCap and c.subtitle <> ""
 
     ' The title at the bottom left with the episode or time left under it,
@@ -134,7 +153,11 @@ sub layout()
     m.trackBg.height = 5
     m.track.translation = [20, h - 23]
     m.track.height = 5
-    if showTrack then m.track.width = (w - 40) * c.progress
+    if fullBar
+        m.track.width = w - 40
+    else if showTrack
+        m.track.width = (w - 40) * c.progress
+    end if
 
     hasBadge = (c.badge <> "")
     m.badge.visible = hasBadge
