@@ -342,9 +342,12 @@ sub onNavigate(event as object)
         pushScreen(CreateObject("roSGNode", "SearchScreen"))
     else if a = "requests"
         popTo(1)
-        dv = CreateObject("roSGNode", "DiscoverScreen")
-        pushScreen(dv)
-        dv.begin = true
+        rq = CreateObject("roSGNode", "RequestsScreen")
+        pushScreen(rq)
+        if isValid(nav.tmdbId) then rq.open = { tmdbId: nav.tmdbId, mediaType: nav.mediaType }
+    else if a = "activity"
+        popTo(1)
+        pushScreen(CreateObject("roSGNode", "ActivityScreen"))
     else if a = "mylist"
         popTo(1)
         pushScreen(CreateObject("roSGNode", "MyListScreen"))
@@ -359,10 +362,6 @@ sub onNavigate(event as object)
         pushScreen(CreateObject("roSGNode", "SettingsScreen"))
     else if a = "themes"
         pushScreen(CreateObject("roSGNode", "ThemesScreen"))
-    else if a = "seerrDetails"
-        sd = CreateObject("roSGNode", "SeerrDetailsScreen")
-        pushScreen(sd)
-        sd.media = { tmdbId: nav.tmdbId, mediaType: nav.mediaType }
     else if a = "seerrSignIn"
         si = CreateObject("roSGNode", "SignInScreen")
         si.mode = "seerr"

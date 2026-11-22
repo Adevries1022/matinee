@@ -706,6 +706,122 @@ sub arrRequest(name as string, path as string, query as object, callback as stri
     startRequest(s.url + "/api/v3", path, query, callback, method, body, tag, "", { "X-Api-Key": s.key })
 end sub
 
+' "2.1 TB" or "640 GB" from a byte count (which can be larger than an integer).
+function formatBytes(b as dynamic) as string
+    v = 0#
+    if isValid(b) then v = b * 1#
+    if v >= 1000000000000#
+        x = Int(v / 100000000000# + 0.5)
+        return (x \ 10).ToStr() + "." + (x mod 10).ToStr() + " TB"
+    end if
+    if v >= 1000000000# then return Int(v / 1000000000# + 0.5).ToStr() + " GB"
+    return Int(v / 1000000# + 0.5).ToStr() + " MB"
+end function
+
+' Radarr/Sonarr "timeleft" ("01:02:03" or "1.02:03:04") as "1 h 2 min left".
+function arrTimeLeft(text as string) as string
+    if text = "" then return ""
+    days = 0
+    rest = text
+    dotAt = Instr(1, text, ".")
+    colonAt = Instr(1, text, ":")
+    if dotAt > 0 and dotAt < colonAt
+        days = Left(text, dotAt - 1).ToInt()
+        rest = Mid(text, dotAt + 1)
+    end if
+    parts = rest.Split(":")
+    if parts.Count() < 2 then return ""
+    hours = parts[0].ToInt() + days * 24
+    mins = parts[1].ToInt()
+    if hours = 0 and mins = 0 then return "under a minute left"
+    if hours = 0 then return mins.ToStr() + " min left"
+    return hours.ToStr() + " h " + mins.ToStr() + " min left"
+end function
+
+' One Radarr or Sonarr queue record, ready to draw.
+function arrQueueInfo(rec as object, name as string) as object
+    t = th()
+    title = ""
+    image = ""
+    if name = "radarr"
+        mv = rec.movie
+        if isValid(mv)
+            title = safeStr(mv.title)
+            image = arrImage(mv.images)
+        end if
+    else
+        sr = rec.series
+        ep = rec.episode
+        if isValid(sr)
+            title = safeStr(sr.title)
+            image = arrImage(sr.images)
+        end if
+        if isValid(ep)
+            title = title + " " + Chr(183) + " S" + safeInt(ep.seasonNumber).ToStr() + " E" + safeInt(ep.episodeNumber).ToStr()
+        end if
+    end if
+    if title = "" then title = safeStr(rec.title)
+    size = 0#
+    remain = 0#
+    if isValid(rec.size) then size = rec.size * 1#
+    if isValid(rec.sizeleft) then remain = rec.sizeleft * 1#
+    pct = 0.0
+    if size > 0 then pct = (size - remain) / size
+    quality = ""
+    if isValid(rec.quality)
+        if isValid(rec.quality.quality) then quality = safeStr(rec.quality.quality.name)
+    end if
+    st = LCase(safeStr(rec.status))
+    tracked = LCase(safeStr(rec.trackedDownloadState))
+    health = LCase(safeStr(rec.trackedDownloadStatus))
+    state = "queued"
+    if tracked = "importpending" or tracked = "importing" or st = "completed"
+        state = "importing"
+    else if health = "warning" or health = "error" or st = "stalled" or st = "warning" or st = "failed"
+        state = "stalled"
+    else if st = "downloading"
+        state = "downloading"
+    else if st = "paused"
+        state = "paused"
+    end if
+    labels = { downloading: "Downloading", importing: "Importing to library", stalled: "Stalled", queued: "Queued", paused: "Paused" }
+    stateColor = t.muted
+    barColor = t.dashed
+    if state = "downloading"
+        stateColor = t.info
+        barColor = t.accent
+    else if state = "importing"
+        stateColor = t.ok
+        barColor = t.ok
+    else if state = "stalled"
+        stateColor = t.error
+        barColor = t.error
+    end if
+    detail = formatBytes(size - remain) + " of " + formatBytes(size)
+    tl = arrTimeLeft(safeStr(rec.timeleft))
+    if tl <> "" and state = "downloading" then detail = detail + " " + Chr(183) + " " + tl
+    source = "Radarr"
+    kind = "movie"
+    if name = "sonarr"
+        source = "Sonarr"
+        kind = "series"
+    end if
+    return { id: safeInt(rec.id), name: name, source: source, kind: kind, title: title, image: image, quality: quality, pct: pct, state: state, stateLabel: labels[state], stateColor: stateColor, barColor: barColor, detail: detail }
+end function
+
+' The wide artwork (fanart) from a Radarr/Sonarr image list, or the poster.
+function arrImage(images as dynamic) as string
+    if not isValid(images) then return ""
+    poster = ""
+    for each im in images
+        url = safeStr(im.remoteUrl)
+        kind = safeStr(im.coverType)
+        if kind = "fanart" and url <> "" then return url
+        if kind = "poster" and url <> "" then poster = url
+    end for
+    return poster
+end function
+
 ' ================= Seerr data =================
 
 function tmdbImage(path as dynamic, size as string) as string
@@ -756,6 +872,7 @@ function seerrToContent(r as object) as object
     c.HDPosterUrl = tmdbImage(r.posterPath, "w342")
     setCardSize(c, false)
     c.requestStatus = seerrStatus(r)
+    if isValid(r.mediaInfo) then c.jellyfinId = safeStr(r.mediaInfo.jellyfinMediaId)
     c.badge = requestStatusLabel(c.requestStatus)
     return c
 end function

@@ -28,5 +28,7 @@
     <field id="removable" type="boolean" />
     <field id="badge" type="string" />
     <field id="requestStatus" type="integer" />
+    <!-- Seerr titles that are on the server: their Jellyfin item. -->
+    <field id="jellyfinId" type="string" />
   </interface>
 </component>

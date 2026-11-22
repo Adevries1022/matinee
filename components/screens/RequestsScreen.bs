@@ -1,0 +1,547 @@
+' Requests (the Requests board), powered by Seerr. Tabs: Discover (what's
+' trending), My requests (pending or downloading) and Ready to watch.
+' OK on a title that isn't on the server opens the request panel: quality,
+' seasons for shows, then Send request. Requests go out as the signed-in
+' User's own Seerr account.
+
+sub init()
+    t = th()
+    m.layer = m.top.findNode("layer")
+    m.grid = m.top.findNode("grid")
+    m.modal = m.top.findNode("modal")
+    m.sink = m.top.findNode("sink")
+
+    makeTitle(m.layer, "Requests", 64).translation = [160, 80]
+    m.sub = makeLabel(m.layer, "Find something that isn" + Chr(8217) + "t on your server and ask for it. Powered by Seerr.", 20, "regular", t.muted)
+    m.sub.translation = [160, 166]
+    m.sub.width = 1000
+    m.tabHost = m.layer.CreateChild("Group")
+    m.tabs = makePills(m.tabHost, ["Discover", "My requests", "Ready to watch"], 0)
+    last = m.tabs[m.tabs.Count() - 1]
+    m.tabHost.translation = [1800 - (last.group.translation[0] + last.w), 150]
+
+    pad = t.cellPadX
+    m.grid.translation = [160 - pad, 270 - pad]
+    m.grid.itemSize = [389 + pad * 2, 219 + pad * 2 + 72]
+    m.grid.itemSpacing = [28 - pad * 2, 36 - pad * 2]
+    m.grid.observeField("itemSelected", "onSelected")
+    m.grid.observeField("itemFocused", "onFocused")
+
+    m.empty = m.layer.CreateChild("Group")
+    m.empty.translation = [160, 270]
+    m.empty.visible = false
+
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.global.observeField("seerrState", "onSeerrState")
+    m.tab = 0
+    m.zone = "grid"
+    m.items = []
+    m.page = 1
+    m.loadingMore = false
+    m.gen = 0
+    m.userId = ""
+    m.autoApprove = false
+    m.modalOpen = false
+    m.can4k = readSetting("seerr4k", "false") = "true"
+    setupMenu("requests")
+    start()
+end sub
+
+sub start()
+    st = m.global.seerrState
+    if st = "ready"
+        seerrRequest("/auth/me", {}, "onMe")
+        loadTab()
+    else
+        showEmpty()
+    end if
+end sub
+
+sub onSeerrState()
+    if m.global.seerrState = "ready" and m.items.Count() = 0 then start()
+end sub
+
+sub onMe(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        m.userId = safeStr(res.data.id)
+        perms = safeInt(res.data.permissions)
+        m.autoApprove = (perms and 2) <> 0 or (perms and 128) <> 0
+        if m.tab > 0 then loadTab()
+    else if res.code = 401 or res.code = 403
+        m.top.navigate = { action: "seerrSignedOut" }
+    end if
+end sub
+
+' ---------- Loading ----------
+
+sub loadTab()
+    m.gen = m.gen + 1
+    m.items = []
+    m.page = 1
+    if m.tab = 0
+        seerrRequest("/discover/trending", { "page": "1" }, "onDiscover", "GET", invalid, m.gen)
+    else
+        if m.userId = "" then return
+        filter = "all"
+        if m.tab = 2 then filter = "available"
+        seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": filter, "requestedBy": m.userId }, "onRequests", "GET", invalid, m.gen)
+    end if
+end sub
+
+function backdropContent(r as object) as object
+    c = seerrToContent(r)
+    url = tmdbImage(r.backdropPath, "w780")
+    if url = "" then url = tmdbImage(r.posterPath, "w500")
+    c.HDPosterUrl = url
+    parts = []
+    dateStr = safeStr(r.releaseDate)
+    if dateStr = "" then dateStr = safeStr(r.firstAirDate)
+    if Len(dateStr) >= 4 then parts.Push(Left(dateStr, 4))
+    if safeStr(r.mediaType) = "tv" then parts.Push("Series") else parts.Push("Movie")
+    c.meta = parts.Join(" " + Chr(183) + " ")
+    return c
+end function
+
+sub onDiscover(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    m.loadingMore = false
+    if res.ok and isValid(res.data)
+        if isValid(res.data.results)
+            for each r in res.data.results
+                mt = safeStr(r.mediaType)
+                if mt = "movie" or mt = "tv" then m.items.Push(backdropContent(r))
+            end for
+        end if
+    else if res.code = 401 or res.code = 403
+        m.top.navigate = { action: "seerrSignedOut" }
+    end if
+    render()
+end sub
+
+sub onRequests(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    m.pendingDetails = 0
+    m.slots = []
+    if res.ok and isValid(res.data)
+        if isValid(res.data.results)
+            for each rq in res.data.results
+                md = rq.media
+                if isValid(md)
+                    ms = safeInt(md.status)
+                    keep = (m.tab = 2) or ms = 2 or ms = 3 or safeInt(rq.status) = 1
+                    if keep and m.slots.Count() < 24
+                        mt = safeStr(md.mediaType)
+                        m.slots.Push(invalid)
+                        m.pendingDetails = m.pendingDetails + 1
+                        seerrRequest("/" + mt + "/" + safeStr(md.tmdbId), {}, "onDetail", "GET", invalid, { gen: m.gen, slot: m.slots.Count() - 1, mediaType: mt })
+                    end if
+                end if
+            end for
+        end if
+    end if
+    if m.pendingDetails = 0 then render()
+end sub
+
+sub onDetail(event as object)
+    res = event.getData()
+    tag = res.tag
+    if tag = invalid then return
+    if tag.gen <> m.gen then return
+    if res.ok and isValid(res.data)
+        d = res.data
+        d.mediaType = tag.mediaType
+        m.slots[tag.slot] = backdropContent(d)
+    end if
+    m.pendingDetails = m.pendingDetails - 1
+    if m.pendingDetails <= 0
+        for each c in m.slots
+            if c <> invalid then m.items.Push(c)
+        end for
+        render()
+    end if
+end sub
+
+sub onFocused(event as object)
+    i = event.getData()
+    ' Discover keeps going: fetch the next page near the end.
+    if m.tab = 0 and not m.loadingMore and i >= m.items.Count() - 8 and m.page < 5
+        m.loadingMore = true
+        m.page = m.page + 1
+        seerrRequest("/discover/trending", { "page": m.page.ToStr() }, "onMore", "GET", invalid, m.gen)
+    end if
+end sub
+
+sub onMore(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    m.loadingMore = false
+    if not res.ok or not isValid(res.data) then return
+    if not isValid(res.data.results) then return
+    root = m.grid.content
+    for each r in res.data.results
+        mt = safeStr(r.mediaType)
+        if mt = "movie" or mt = "tv"
+            c = backdropContent(r)
+            m.items.Push(c)
+            root.appendChild(c)
+        end if
+    end for
+end sub
+
+sub render()
+    root = CreateObject("roSGNode", "ContentNode")
+    for each c in m.items
+        root.appendChild(c)
+    end for
+    m.grid.content = root
+    m.grid.visible = m.items.Count() > 0
+    if m.items.Count() = 0
+        showEmpty()
+    else
+        m.empty.visible = false
+    end if
+    paint()
+    if m.top.isInFocusChain() and not menuIsOpen() and not m.modalOpen then restoreContentFocus()
+end sub
+
+sub showEmpty()
+    t = th()
+    e = m.empty
+    e.removeChildrenIndex(e.getChildCount(), 0)
+    st = m.global.seerrState
+    title = "Nothing here yet"
+    body = ""
+    m.emptyBtn = invalid
+    if st = "signedOut"
+        title = "Sign in to Seerr"
+        body = "Seerr uses your Jellyfin account, so your requests are yours."
+        m.emptyBtn = "seerrSignIn"
+    else if st <> "ready"
+        title = "Seerr isn" + Chr(8217) + "t set up"
+        body = "An Administrator can add it in Settings " + Chr(8250) + " Servers & services."
+    else if m.tab = 1
+        body = "Titles you request show up here until they" + Chr(8217) + "re ready to watch."
+    else if m.tab = 2
+        body = "When something you asked for arrives, it shows up here."
+    else
+        body = "Loading..."
+    end if
+    makePanel(e, 760, 260, 18)
+    makeLabel(e, title, 30, "semibold", t.text).translation = [56, 56]
+    b = makeLabel(e, body, 22, "regular", t.muted)
+    b.translation = [56, 108]
+    b.width = 648
+    b.wrap = true
+    if m.emptyBtn <> invalid
+        m.emptyButton = makeBtn(e, { kind: "primary", text: "Sign in", h: 64, size: 22, padX: 32 })
+        m.emptyButton.group.translation = [56, 168]
+        paintBtn(m.emptyButton, m.zone = "grid")
+    end if
+    e.visible = true
+end sub
+
+sub paint()
+    focusTab = -1
+    if m.zone = "tabs" then focusTab = m.tab
+    selectPill(m.tabs, m.tab, focusTab)
+end sub
+
+sub onSelected(event as object)
+    i = event.getData()
+    if i < 0 or i >= m.items.Count() then return
+    c = m.items[i]
+    s = c.requestStatus
+    if s = 5
+        if c.jellyfinId <> "" then m.top.navigate = { action: "details", itemId: c.jellyfinId }
+    else if s = 2
+        flash("Already requested " + Chr(183) + " waiting for approval")
+    else if s = 3
+        flash("Already requested " + Chr(183) + " downloading")
+    else
+        openPanel(c)
+    end if
+end sub
+
+sub flash(text as string)
+    m.sub.text = text
+    m.sub.color = th().accent
+end sub
+
+' ---------- Opening a title from Search ----------
+
+sub onOpen()
+    o = m.top.open
+    if o = invalid then return
+    mt = safeStr(o.mediaType)
+    seerrRequest("/" + mt + "/" + safeStr(o.tmdbId), {}, "onOpenDetail", "GET", invalid, mt)
+end sub
+
+sub onOpenDetail(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    d = res.data
+    d.mediaType = safeStr(res.tag)
+    openPanel(backdropContent(d))
+end sub
+
+' ---------- Request panel ----------
+
+sub openPanel(c as object)
+    m.cur = c
+    m.isTv = (c.itemType = "seerr-tv")
+    m.quality = 0
+    if readSetting("seerrQuality", "1080p") = "4K" and m.can4k then m.quality = 1
+    m.seasonChoice = 0
+    m.seasonCount = 0
+    m.modalRow = 0
+    m.modalCol = 0
+    m.modalOpen = true
+    if m.isTv
+        seerrRequest("/tv/" + c.itemId, {}, "onTvSeasons")
+    end if
+    drawPanel()
+    m.modal.visible = true
+    m.sink.setFocus(true)
+end sub
+
+sub onTvSeasons(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    n = 0
+    if isValid(res.data.seasons)
+        for each s in res.data.seasons
+            if safeInt(s.seasonNumber) > 0 then n = n + 1
+        end for
+    end if
+    m.seasonCount = n
+    if m.modalOpen then drawPanel()
+end sub
+
+function seasonLabels() as object
+    labels = ["All seasons", "Season 1"]
+    if m.seasonCount > 1 then labels.Push("Latest only")
+    return labels
+end function
+
+function qualityLabels() as object
+    if m.can4k then return ["1080p", "4K"]
+    return ["1080p"]
+end function
+
+function modalRows() as object
+    rows = ["quality"]
+    if m.isTv then rows.Push("seasons")
+    rows.Push("buttons")
+    return rows
+end function
+
+sub drawPanel()
+    t = th()
+    m.modal.removeChildrenIndex(m.modal.getChildCount(), 0)
+    h = 516
+    if m.isTv then h = 636
+    md = makeModal(m.modal, 820, h)
+    b = md.body
+    art = b.CreateChild("Poster")
+    art.translation = [48, 48]
+    art.width = 200
+    art.height = 112
+    art.loadWidth = 200
+    art.loadHeight = 112
+    art.loadDisplayMode = "scaleToZoom"
+    art.uri = m.cur.HDPosterUrl
+    makeShape(b, "pkg:/images/corners_r12.9.png", 200, 112, t.panel).translation = [48, 48]
+    kind = "movie"
+    if m.isTv then kind = "series"
+    makeLabel(b, "Request " + kind, 18, "regular", t.muted).translation = [276, 62]
+    tl = makeTitle(b, m.cur.heading, 40)
+    tl.translation = [276, 88]
+    tl.width = 500
+    rows = modalRows()
+    focusRow = rows[m.modalRow]
+    y = 196
+    makeLabel(b, "Quality", 20, "semibold", t.text).translation = [48, y]
+    qHost = b.CreateChild("Group")
+    qHost.translation = [48, y + 36]
+    m.qPills = makePills(qHost, qualityLabels(), m.quality, 60, 20)
+    fq = -1
+    if focusRow = "quality" then fq = m.modalCol
+    selectPill(m.qPills, m.quality, fq)
+    y = y + 120
+    if m.isTv
+        makeLabel(b, "Seasons", 20, "semibold", t.text).translation = [48, y]
+        sHost = b.CreateChild("Group")
+        sHost.translation = [48, y + 36]
+        m.sPills = makePills(sHost, seasonLabels(), m.seasonChoice, 60, 20)
+        fs = -1
+        if focusRow = "seasons" then fs = m.modalCol
+        selectPill(m.sPills, m.seasonChoice, fs)
+        y = y + 120
+    end if
+    dest = "Radarr"
+    if m.isTv then dest = "Sonarr"
+    approval = "needs an admin to approve"
+    if m.autoApprove then approval = "approved automatically"
+    makeBox(b, 724, 60, 12, t.raised).translation = [48, y]
+    il = makeLabel(b, "Sends to " + dest + " " + Chr(183) + " " + approval, 18, "regular", t.meta)
+    il.translation = [68, y]
+    il.height = 60
+    il.vertAlign = "center"
+    y = y + 92
+    send = makeBtn(b, { kind: "primary", text: "Send request", size: 22, padX: 40 })
+    send.bg.blendColor = t.accent
+    send.label.color = t.bg
+    cancel = makeBtn(b, { kind: "secondary", text: "Cancel", size: 22, padX: 32 })
+    rowBtns([send, cancel], 48, y, 16)
+    fb = -1
+    if focusRow = "buttons" then fb = m.modalCol
+    paintBtns([send, cancel], fb)
+    send.bg.blendColor = t.accent
+    send.label.color = t.bg
+end sub
+
+sub closePanel()
+    m.modalOpen = false
+    m.modal.visible = false
+    restoreContentFocus()
+end sub
+
+sub sendRequest()
+    c = m.cur
+    body = { "mediaType": "movie", "mediaId": c.itemId.ToInt(), "is4k": (m.quality = 1) }
+    if m.isTv
+        body.mediaType = "tv"
+        if m.seasonChoice = 0
+            body.seasons = "all"
+        else if m.seasonChoice = 1
+            body.seasons = [1]
+        else
+            body.seasons = [m.seasonCount]
+        end if
+    end if
+    flash("Sending your request...")
+    seerrRequest("/request", {}, "onRequested", "POST", body)
+    closePanel()
+end sub
+
+sub onRequested(event as object)
+    res = event.getData()
+    if res.ok
+        flash("Requested " + m.cur.heading + ". It shows up here and in your library once it" + Chr(8217) + "s ready.")
+        m.cur.requestStatus = 2
+        render()
+    else if res.code = 403
+        flash("Your Seerr account isn" + Chr(8217) + "t allowed to request this. Ask an Administrator.")
+    else if res.code = 409
+        flash("Someone has already requested this.")
+    else if res.code = 401
+        m.top.navigate = { action: "seerrSignedOut" }
+    else
+        flash("The request didn" + Chr(8217) + "t go through (error " + res.code.ToStr() + ").")
+    end if
+end sub
+
+function modalKey(key as string) as boolean
+    rows = modalRows()
+    row = rows[m.modalRow]
+    count = 2
+    if row = "quality" then count = qualityLabels().Count()
+    if row = "seasons" then count = seasonLabels().Count()
+    if key = "back"
+        closePanel()
+    else if key = "up"
+        if m.modalRow > 0
+            m.modalRow = m.modalRow - 1
+            m.modalCol = 0
+        end if
+    else if key = "down"
+        if m.modalRow < rows.Count() - 1
+            m.modalRow = m.modalRow + 1
+            m.modalCol = 0
+        end if
+    else if key = "left"
+        if m.modalCol > 0 then m.modalCol = m.modalCol - 1
+    else if key = "right"
+        if m.modalCol < count - 1 then m.modalCol = m.modalCol + 1
+    else if key = "OK"
+        if row = "quality"
+            m.quality = m.modalCol
+        else if row = "seasons"
+            m.seasonChoice = m.modalCol
+        else if m.modalCol = 0
+            sendRequest()
+            return true
+        else
+            closePanel()
+            return true
+        end if
+    end if
+    if m.modalOpen then drawPanel()
+    return true
+end function
+
+' ---------- Focus & keys ----------
+
+sub onRefresh()
+    if m.global.seerrState = "ready" and m.items.Count() = 0 then start()
+end sub
+
+sub restoreContentFocus()
+    if m.zone = "grid" and m.grid.visible
+        m.grid.setFocus(true)
+    else
+        m.sink.setFocus(true)
+    end if
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() and not menuIsOpen() and not m.modalOpen then restoreContentFocus()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if m.modalOpen then return modalKey(key)
+    if menuIsOpen() then return false
+    if m.zone = "grid"
+        if key = "up"
+            m.zone = "tabs"
+            paint()
+            restoreContentFocus()
+            return true
+        else if key = "left"
+            openMenu()
+            return true
+        else if key = "OK" and not m.grid.visible and m.emptyBtn <> invalid
+            m.top.navigate = { action: m.emptyBtn }
+            return true
+        end if
+        return false
+    else if m.zone = "tabs"
+        if key = "left"
+            if m.tab = 0
+                openMenu()
+            else
+                m.tab = m.tab - 1
+                paint()
+                loadTab()
+            end if
+        else if key = "right"
+            if m.tab < 2
+                m.tab = m.tab + 1
+                paint()
+                loadTab()
+            end if
+        else if key = "down" or key = "OK"
+            m.zone = "grid"
+            paint()
+            restoreContentFocus()
+        else
+            return false
+        end if
+        return true
+    end if
+    return false
+end function

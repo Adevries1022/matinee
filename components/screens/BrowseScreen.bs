@@ -245,6 +245,18 @@ sub loadHome()
     portrait = th().portraitPosters
     defs = []
     defs.Push({ title: "Continue watching", path: "/UserItems/Resume", landscape: true, kind: "resume", action: "play", query: baseQuery({ "MediaTypes": "Video" }) })
+    ' "Show queue on Home" in Servers & services adds what Radarr/Sonarr are downloading.
+    for each n in ["radarr", "sonarr"]
+        if arrReady(n) and readSetting(n + "ShowQueue", "false") = "true"
+            title = "Downloading movies"
+            q = { "pageSize": "24", "includeMovie": "true" }
+            if n = "sonarr"
+                title = "Downloading shows"
+                q = { "pageSize": "24", "includeSeries": "true", "includeEpisode": "true" }
+            end if
+            defs.Push({ title: title, arr: n, path: "/queue", landscape: true, kind: "", action: "activity", query: q })
+        end if
+    end for
     defs.Push({ title: "Next up", path: "/Shows/NextUp", landscape: true, kind: "", action: "play", query: baseQuery({}) })
     defs.Push({ title: "Recently added", path: "/Items/Latest", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "IncludeItemTypes": "Movie,Series" }) })
     defs.Push({ title: "Picked for you", path: "/Items", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "Random" }) })
@@ -297,7 +309,11 @@ sub fetchRows(defs as object)
     m.pending = defs.Count()
     for i = 0 to defs.Count() - 1
         d = defs[i]
-        apiRequest(d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
+        if d.arr <> invalid
+            arrRequest(d.arr, d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
+        else
+            apiRequest(d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
+        end if
     end for
 end sub
 
@@ -312,6 +328,8 @@ sub onRowData(event as object)
             items = res.data
         else if isValid(res.data.Items)
             items = res.data.Items
+        else if isValid(res.data.records)
+            items = res.data.records
         end if
     end if
     m.rowResults[i] = items
@@ -332,7 +350,11 @@ sub buildRows()
                 row = root.CreateChild("ContentNode")
                 row.title = d.title
                 for each it in items
-                    c = itemToContent(it, d.landscape, d.kind)
+                    if d.arr <> invalid
+                        c = queueToContent(arrQueueInfo(it, d.arr))
+                    else
+                        c = itemToContent(it, d.landscape, d.kind)
+                    end if
                     c.rowTitle = d.title
                     row.appendChild(c)
                 end for
@@ -396,8 +418,27 @@ sub onItemSelected(event as object)
     openItem(c, m.rowActions[idx[0]])
 end sub
 
+' A Radarr/Sonarr download as a Card on Home.
+function queueToContent(q as object) as object
+    t = th()
+    c = newContent()
+    c.itemType = "download"
+    c.heading = q.title
+    c.title = q.title
+    c.subtitle = q.stateLabel + " " + Chr(183) + " " + Int(q.pct * 100).ToStr() + "%"
+    c.description = q.detail
+    c.HDPosterUrl = q.image
+    c.backdropUrl = q.image
+    c.progress = q.pct
+    c.cardW = t.landW
+    c.cardH = t.landH
+    return c
+end function
+
 sub openItem(c as object, action as string)
-    if action = "play" and c.itemType <> "Series"
+    if action = "activity"
+        m.top.navigate = { action: "activity" }
+    else if action = "play" and c.itemType <> "Series"
         m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
     else if action = "play"
         playSeries(c.itemId)
@@ -434,6 +475,10 @@ end sub
 sub heroButton(index as integer)
     c = m.heroItem
     if c = invalid then return
+    if c.itemType = "download"
+        m.top.navigate = { action: "activity" }
+        return
+    end if
     if index = 0
         if c.itemType = "Series"
             playSeries(c.itemId)

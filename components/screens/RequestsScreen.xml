@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Requests (Seerr): Discover, My requests and Ready to watch, with a
+     request panel for quality and seasons. -->
+<component name="RequestsScreen" extends="Group">
+  <interface>
+    <!-- open: { tmdbId, mediaType } opens the request panel for that title -->
+    <field id="open" type="assocarray" onChange="onOpen" />
+    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="RequestsScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <children>
+    <Group id="layer" />
+    <MarkupGrid
+      id="grid"
+      itemComponentName="RequestItem"
+      numColumns="4"
+      numRows="3"
+      drawFocusFeedback="false"
+      vertFocusAnimationStyle="floatingFocus"
+      visible="false" />
+    <Group id="modal" visible="false" />
+    <Group id="sink" focusable="true" />
+  </children>
+</component>

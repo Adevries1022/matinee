@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Activity: the Radarr and Sonarr download queue, what's coming up this
+     week, and how full the disks are. -->
+<component name="ActivityScreen" extends="Group">
+  <interface>
+    <field id="refresh" type="boolean" alwaysNotify="true" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="ActivityScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <children>
+    <Group id="layer" />
+    <Group id="queue" />
+    <Group id="aside" />
+    <Group id="modal" visible="false" />
+    <Group id="sink" focusable="true" />
+    <Timer id="poll" repeat="true" />
+  </children>
+</component>

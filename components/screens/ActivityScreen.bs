@@ -1,0 +1,496 @@
+' Activity (the Activity board): Radarr and Sonarr's download queue with
+' progress, "Coming up this week" from their calendars, and Storage from
+' their disk space. The round button on a row removes it from the queue
+' (Radarr and Sonarr can't pause a download). Refreshes on the interval
+' set in Settings > Servers & services.
+
+sub init()
+    t = th()
+    m.layer = m.top.findNode("layer")
+    m.queueHost = m.top.findNode("queue")
+    m.aside = m.top.findNode("aside")
+    m.modal = m.top.findNode("modal")
+    m.sink = m.top.findNode("sink")
+    m.poll = m.top.findNode("poll")
+
+    makeTitle(m.layer, "Activity", 64).translation = [160, 80]
+    m.summary = makeLabel(m.layer, "Loading...", 20, "regular", t.muted)
+    m.summary.translation = [160, 166]
+    m.summary.width = 700
+    m.filterHost = m.layer.CreateChild("Group")
+    m.filters = makePills(m.filterHost, ["All", "Movies", "Series"], 0, 52, 20)
+    last = m.filters[m.filters.Count() - 1]
+    m.filterHost.translation = [1200 - (last.group.translation[0] + last.w), 150]
+
+    m.services = []
+    for each n in ["radarr", "sonarr"]
+        if arrReady(n) then m.services.Push(n)
+    end for
+    m.queue = {}
+    m.calendar = {}
+    m.disks = {}
+    m.filter = 0
+    m.zone = "queue"
+    m.index = 0
+    m.first = 0
+    m.modalOpen = false
+    m.shown = []
+
+    m.poll.duration = readSetting("arrRefresh", "30").ToInt()
+    m.poll.observeField("fire", "loadQueue")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.top.observeField("visible", "onVisible")
+    setupMenu("activity")
+
+    if m.services.Count() = 0
+        m.summary.text = "Set up Radarr or Sonarr in Settings " + Chr(8250) + " Servers & services."
+        renderQueue()
+        return
+    end if
+    loadQueue()
+    loadSide()
+    m.poll.control = "start"
+end sub
+
+sub onVisible()
+    if m.top.visible and m.services.Count() > 0
+        m.poll.control = "start"
+        loadQueue()
+    else
+        m.poll.control = "stop"
+    end if
+end sub
+
+' ---------- Loading ----------
+
+sub loadQueue()
+    for each n in m.services
+        q = { "pageSize": "50" }
+        if n = "radarr"
+            q.includeMovie = "true"
+        else
+            q.includeSeries = "true"
+            q.includeEpisode = "true"
+        end if
+        arrRequest(n, "/queue", q, "onQueue", "GET", invalid, n)
+    end for
+end sub
+
+sub loadSide()
+    now = CreateObject("roDateTime")
+    startIso = Left(now.ToISOString(), 10)
+    later = CreateObject("roDateTime")
+    later.FromSeconds(now.AsSeconds() + 7 * 86400)
+    endIso = Left(later.ToISOString(), 10)
+    for each n in m.services
+        q = { "start": startIso, "end": endIso }
+        if n = "sonarr" then q.includeSeries = "true"
+        arrRequest(n, "/calendar", q, "onCalendar", "GET", invalid, n)
+        arrRequest(n, "/diskspace", {}, "onDisks", "GET", invalid, n)
+    end for
+end sub
+
+sub onQueue(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    list = []
+    if res.ok and isValid(res.data)
+        recs = res.data.records
+        if not isValid(recs) and type(res.data) = "roArray" then recs = res.data
+        if isValid(recs)
+            for each r in recs
+                list.Push(arrQueueInfo(r, n))
+            end for
+        end if
+    end if
+    m.queue[n] = list
+    renderQueue()
+end sub
+
+sub onCalendar(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    list = []
+    if res.ok and type(res.data) = "roArray"
+        for each it in res.data
+            if n = "sonarr"
+                title = ""
+                if isValid(it.series) then title = safeStr(it.series.title)
+                what = "S" + safeInt(it.seasonNumber).ToStr() + " E" + safeInt(it.episodeNumber).ToStr()
+                if safeStr(it.title) <> "" then what = what + " " + Chr(183) + " " + safeStr(it.title)
+                list.Push({ when: safeStr(it.airDateUtc), title: title, what: what, source: "Sonarr" })
+            else
+                ' A movie's next release in the week: digital, then physical, then cinemas.
+                when = ""
+                what = ""
+                for each pair in [["digitalRelease", "Digital release"], ["physicalRelease", "Physical release"], ["inCinemas", "In cinemas"]]
+                    v = safeStr(it[pair[0]])
+                    if when = "" and v <> "" and inWeek(v)
+                        when = v
+                        what = pair[1]
+                    end if
+                end for
+                if when <> "" then list.Push({ when: when, title: safeStr(it.title), what: what, source: "Radarr" })
+            end if
+        end for
+    end if
+    m.calendar[n] = list
+    renderAside()
+end sub
+
+function inWeek(iso as string) as boolean
+    d = CreateObject("roDateTime")
+    d.FromISO8601String(iso)
+    now = CreateObject("roDateTime")
+    diff = d.AsSeconds() - now.AsSeconds()
+    return diff > -86400 and diff < 8 * 86400
+end function
+
+sub onDisks(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    list = []
+    if res.ok and type(res.data) = "roArray"
+        for each dsk in res.data
+            list.Push({ path: safeStr(dsk.path), free: dsk.freeSpace * 1#, total: dsk.totalSpace * 1# })
+        end for
+    end if
+    m.disks[n] = list
+    renderAside()
+end sub
+
+' ---------- Queue ----------
+
+sub renderQueue()
+    t = th()
+    all = []
+    for each n in m.services
+        q = m.queue[n]
+        if q <> invalid then all.Append(q)
+    end for
+    active = 0
+    for each it in all
+        if it.state = "downloading" then active = active + 1
+    end for
+    if m.services.Count() > 0
+        from = "Radarr and Sonarr"
+        if m.services.Count() = 1
+            from = "Radarr"
+            if m.services[0] = "sonarr" then from = "Sonarr"
+        end if
+        m.summary.text = active.ToStr() + " downloading " + Chr(183) + " " + all.Count().ToStr() + " in queue " + Chr(183) + " from " + from
+    end if
+    m.shown = []
+    for each it in all
+        if m.filter = 0 or (m.filter = 1 and it.kind = "movie") or (m.filter = 2 and it.kind = "series") then m.shown.Push(it)
+    end for
+    if m.index > m.shown.Count() - 1 then m.index = m.shown.Count() - 1
+    if m.index < 0 then m.index = 0
+    if m.index < m.first then m.first = m.index
+    if m.index > m.first + 4 then m.first = m.index - 4
+
+    h = m.queueHost
+    h.removeChildrenIndex(h.getChildCount(), 0)
+    m.rows = []
+    if m.shown.Count() = 0
+        g = h.CreateChild("Group")
+        g.translation = [160, 260]
+        makePanel(g, 1040, 140, 16)
+        msg = "Nothing downloading right now."
+        if m.services.Count() = 0 then msg = "Radarr and Sonarr aren" + Chr(8217) + "t set up on this TV yet."
+        l = makeLabel(g, msg, 24, "semibold", t.text)
+        l.translation = [32, 0]
+        l.height = 140
+        l.vertAlign = "center"
+    end if
+    y = 260
+    for i = m.first to m.shown.Count() - 1
+        if i <= m.first + 4
+            m.rows.Push(drawRow(h, m.shown[i], y))
+            y = y + 144
+        end if
+    end for
+    paint()
+end sub
+
+function drawRow(parent as object, it as object, y as integer) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    g.translation = [160, y]
+    makeBox(g, 1040, 130, 16, t.panel)
+    ring = makeFocusRing(g, 1040, 130, 16)
+    makeBox(g, 160, 90, 10, t.raised).translation = [24, 20]
+    if it.image <> ""
+        p = g.CreateChild("Poster")
+        p.translation = [24, 20]
+        p.width = 160
+        p.height = 90
+        p.loadWidth = 160
+        p.loadHeight = 90
+        p.loadDisplayMode = "scaleToZoom"
+        p.uri = it.image
+        makeShape(g, "pkg:/images/corners_r10.9.png", 160, 90, t.panel).translation = [24, 20]
+    end if
+    x = 208
+    title = makeLabel(g, it.title, 22, "semibold", t.text)
+    title.translation = [x, 18]
+    tw = measureText(it.title, 22, "semibold")
+    if tw > 480 then tw = 480
+    title.width = tw + 4
+    cx = x + tw + 16
+    src = makeTag(g, it.source, { size: 15, h: 28 })
+    src.group.translation = [cx, 20]
+    cx = cx + src.w + 10
+    if it.quality <> ""
+        q = makeTag(g, it.quality, { size: 15, h: 28 })
+        q.group.translation = [cx, 20]
+    end if
+    barW = 1040 - x - 24 - 60 - 24
+    bg = g.CreateChild("Rectangle")
+    bg.translation = [x, 62]
+    bg.width = barW
+    bg.height = 8
+    bg.color = t.barBg
+    fill = g.CreateChild("Rectangle")
+    fill.translation = [x, 62]
+    fill.width = Int(barW * it.pct)
+    fill.height = 8
+    fill.color = it.barColor
+    st = makeLabel(g, it.stateLabel, 17, "regular", it.stateColor)
+    st.translation = [x, 82]
+    dl = makeLabel(g, it.detail, 17, "regular", t.muted)
+    dl.translation = [x, 82]
+    dl.width = barW
+    dl.horizAlign = "right"
+    btn = makeBtn(g, { kind: "round", icon: "close", h: 60, iconSize: 24 })
+    btn.group.translation = [1040 - 24 - 60, 35]
+    return { ring: ring, btn: btn }
+end function
+
+sub paint()
+    for i = 0 to m.rows.Count() - 1
+        focused = (m.zone = "queue" and m.first + i = m.index)
+        m.rows[i].ring.visible = focused
+        paintBtn(m.rows[i].btn, false)
+    end for
+    focusPill = -1
+    if m.zone = "filters" then focusPill = m.filter
+    selectPill(m.filters, m.filter, focusPill)
+end sub
+
+' ---------- Coming up and Storage ----------
+
+sub renderAside()
+    t = th()
+    a = m.aside
+    a.removeChildrenIndex(a.getChildCount(), 0)
+    items = []
+    for each n in m.services
+        c = m.calendar[n]
+        if c <> invalid then items.Append(c)
+    end for
+    items.SortBy("when")
+    shown = []
+    for each it in items
+        if shown.Count() < 5 then shown.Push(it)
+    end for
+    panelH = 100 + shown.Count() * 86
+    if shown.Count() = 0 then panelH = 150
+    g = a.CreateChild("Group")
+    g.translation = [1260, 80]
+    makePanel(g, 580, panelH, 20)
+    makeLabel(g, "Coming up this week", 26, "semibold", t.text).translation = [32, 32]
+    if shown.Count() = 0
+        makeLabel(g, "Nothing scheduled.", 20, "regular", t.muted).translation = [32, 86]
+    end if
+    days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    y = 84
+    for each it in shown
+        rule = g.CreateChild("Rectangle")
+        rule.translation = [32, y]
+        rule.width = 516
+        rule.height = 1
+        rule.color = t.rule
+        d = CreateObject("roDateTime")
+        d.FromISO8601String(it.when)
+        d.ToLocalTime()
+        dl = makeLabel(g, UCase(days[d.GetDayOfWeek()]), 15, "semibold", t.accent)
+        dl.translation = [32, y + 14]
+        dl.width = 72
+        dl.horizAlign = "center"
+        dn = makeLabel(g, d.GetDayOfMonth().ToStr(), 30, "display", t.text)
+        dn.translation = [32, y + 34]
+        dn.width = 72
+        dn.horizAlign = "center"
+        tl = makeLabel(g, it.title, 20, "semibold", t.text)
+        tl.translation = [124, y + 16]
+        tl.width = 300
+        wl = makeLabel(g, it.what, 17, "regular", t.muted)
+        wl.translation = [124, y + 46]
+        wl.width = 300
+        tag = makeTag(g, it.source, { size: 15, h: 28 })
+        tag.group.translation = [548 - tag.w, y + 28]
+        y = y + 86
+    end for
+
+    ' Storage: each disk once, biggest first.
+    seen = {}
+    disks = []
+    for each n in m.services
+        list = m.disks[n]
+        if list <> invalid
+            for each dsk in list
+                if not seen.DoesExist(dsk.path) and dsk.total > 50000000000#
+                    seen[dsk.path] = true
+                    disks.Push(dsk)
+                end if
+            end for
+        end if
+    end for
+    disks.SortBy("total", "r")
+    shownDisks = []
+    for each dsk in disks
+        if shownDisks.Count() < 3 then shownDisks.Push(dsk)
+    end for
+    sy = 80 + panelH + 28
+    sg = a.CreateChild("Group")
+    sg.translation = [1260, sy]
+    sh = 100 + shownDisks.Count() * 64
+    if shownDisks.Count() = 0 then sh = 150
+    makePanel(sg, 580, sh, 20)
+    makeLabel(sg, "Storage", 26, "semibold", t.text).translation = [32, 32]
+    if shownDisks.Count() = 0
+        makeLabel(sg, "No disk information yet.", 20, "regular", t.muted).translation = [32, 86]
+    end if
+    y = 88
+    for each dsk in shownDisks
+        used = 0.0
+        if dsk.total > 0 then used = (dsk.total - dsk.free) / dsk.total
+        pl = makeLabel(sg, dsk.path, 18, "regular", t.text)
+        pl.translation = [32, y]
+        pl.width = 260
+        fl = makeLabel(sg, formatBytes(dsk.free) + " free of " + formatBytes(dsk.total), 18, "regular", t.muted)
+        fl.translation = [292, y]
+        fl.width = 256
+        fl.horizAlign = "right"
+        bg = sg.CreateChild("Rectangle")
+        bg.translation = [32, y + 32]
+        bg.width = 516
+        bg.height = 8
+        bg.color = t.barBg
+        fill = sg.CreateChild("Rectangle")
+        fill.translation = [32, y + 32]
+        fill.width = Int(516 * used)
+        fill.height = 8
+        fill.color = t.accent
+        if used > 0.85 then fill.color = t.error
+        y = y + 64
+    end for
+end sub
+
+' ---------- Removing from the queue ----------
+
+sub openConfirm()
+    if m.shown.Count() = 0 then return
+    t = th()
+    it = m.shown[m.index]
+    m.modalOpen = true
+    m.confirmCol = 1
+    m.modal.removeChildrenIndex(m.modal.getChildCount(), 0)
+    md = makeModal(m.modal, 760, 300)
+    makeTitle(md.body, "Remove from the queue?", 36).translation = [48, 44]
+    l = makeLabel(md.body, it.title + " stops downloading and leaves " + it.source + Chr(8217) + "s queue.", 22, "regular", t.muted)
+    l.translation = [48, 104]
+    l.width = 664
+    l.wrap = true
+    m.confirmBtns = [makeBtn(md.body, { kind: "primary", text: "Remove", size: 22, padX: 36 }), makeBtn(md.body, { kind: "secondary", text: "Keep it", size: 22, padX: 32 })]
+    rowBtns(m.confirmBtns, 48, 196, 16)
+    paintBtns(m.confirmBtns, m.confirmCol)
+    m.modal.visible = true
+end sub
+
+sub closeConfirm()
+    m.modalOpen = false
+    m.modal.visible = false
+end sub
+
+sub removeItem()
+    it = m.shown[m.index]
+    arrRequest(it.name, "/queue/" + it.id.ToStr(), { "removeFromClient": "true", "blocklist": "false" }, "onRemoved", "DELETE")
+    closeConfirm()
+    m.summary.text = "Removing " + it.title + "..."
+end sub
+
+sub onRemoved(_event as object)
+    loadQueue()
+end sub
+
+' ---------- Focus & keys ----------
+
+sub restoreContentFocus()
+    m.sink.setFocus(true)
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() and not menuIsOpen() then restoreContentFocus()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if m.modalOpen
+        if key = "left"
+            m.confirmCol = 0
+        else if key = "right"
+            m.confirmCol = 1
+        else if key = "OK"
+            if m.confirmCol = 0
+                removeItem()
+            else
+                closeConfirm()
+            end if
+            return true
+        else if key = "back"
+            closeConfirm()
+            return true
+        end if
+        paintBtns(m.confirmBtns, m.confirmCol)
+        return true
+    end if
+    if menuIsOpen() then return false
+    if key = "left" and (m.zone = "queue" or m.filter = 0)
+        openMenu()
+        return true
+    end if
+    if m.zone = "filters"
+        if key = "left"
+            m.filter = m.filter - 1
+        else if key = "right"
+            if m.filter < 2 then m.filter = m.filter + 1
+        else if key = "down"
+            m.zone = "queue"
+        else
+            return false
+        end if
+        m.index = 0
+        m.first = 0
+        renderQueue()
+        return true
+    end if
+    if key = "up"
+        if m.index = 0
+            m.zone = "filters"
+        else
+            m.index = m.index - 1
+        end if
+        renderQueue()
+        return true
+    else if key = "down"
+        if m.index < m.shown.Count() - 1 then m.index = m.index + 1
+        renderQueue()
+        return true
+    else if key = "OK"
+        openConfirm()
+        return true
+    end if
+    return false
+end function
