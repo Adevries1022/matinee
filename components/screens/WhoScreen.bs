@@ -1,14 +1,18 @@
 sub init()
-    m.top.findNode("brand").color = th().accent
+    t = th()
+    m.top.findNode("brand").color = t.accent
+    m.top.findNode("heading").color = t.text
+    m.top.findNode("tip").color = t.textFaint
     m.strip = m.top.findNode("strip")
     m.status = m.top.findNode("status")
+    m.status.color = t.textDim
     m.top.observeField("focusedChild", "onFocusChanged")
     m.users = []
     m.tiles = []
     m.index = 0
     m.panel = invalid
-    m.tileSize = 240
-    m.gap = 72
+    m.tileSize = 220
+    m.gap = 56
     m.status.text = "Loading..."
     apiRequest("/Users/Public", {}, "onUsers")
 end sub
@@ -80,9 +84,10 @@ sub render()
 
         ring = g.CreateChild("Poster")
         ring.uri = "pkg:/images/avatar_ring.png"
-        ring.width = size + 28
-        ring.height = size + 28
-        ring.translation = [-14, -14]
+        ring.width = size + 26
+        ring.height = size + 26
+        ring.translation = [-13, -13]
+        ring.blendColor = th().text
         ring.loadDisplayMode = "scaleToFill"
 
         symbol = ""
@@ -90,10 +95,10 @@ sub render()
         g.appendChild(makeAvatar(u.id, u.name, u.imageTag, size, symbol))
 
         name = g.CreateChild("Label")
-        name.translation = [-40, size + 30]
+        name.translation = [-40, size + 32]
         name.width = size + 80
         name.horizAlign = "center"
-        name.font = makeFont(30, true)
+        name.font = makeFont(28, true)
         name.text = u.name
         m.tiles.Push({ group: g, ring: ring, name: name })
     end for
@@ -101,16 +106,19 @@ sub render()
 end sub
 
 sub paint()
+    th0 = th()
+    grow = 1.06
+    if th0.reduceMotion then grow = 1.0
     for i = 0 to m.tiles.Count() - 1
         t = m.tiles[i]
         if i = m.index
             t.ring.visible = true
-            t.group.scale = [1.08, 1.08]
-            t.name.color = "0xFFFFFFFF"
+            t.group.scale = [grow, grow]
+            t.name.color = th0.text
         else
             t.ring.visible = false
             t.group.scale = [1.0, 1.0]
-            t.name.color = "0x8E8E99FF"
+            t.name.color = th0.textFaint
         end if
     end for
     ' With many Users, slide the row so the focused tile stays on screen.
@@ -120,7 +128,7 @@ sub paint()
         x = 96 - (m.index - 2) * step2
         if x > 96 then x = 96
     end if
-    m.strip.translation = [x, 380]
+    m.strip.translation = [x, 420]
 end sub
 
 sub choose()

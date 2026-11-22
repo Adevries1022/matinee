@@ -29,7 +29,11 @@ sub setupHero()
 
     heroBox = layer.CreateChild("LayoutGroup")
     heroBox.layoutDirection = "vert"
-    heroBox.itemSpacings = [14, 20]
+    heroBox.itemSpacings = [10, 16, 18]
+    ' A small Accent line above the title: the Request Status or the kind of title.
+    m.heroEyebrow = heroBox.CreateChild("Label")
+    m.heroEyebrow.font = makeFont(22, true)
+    m.heroEyebrow.color = t.accent
     m.heroTitle = heroBox.CreateChild("Label")
     m.heroTitle.width = 1150
     m.heroTitle.wrap = true
@@ -42,18 +46,18 @@ sub setupHero()
     m.heroOverview = heroBox.CreateChild("Label")
     m.heroOverview.width = 960
     m.heroOverview.wrap = true
-    m.heroOverview.maxLines = 3
+    m.heroOverview.maxLines = 2
     m.heroOverview.lineSpacing = 6
     m.heroOverview.color = t.textDim
-    m.heroOverview.font = makeFont(30)
+    m.heroOverview.font = makeFont(28)
 
     if t.bigHero
         ' Big Hero: the artwork leads, with just the title and details.
-        m.heroTitle.font = makeFont(84, true)
+        m.heroTitle.font = makeFont(88, true)
         m.heroOverview.visible = false
-        heroBox.translation = [t.leftPad, t.rowsTop - 290]
+        heroBox.translation = [t.leftPad, t.rowsTop - 330]
     else
-        m.heroTitle.font = makeFont(70, true)
+        m.heroTitle.font = makeFont(76, true)
         heroBox.translation = [t.leftPad, t.heroTop + 45]
     end if
 
@@ -88,13 +92,7 @@ sub applyHero()
             meta = c.subtitle
         end if
     end if
-    if c.badge <> ""
-        if meta <> ""
-            meta = c.badge + dot() + meta
-        else
-            meta = c.badge
-        end if
-    end if
+    m.heroEyebrow.text = UCase(heroEyebrow(c))
     m.heroMeta.text = meta
     m.heroOverview.text = c.description
     trailerSchedule(c)
@@ -104,6 +102,15 @@ sub applyHero()
         if m.menu <> invalid then m.menu.backdropUri = c.backdropUrl
     end if
 end sub
+
+function heroEyebrow(c as object) as string
+    if c.badge <> "" then return c.badge
+    kind = c.itemType
+    if kind = "Episode" then return "Episode"
+    if kind = "Series" or kind = "seerr-tv" then return "Series"
+    if kind = "Movie" or kind = "seerr-movie" then return "Movie"
+    return ""
+end function
 
 sub onHeroBackdropStatus()
     if m.heroBackdrop.loadStatus = "ready"

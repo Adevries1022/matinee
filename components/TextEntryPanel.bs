@@ -5,6 +5,11 @@ sub init()
     m.btn = m.top.findNode("btn")
     m.btnRect = m.top.findNode("btnRect")
     m.btnLabel = m.top.findNode("btnLabel")
+    t = th()
+    m.top.findNode("veil").color = t.bg
+    m.titleLabel.color = t.text
+    m.hintLabel.color = t.textDim
+    m.top.findNode("tip").color = t.textFaint
 
     m.kb.textEditBox.maxTextLength = 200
     m.onButton = false
@@ -46,12 +51,15 @@ sub applySecure()
 end sub
 
 sub paint()
+    t = th()
     if m.onButton
-        m.btnRect.color = "0xFFFFFFFF"
-        m.btnLabel.color = "0x0B0B0FFF"
+        m.btnRect.blendColor = t.focusBg
+        m.btnRect.opacity = 1.0
+        m.btnLabel.color = t.onFocus
     else
-        m.btnRect.color = "0xFFFFFF2E"
-        m.btnLabel.color = "0xFFFFFFFF"
+        m.btnRect.blendColor = t.surface
+        m.btnRect.opacity = t.surfaceHiOpacity
+        m.btnLabel.color = t.text
     end if
 end sub
 

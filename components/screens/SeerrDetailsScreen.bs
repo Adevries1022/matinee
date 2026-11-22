@@ -287,11 +287,11 @@ sub drawPicker()
             y = 180 + (i - first) * 84
             focused = (i = m.pickIndex)
             if focused
-                hl = makeShape(p, t.pillUri, 600, 72, "0xFFFFFFFF", 1.0)
+                hl = makeShape(p, t.fillUri, 600, 72, t.focusBg, 1.0)
                 hl.translation = [panelX + 40, y]
             end if
             textColor = t.text
-            if focused then textColor = "0x0B0B0FFF"
+            if focused then textColor = t.onFocus
             if i < m.seasons.Count()
                 s = m.seasons[i]
                 chk = makeShape(p, t.fillUri, 34, 34, t.surface, 0.25)

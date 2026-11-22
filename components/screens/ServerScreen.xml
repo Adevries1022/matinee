@@ -8,13 +8,13 @@
   <script type="text/brightscript" uri="ServerScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
-    <Label id="brand" text="MATINEE" translation="[96,70]" color="0xE8A33DFF">
-      <Font role="font" uri="font:BoldSystemFontFile" size="44" />
+    <Label id="brand" text="MATINEE" translation="[96,60]">
+      <Font role="font" uri="font:BoldSystemFontFile" size="30" />
     </Label>
-    <Label translation="[96,165]" width="1700" color="0xFFFFFFFF" text="Choose your server">
+    <Label id="heading" translation="[96,165]" width="1700" text="Choose your server">
       <Font role="font" uri="font:BoldSystemFontFile" size="56" />
     </Label>
-    <Label id="status" translation="[96,250]" width="1700" wrap="true" color="0xB0B0B8FF">
+    <Label id="status" translation="[96,250]" width="1700" wrap="true">
       <Font role="font" uri="font:SystemFontFile" size="30" />
     </Label>
     <Group id="list" translation="[96,340]" />

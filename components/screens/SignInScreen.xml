@@ -10,26 +10,26 @@
   <script type="text/brightscript" uri="SignInScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
-    <Label id="brand" text="MATINEE" translation="[96,70]" color="0xE8A33DFF">
-      <Font role="font" uri="font:BoldSystemFontFile" size="44" />
+    <Label id="brand" text="MATINEE" translation="[96,60]">
+      <Font role="font" uri="font:BoldSystemFontFile" size="30" />
     </Label>
     <Group id="avatar" translation="[870,130]" />
-    <Label id="nameLabel" translation="[0,330]" width="1920" horizAlign="center" color="0xFFFFFFFF">
+    <Label id="nameLabel" translation="[0,330]" width="1920" horizAlign="center">
       <Font role="font" uri="font:BoldSystemFontFile" size="44" />
     </Label>
-    <Label id="code" translation="[0,420]" width="1920" horizAlign="center" color="0xE8A33DFF">
+    <Label id="code" translation="[0,420]" width="1920" horizAlign="center">
       <Font role="font" uri="font:BoldSystemFontFile" size="128" />
     </Label>
-    <Label id="instr" translation="[360,600]" width="1200" horizAlign="center" wrap="true" lineSpacing="6" color="0xC9C9D1FF">
+    <Label id="instr" translation="[360,600]" width="1200" horizAlign="center" wrap="true" lineSpacing="6">
       <Font role="font" uri="font:SystemFontFile" size="30" />
     </Label>
     <Group id="btn" translation="[700,800]">
-      <Rectangle width="520" height="76" color="0xFFFFFFFF" />
-      <Label width="520" height="76" horizAlign="center" vertAlign="center" color="0x0B0B0FFF" text="Use password instead">
+      <Poster id="btnBg" width="520" height="76" uri="pkg:/images/fill_round.9.png" />
+      <Label id="btnLabel" width="520" height="76" horizAlign="center" vertAlign="center" text="Use password instead">
         <Font role="font" uri="font:BoldSystemFontFile" size="30" />
       </Label>
     </Group>
-    <Label id="status" translation="[160,910]" width="1600" horizAlign="center" wrap="true" color="0xB0B0B8FF">
+    <Label id="status" translation="[160,910]" width="1600" horizAlign="center" wrap="true">
       <Font role="font" uri="font:SystemFontFile" size="28" />
     </Label>
     <Timer id="poll" duration="3" repeat="true" />

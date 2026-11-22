@@ -21,11 +21,14 @@
         <Font role="font" uri="font:BoldSystemFontFile" size="24" />
       </Label>
       <Poster id="poster" loadDisplayMode="scaleToZoom" opacity="0" />
-      <Poster id="shade" uri="pkg:/images/grad_up.png" loadDisplayMode="scaleToFill" blendColor="0x000000FF" visible="false" />
+      <Poster id="shade" uri="pkg:/images/grad_up.png" loadDisplayMode="scaleToFill" visible="false" />
       <Label id="caption" vertAlign="center" visible="false">
         <Font role="font" uri="font:BoldSystemFontFile" size="24" />
       </Label>
-      <Rectangle id="trackBg" color="0xFFFFFF40" visible="false" />
+      <Label id="captionSub" vertAlign="center" visible="false">
+        <Font role="font" uri="font:SystemFontFile" size="18" />
+      </Label>
+      <Rectangle id="trackBg" visible="false" />
       <Rectangle id="track" visible="false" />
       <Poster id="corners" visible="false" />
       <Group id="badge" visible="false">

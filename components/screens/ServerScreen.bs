@@ -1,6 +1,9 @@
 sub init()
-    m.top.findNode("brand").color = th().accent
+    t = th()
+    m.top.findNode("brand").color = t.accent
+    m.top.findNode("heading").color = t.text
     m.status = m.top.findNode("status")
+    m.status.color = t.textDim
     m.list = m.top.findNode("list")
     m.top.observeField("focusedChild", "onFocusChanged")
     m.items = []
@@ -69,9 +72,7 @@ sub renderList()
         it = m.items[i]
         g = m.list.CreateChild("Group")
         g.translation = [0, i * 124]
-        r = g.CreateChild("Rectangle")
-        r.width = 1100
-        r.height = 108
+        r = makeShape(g, th().fillUri, 1100, 108, th().panel)
         n = g.CreateChild("Label")
         n.translation = [36, 0]
         n.width = 1030
@@ -95,16 +96,17 @@ sub renderList()
 end sub
 
 sub paint()
+    t = th()
     for i = 0 to m.rows.Count() - 1
         row = m.rows[i]
         if i = m.index
-            row.rect.color = "0xFFFFFFFF"
-            row.name.color = "0x0B0B0FFF"
-            row.url.color = "0x55555FFF"
+            row.rect.blendColor = t.focusBg
+            row.name.color = t.onFocus
+            row.url.color = t.onFocusDim
         else
-            row.rect.color = "0xFFFFFF14"
-            row.name.color = "0xFFFFFFFF"
-            row.url.color = "0x9A9AA5FF"
+            row.rect.blendColor = t.panel
+            row.name.color = t.text
+            row.url.color = t.textDim
         end if
     end for
 end sub

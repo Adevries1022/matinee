@@ -1,11 +1,17 @@
 sub init()
-    m.top.findNode("brand").color = th().accent
+    t = th()
+    m.top.findNode("brand").color = t.accent
+    m.top.findNode("btnBg").blendColor = t.focusBg
+    m.top.findNode("btnLabel").color = t.onFocus
     m.avatar = m.top.findNode("avatar")
     m.nameLabel = m.top.findNode("nameLabel")
+    m.nameLabel.color = t.text
     m.code = m.top.findNode("code")
-    m.code.color = th().accent
+    m.code.color = t.accent
     m.instr = m.top.findNode("instr")
+    m.instr.color = t.textDim
     m.status = m.top.findNode("status")
+    m.status.color = t.textDim
     m.poll = m.top.findNode("poll")
     m.poll.observeField("fire", "onPoll")
     m.top.observeField("focusedChild", "onFocusChanged")

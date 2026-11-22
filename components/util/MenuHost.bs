@@ -5,8 +5,8 @@
 sub setupMenu(currentKey as string)
     m.menuKey = currentKey
     m.menu = CreateObject("roSGNode", "MainMenu")
-    m.menu.items = menuItems()
     m.menu.currentKey = currentKey
+    m.menu.items = menuItems()
     m.menu.observeField("chosen", "onMenuChosen")
     m.menu.observeField("closeRequested", "onMenuClose")
     m.top.appendChild(m.menu)

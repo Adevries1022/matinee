@@ -9,6 +9,15 @@ sub init()
     m.countdown = m.top.findNode("countdown")
     m.hintTimer = m.top.findNode("hintTimer")
 
+    t = th()
+    m.status.color = t.text
+    m.hint.color = t.textDim
+    ' The seek bar and buffering bar take the Accent.
+    m.video.trickPlayBar.filledBarBlendColor = t.accent
+    m.video.trickPlayBar.currentTimeMarkerBlendColor = t.accent
+    m.video.bufferingBar.filledBarBlendColor = t.accent
+    m.video.retrievingBar.filledBarBlendColor = t.accent
+
     m.video.notificationInterval = 2
     m.video.observeField("state", "onState")
     m.video.observeField("position", "onPosition")
@@ -369,9 +378,9 @@ sub drawPicker()
     p = m.picker
     p.removeChildrenIndex(p.getChildCount(), 0)
     panelX = 1920 - 680
-    bg = makeShape(p, t.fillUri, 640, 1000, "0x0B0B0FFF", 0.94)
+    bg = makeShape(p, t.fillUri, 640, 1000, t.panel, 0.96)
     bg.translation = [panelX, 40]
-    head = makeLabel(p, "Audio and subtitles", 40, true, "0xFFFFFFFF")
+    head = makeLabel(p, "Audio and subtitles", 40, true, t.text)
     head.translation = [panelX + 40, 80]
 
     maxRows = 11
@@ -388,7 +397,7 @@ sub drawPicker()
             else
                 focused = (i = m.pickIndex)
                 if focused
-                    hl = makeShape(p, t.pillUri, 580, 64, "0xFFFFFFFF", 1.0)
+                    hl = makeShape(p, t.fillUri, 580, 64, t.focusBg, 1.0)
                     hl.translation = [panelX + 30, y]
                 end if
                 current = (r.kind = "audio" and r.index = m.audioIndex) or (r.kind = "sub" and r.index = m.subIndex)
@@ -399,13 +408,13 @@ sub drawPicker()
                     tick.height = 30
                     tick.translation = [panelX + 50, y + 17]
                     if focused
-                        tick.blendColor = "0x0B0B0FFF"
+                        tick.blendColor = t.onFocus
                     else
                         tick.blendColor = t.accent
                     end if
                 end if
-                color = "0xFFFFFFFF"
-                if focused then color = "0x0B0B0FFF"
+                color = t.text
+                if focused then color = t.onFocus
                 lbl = makeLabel(p, r.label, 28, focused, color)
                 lbl.translation = [panelX + 96, y]
                 lbl.width = 500
@@ -548,18 +557,16 @@ sub showUpNext()
     g = m.upNext
     g.removeChildrenIndex(g.getChildCount(), 0)
     g.translation = [1200, 700]
-    makeShape(g, t.fillUri, 640, 290, "0x0B0B0FFF", 0.94)
-    bar = makeShape(g, t.fillUri, 8, 230, t.accent, 1.0)
-    bar.translation = [24, 30]
-    l1 = makeLabel(g, "UP NEXT", 24, true, t.accent)
-    l1.translation = [60, 30]
-    m.upTitle = makeLabel(g, episodeLabel(m.nextEp), 32, true, "0xFFFFFFFF")
-    m.upTitle.translation = [60, 68]
+    makeShape(g, t.fillUri, 640, 290, t.panel, 0.94)
+    l1 = makeLabel(g, "UP NEXT", 22, true, t.accent)
+    l1.translation = [40, 34]
+    m.upTitle = makeLabel(g, episodeLabel(m.nextEp), 32, true, t.text)
+    m.upTitle.translation = [40, 70]
     m.upTitle.width = 550
     m.upTitle.wrap = true
     m.upTitle.maxLines = 2
-    m.upCountdown = makeLabel(g, "", 24, false, "0xC9C9D1FF")
-    m.upCountdown.translation = [60, 180]
+    m.upCountdown = makeLabel(g, "", 24, false, t.textDim)
+    m.upCountdown.translation = [40, 180]
     m.upCountdown.width = 550
     m.upCountdown.wrap = true
     updateCountdown()

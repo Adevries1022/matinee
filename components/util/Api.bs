@@ -86,13 +86,46 @@ end function
 
 function accentColors() as object
     return {
-        amber: "0xE8A33DFF",
-        red: "0xE5484DFF",
-        teal: "0x2EC4B6FF",
-        violet: "0xA78BFAFF",
-        blue: "0x5B9BFFFF",
-        white: "0xFFFFFFFF"
+        amber: "0xFFB547FF",
+        sky: "0x5CC8FFFF",
+        coral: "0xFF7A59FF",
+        lime: "0xB9F27CFF",
+        violet: "0xA78BFAFF"
     }
+end function
+
+' Accents and Themes saved by earlier versions, mapped to today's names.
+function legacyAccent(name as string) as string
+    if name = "red" then return "coral"
+    if name = "blue" or name = "teal" then return "sky"
+    if name = "white" then return ""
+    return name
+end function
+
+function legacyTheme(name as string) as string
+    if name = "void" then return "oled"
+    if name = "classic" then return "midnight"
+    return name
+end function
+
+' The six Themes: background, panel and raised surfaces, text and Accent.
+function themePalette(name as string) as object
+    if name = "oled"
+        return { name: "oled", label: "OLED Black", bg: "0x000000FF", panel: "0x161616FF", raised: "0x222222FF", text: "0xFFFFFFFF", textDim: "0xA3A3A3FF", textFaint: "0x7A7A7AFF", accent: "0x5CC8FFFF", frosted: false, blurb: "Pure black, so the screen goes dark around the artwork. Best on OLED TVs." }
+    else if name = "slate"
+        return { name: "slate", label: "Slate", bg: "0x18202CFF", panel: "0x253043FF", raised: "0x2C384BFF", text: "0xEEF1F6FF", textDim: "0xAAB4C3FF", textFaint: "0x7F8A9BFF", accent: "0x7DD3FCFF", frosted: true, blurb: "A cool blue-grey that's easy on the eyes in a bright room." }
+    else if name = "forest"
+        return { name: "forest", label: "Forest", bg: "0x0E1A14FF", panel: "0x1A2C22FF", raised: "0x1F3328FF", text: "0xECF3EEFF", textDim: "0xA3B8AAFF", textFaint: "0x76897CFF", accent: "0xB9F27CFF", frosted: true, blurb: "Deep green with a lime Accent." }
+    else if name = "ember"
+        return { name: "ember", label: "Ember", bg: "0x170E0AFF", panel: "0x2A1A13FF", raised: "0x311F17FF", text: "0xF7EEE9FF", textDim: "0xC2AFA5FF", textFaint: "0x93807AFF", accent: "0xFF7A59FF", frosted: true, blurb: "Warm brown-black with a coral Accent." }
+    else if name = "dusk"
+        return { name: "dusk", label: "Dusk", bg: "0x14111CFF", panel: "0x221C30FF", raised: "0x2A2339FF", text: "0xF3F0FAFF", textDim: "0xB3AAC6FF", textFaint: "0x857C98FF", accent: "0xC4A7FFFF", frosted: true, blurb: "Twilight purple with a lavender Accent." }
+    end if
+    return { name: "midnight", label: "Midnight", bg: "0x0B0D12FF", panel: "0x1A1F29FF", raised: "0x1E2430FF", text: "0xF2F3F5FF", textDim: "0xA8B0BDFF", textFaint: "0x7D8592FF", accent: "0xFFB547FF", frosted: true, blurb: "Near-black blue with an amber Accent. The default." }
+end function
+
+function themeNames() as object
+    return ["midnight", "oled", "slate", "forest", "ember", "dusk"]
 end function
 
 function defaultPrefs() as object
@@ -108,51 +141,33 @@ end function
 
 ' Every color, shape and size the screens use comes from here.
 function themeTokens(prefs as object) as object
-    name = safeStr(prefs.theme)
-    if name = "void"
-        t = {
-            name: "void", label: "Void",
-            bg: "0x000000FF", text: "0xFFFFFFFF", textDim: "0xA8A8B0FF", textFaint: "0x66666EFF",
-            surface: "0xFFFFFFFF", surfaceOpacity: 0.07, surfaceHiOpacity: 0.16,
-            accent: "0xFFFFFFFF", shape: "square", frosted: false, cardFocusScale: 1.05, focusWithAccent: false
-        }
-    else if name = "classic"
-        t = {
-            name: "classic", label: "Amber",
-            bg: "0x0B0B0FFF", text: "0xFFFFFFFF", textDim: "0xC9C9D1FF", textFaint: "0x8E8E99FF",
-            surface: "0xFFFFFFFF", surfaceOpacity: 0.10, surfaceHiOpacity: 0.20,
-            accent: "0xE8A33DFF", shape: "square", frosted: false, cardFocusScale: 1.05, focusWithAccent: false
-        }
-    else
-        t = {
-            name: "midnight", label: "Midnight Glass",
-            bg: "0x000000FF", text: "0xFFFFFFFF", textDim: "0xB9B9C6FF", textFaint: "0x70707CFF",
-            surface: "0xFFFFFFFF", surfaceOpacity: 0.08, surfaceHiOpacity: 0.17,
-            accent: "0xA78BFAFF", shape: "round", frosted: true, cardFocusScale: 1.06, focusWithAccent: true
-        }
-    end if
+    t = themePalette(legacyTheme(safeStr(prefs.theme)))
+    ' Translucent white layers over artwork: idle buttons, chips, placeholders.
+    t.surface = "0xFFFFFFFF"
+    t.surfaceOpacity = 0.08
+    t.surfaceHiOpacity = 0.14
+    t.cardFocusScale = 1.04
 
-    accent = safeStr(prefs.accent)
+    accent = legacyAccent(safeStr(prefs.accent))
     colors = accentColors()
     if accent <> "" and colors.DoesExist(accent) then t.accent = colors[accent]
-    t.onAccent = "0x0B0B0FFF"
+    t.onAccent = t.bg
 
-    t.focusColor = "0xFFFFFFFF"
-    if t.focusWithAccent then t.focusColor = t.accent
+    ' Focused buttons, rows and chips turn solid light with dark text;
+    ' focused Cards get a ring in the Accent.
+    t.focusColor = t.accent
+    t.focusBg = t.text
+    t.onFocus = t.bg
+    t.onFocusDim = "0x4A505CFF"
+    t.trackBg = "0xFFFFFF40"
+    t.online = "0x4ADE80FF"
+    t.scrim = "0x000000FF"
 
-    if t.shape = "round"
-        t.fillUri = "pkg:/images/fill_round.9.png"
-        t.pillUri = "pkg:/images/pill.9.png"
-        t.ringUri = "pkg:/images/ring_round.9.png"
-        t.cornerUri = "pkg:/images/corners_round.9.png"
-        t.ringInset = 2   ' transparent margin around the stroke in ring_round.9.png
-    else
-        t.fillUri = "pkg:/images/fill_square.9.png"
-        t.pillUri = "pkg:/images/fill_square.9.png"
-        t.ringUri = "pkg:/images/ring_square.9.png"
-        t.cornerUri = ""
-        t.ringInset = 0
-    end if
+    t.fillUri = "pkg:/images/fill_round.9.png"
+    t.pillUri = "pkg:/images/pill.9.png"
+    t.ringUri = "pkg:/images/ring_round.9.png"
+    t.cornerUri = "pkg:/images/corners_round.9.png"
+    t.ringInset = 2   ' transparent margin around the stroke in ring_round.9.png
     ' The focus ring: its stroke width in the ring images, and the gap between it and the Card.
     t.ringStroke = 4
     t.ringGap = 3
@@ -170,7 +185,7 @@ function themeTokens(prefs as object) as object
         t.heroTop = 120
     else
         t.leftPad = 96
-        t.heroTop = 165
+        t.heroTop = 150
     end if
     t.contentWidth = 1920 - t.leftPad
     ' Each Card sits in a padded cell so it can grow from its centre
@@ -181,13 +196,13 @@ function themeTokens(prefs as object) as object
     if t.miniCards
         t.posterW = 160
         t.posterH = 240
-        t.landW = 320
-        t.landH = 180
+        t.landW = 288
+        t.landH = 162
     else
         t.posterW = 220
         t.posterH = 330
-        t.landW = 400
-        t.landH = 225
+        t.landW = 352
+        t.landH = 198
     end if
 
     if t.bigHero
@@ -262,7 +277,7 @@ function makeButton(parent as object, text as string, minWidth = 0 as integer) a
     g = parent.CreateChild("Group")
     w = measureText(text, 30, true) + 96
     if w < minWidth then w = minWidth
-    bg = makeShape(g, t.pillUri, w, 72, t.surface, t.surfaceHiOpacity)
+    bg = makeShape(g, t.fillUri, w, 72, t.surface, t.surfaceHiOpacity)
     l = g.CreateChild("Label")
     l.font = makeFont(30, true)
     l.text = text
@@ -277,9 +292,9 @@ end function
 sub paintButton(b as object, focused as boolean)
     t = th()
     if focused
-        b.bg.blendColor = "0xFFFFFFFF"
+        b.bg.blendColor = t.focusBg
         b.bg.opacity = 1.0
-        b.label.color = "0x0B0B0FFF"
+        b.label.color = t.onFocus
     else
         b.bg.blendColor = t.surface
         b.bg.opacity = t.surfaceHiOpacity
@@ -586,7 +601,7 @@ end sub
 ' ================= Avatars =================
 
 function avatarColor(name as string) as string
-    colors = ["0x8E5BD1FF", "0x2A9D8FFF", "0xE07A3FFF", "0x3D7DD8FF", "0xC9475AFF", "0x6A994EFF"]
+    colors = ["0xFFB547FF", "0x5CC8FFFF", "0xFF8A70FF", "0xB9F27CFF", "0xC4A7FFFF", "0x7DD3FCFF"]
     total = 0
     for i = 1 to Len(name)
         total = total + Asc(Mid(name, i, 1))
@@ -607,11 +622,12 @@ function makeAvatar(userId as string, name as string, avatarTag as string, size 
     initial.height = size
     initial.horizAlign = "center"
     initial.vertAlign = "center"
-    initial.color = "0xFFFFFFFF"
+    initial.color = th().bg
     initial.font = makeFont(Int(size * 0.42), true)
     if symbol <> ""
         initial.text = symbol
-        bg.color = "0x2A2A33FF"
+        initial.color = th().textDim
+        bg.color = th().raised
     else
         initial.text = UCase(Left(name, 1))
     end if

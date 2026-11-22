@@ -11,18 +11,19 @@ _Avoid_: Marquee (the working name), Jellyflix, Netfin
 A named, user-selectable skin that changes how Marquee looks. Users can switch Themes in the app.
 _Avoid_: Skin, style, mode
 
-**Midnight Glass**:
-The default Theme: a pure-black base, rounded Cards, frosted panels over artwork, and one Accent.
+Every Theme has rounded Cards, solid panels and a default Accent. There are six:
 
-**Void**:
-A Theme that is pure black, flat and sharp-cornered, where only the artwork carries color.
+**Midnight**:
+The default Theme: near-black blue with an amber Accent. Replaces Midnight Glass and Amber from v2.3, whose saved choices now open as Midnight.
 
-**Amber**:
-A Theme that keeps the original v1 look: square Cards and an amber Accent.
-_Avoid_: Marquee Classic, Classic
+**OLED Black**:
+A pure-black, flat Theme (no frosted panels) with a sky-blue Accent. Replaces Void.
+
+**Slate**, **Forest**, **Ember**, **Dusk**:
+Tinted Themes: cool blue-grey, deep green, warm brown-black and twilight purple, each with its own Accent.
 
 **Accent**:
-The single highlight color a Theme uses for focus, progress, and emphasis.
+The single highlight color a Theme uses for focus, progress, and emphasis: Amber, Sky, Coral, Lime or Violet, or the Theme's default.
 _Avoid_: Brand color, highlight color
 
 **Layout Add-on**:

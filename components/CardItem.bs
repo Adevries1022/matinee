@@ -6,6 +6,7 @@ sub init()
     m.poster = m.top.findNode("poster")
     m.shade = m.top.findNode("shade")
     m.caption = m.top.findNode("caption")
+    m.captionSub = m.top.findNode("captionSub")
     m.trackBg = m.top.findNode("trackBg")
     m.track = m.top.findNode("track")
     m.corners = m.top.findNode("corners")
@@ -28,7 +29,10 @@ sub init()
     m.placeholder.blendColor = t.surface
     m.placeholder.opacity = t.surfaceOpacity * 1.6
     m.fallback.color = t.textFaint
-    m.caption.color = "0xFFFFFFFF"
+    m.caption.color = t.text
+    m.captionSub.color = t.textDim
+    m.shade.blendColor = t.scrim
+    m.trackBg.color = t.trackBg
     m.track.color = t.accent
     m.ring.uri = t.ringUri
     m.ring.blendColor = t.focusColor
@@ -65,6 +69,7 @@ sub showContent()
     end if
     m.fallback.text = c.heading
     m.caption.text = c.heading
+    m.captionSub.text = c.subtitle
     m.badgeText.text = c.badge
     layout()
 end sub
@@ -105,28 +110,44 @@ sub layout()
     if c <> invalid
         showCap = landscape and c.heading <> ""
     end if
-    m.shade.visible = showCap
-    m.caption.visible = showCap
-    m.shade.translation = [0, h - 90]
-    m.shade.width = w
-    m.shade.height = 90
-    m.shade.opacity = 0.9
-    m.caption.translation = [18, h - 56]
-    m.caption.width = w - 36
-    m.caption.height = 44
-
     showTrack = false
     if c <> invalid
         showTrack = c.progress > 0.01 and c.progress < 0.97
     end if
+    showSub = showCap and c.subtitle <> ""
+
+    ' Caption at the bottom left: the title, then the episode, then the
+    ' progress bar, each stacked above the next.
+    bottom = h - 14
+    if showTrack then bottom = bottom - 17
+    if showSub
+        m.captionSub.translation = [18, bottom - 24]
+        m.captionSub.width = w - 36
+        m.captionSub.height = 24
+        bottom = bottom - 26
+    end if
+    m.caption.translation = [18, bottom - 32]
+    m.caption.width = w - 36
+    m.caption.height = 32
+    m.shade.visible = showCap
+    m.caption.visible = showCap
+    m.captionSub.visible = showSub
+    shadeH = h - bottom + 60
+    if shadeH > h then shadeH = h
+    m.shade.translation = [0, h - shadeH]
+    m.shade.width = w
+    m.shade.height = shadeH
+    m.shade.opacity = 0.85
+
+    ' A slim progress bar inset from the Card's edges.
     m.trackBg.visible = showTrack
     m.track.visible = showTrack
-    m.trackBg.translation = [0, h - 6]
-    m.trackBg.width = w
-    m.trackBg.height = 6
-    m.track.translation = [0, h - 6]
-    m.track.height = 6
-    if showTrack then m.track.width = w * c.progress
+    m.trackBg.translation = [16, h - 19]
+    m.trackBg.width = w - 32
+    m.trackBg.height = 5
+    m.track.translation = [16, h - 19]
+    m.track.height = 5
+    if showTrack then m.track.width = (w - 32) * c.progress
 
     hasBadge = false
     if c <> invalid then hasBadge = (c.badge <> "")

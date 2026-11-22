@@ -10,10 +10,10 @@
   <children>
     <Rectangle width="1920" height="1080" color="0x000000FF" />
     <Video id="video" width="1920" height="1080" />
-    <Label id="status" translation="[160,500]" width="1600" horizAlign="center" wrap="true" color="0xFFFFFFFF" text="Loading...">
+    <Label id="status" translation="[160,500]" width="1600" horizAlign="center" wrap="true" text="Loading...">
       <Font role="font" uri="font:SystemFontFile" size="34" />
     </Label>
-    <Label id="hint" translation="[0,40]" width="1880" horizAlign="right" color="0xFFFFFFAA" visible="false" text="* Audio and subtitles">
+    <Label id="hint" translation="[0,40]" width="1880" horizAlign="right" visible="false" text="* Audio and subtitles">
       <Font role="font" uri="font:SystemFontFile" size="24" />
     </Label>
     <Group id="upNext" visible="false" />

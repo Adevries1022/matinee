@@ -19,11 +19,15 @@ end sub
 ' ---------- What each page holds ----------
 
 function themeChoices() as object
-    return [{ v: "midnight", l: "Midnight Glass" }, { v: "void", l: "Void" }, { v: "classic", l: "Amber" }]
+    list = []
+    for each name in themeNames()
+        list.Push({ v: name, l: themePalette(name).label })
+    end for
+    return list
 end function
 
 function accentChoices() as object
-    return [{ v: "", l: "Theme default" }, { v: "amber", l: "Amber" }, { v: "red", l: "Red" }, { v: "teal", l: "Teal" }, { v: "violet", l: "Violet" }, { v: "blue", l: "Blue" }, { v: "white", l: "White" }]
+    return [{ v: "", l: "Theme default" }, { v: "amber", l: "Amber" }, { v: "sky", l: "Sky" }, { v: "coral", l: "Coral" }, { v: "lime", l: "Lime" }, { v: "violet", l: "Violet" }]
 end function
 
 function onOff() as object
@@ -32,7 +36,7 @@ end function
 
 function appearanceRows() as object
     return [
-        { key: "theme", label: "Theme", choices: themeChoices(), help: "The overall look: colors, corners and panels." },
+        { key: "theme", label: "Theme", choices: themeChoices(), help: "The overall look: background, panels and the default Accent." },
         { key: "accent", label: "Accent", choices: accentChoices(), help: "The highlight color for focus, progress and badges." },
         { key: "bigHero", label: "Big Hero", choices: onOff(), help: "Taller artwork at the top, with just the title and details." },
         { key: "miniCards", label: "Mini Cards", choices: onOff(), help: "Smaller Cards, so more titles fit on screen." },
@@ -77,6 +81,8 @@ function currentValue(r as object) as string
         if reg.Exists("alwaysAsk") then return reg.Read("alwaysAsk")
         return "false"
     end if
+    if r.key = "theme" then return legacyTheme(safeStr(m.global.prefs.theme))
+    if r.key = "accent" then return legacyAccent(safeStr(m.global.prefs.accent))
     return valueKey(m.global.prefs[r.key])
 end function
 
@@ -117,24 +123,22 @@ sub renderHome(p as object, t as object, x as integer)
         focused = (i = m.homeIndex) and not menuIsOpen()
         g = p.CreateChild("Group")
         g.translation = [x + i * 640, 260]
-        bgColor = t.surface
-        bgOpacity = t.surfaceOpacity * 1.6
+        bgColor = t.panel
         textColor = t.text
         bodyColor = t.textDim
         if focused
-            bgColor = "0xFFFFFFFF"
-            bgOpacity = 1.0
-            textColor = "0x0B0B0FFF"
-            bodyColor = "0x3A3A44FF"
+            bgColor = t.focusBg
+            textColor = t.onFocus
+            bodyColor = t.onFocusDim
         end if
-        makeShape(g, t.fillUri, 600, 340, bgColor, bgOpacity)
+        makeShape(g, t.fillUri, 600, 340, bgColor, 1.0)
         ic = g.CreateChild("Poster")
         ic.uri = "pkg:/images/icon_" + tile.icon + ".png"
         ic.width = 56
         ic.height = 56
         ic.translation = [44, 44]
         ic.blendColor = t.accent
-        if focused then ic.blendColor = "0x0B0B0FFF"
+        if focused then ic.blendColor = t.onFocus
         tl = makeLabel(g, tile.title, 44, true, textColor)
         tl.translation = [44, 130]
         bl = makeLabel(g, tile.body, 28, false, bodyColor)
@@ -178,12 +182,13 @@ sub renderPage(p as object, t as object, x as integer)
         textColor = t.text
         valueColor = t.textDim
         if focused
-            bg.blendColor = "0xFFFFFFFF"
+            bg.blendColor = t.focusBg
             bg.opacity = 1
-            textColor = "0x0B0B0FFF"
-            valueColor = "0x3A3A44FF"
+            textColor = t.onFocus
+            valueColor = t.onFocusDim
         else if opened
-            bg.opacity = t.surfaceHiOpacity
+            bg.blendColor = t.panel
+            bg.opacity = 1
         end if
         locked = isTrue(r.admin) and not m.global.isAdmin
         if locked and not focused then textColor = t.textFaint
@@ -226,22 +231,21 @@ sub drawOptions(p as object, t as object, ox as integer, oy as integer)
         focused = (i = m.optIndex)
         if r.key = "theme"
             drawThemeCard(p, t, c, ox, y, focused)
-            y = y + 150
+            y = y + 112
         else
-            bgColor = t.surface
-            bgOpacity = t.surfaceOpacity
+            bgColor = t.panel
             color = t.text
             if focused
-                bgColor = "0xFFFFFFFF"
-                bgOpacity = 1
-                color = "0x0B0B0FFF"
+                bgColor = t.focusBg
+                color = t.onFocus
             end if
-            bg = makeShape(p, t.pillUri, 340, 64, bgColor, bgOpacity)
+            bg = makeShape(p, t.fillUri, 340, 64, bgColor, 1.0)
             bg.translation = [ox, y]
-            if r.key = "accent" and c.v <> ""
-                palette = accentColors()
-                dotShape = makeShape(p, t.fillUri, 26, 26, palette[c.v], 1)
-                dotShape.translation = [ox + 26, y + 19]
+            if r.key = "accent"
+                swatch = themePalette(legacyTheme(safeStr(m.global.prefs.theme))).accent
+                if c.v <> "" then swatch = accentColors()[c.v]
+                dotShape = makeShape(p, t.fillUri, 28, 28, swatch, 1)
+                dotShape.translation = [ox + 24, y + 18]
             end if
             l = makeLabel(p, c.l, 28, focused, color)
             l.translation = [ox + 70, y]
@@ -255,29 +259,24 @@ sub drawOptions(p as object, t as object, ox as integer, oy as integer)
     tip.translation = [ox, y + 10]
 end sub
 
-' A small picture of a Theme: its background, a few Cards in its shape,
-' and its Accent.
+' A small picture of a Theme: its background, two panels and its Accent.
 sub drawThemeCard(p as object, t as object, c as object, ox as integer, oy as integer, focused as boolean)
-    other = themeTokens({ theme: c.v })
+    other = themePalette(c.v)
     g = p.CreateChild("Group")
     g.translation = [ox, oy]
     if focused
-        ring = makeShape(g, t.ringUri, 352, 136, "0xFFFFFFFF", 1)
+        ring = makeShape(g, t.ringUri, 352, 112, t.focusColor, 1)
         ring.translation = [-6, -6]
     end if
-    makeShape(g, other.fillUri, 340, 124, other.bg, 1)
-    for k = 0 to 2
-        cardShape = makeShape(g, other.fillUri, 64, 44, "0xFFFFFFFF", 0.22)
-        cardShape.translation = [20 + k * 76, 20]
-        if k = 0
-            cardShape.blendColor = other.accent
-            cardShape.opacity = 1
-        end if
+    makeShape(g, t.fillUri, 340, 100, other.bg, 1)
+    for k = 0 to 1
+        block = makeShape(g, t.fillUri, 64, 36, other.panel, 1)
+        block.translation = [20 + k * 76, 50]
     end for
-    bar = makeShape(g, other.fillUri, 140, 6, other.accent, 1)
-    bar.translation = [20, 74]
-    l = makeLabel(g, c.l, 26, true, "0xFFFFFFFF")
-    l.translation = [20, 84]
+    dotShape = makeShape(g, t.fillUri, 28, 28, other.accent, 1)
+    dotShape.translation = [292, 18]
+    l = makeLabel(g, c.l, 24, true, other.text)
+    l.translation = [20, 12]
 end sub
 
 ' A scaled-down picture of the home screen in the current Appearance.
@@ -316,14 +315,16 @@ sub drawPreview(p as object, t as object, px as integer, py as integer, pw as in
         title = items[0].heading
         meta = items[0].meta
     end if
-    tl = makeLabel(world, title, 70, true, t.text)
-    if t.bigHero then tl.font = makeFont(84, true)
     ty = t.heroTop + 45
-    if t.bigHero then ty = t.rowsTop - 290
-    tl.translation = [t.leftPad, ty]
+    if t.bigHero then ty = t.rowsTop - 330
+    eb = makeLabel(world, "MOVIE", 22, true, t.accent)
+    eb.translation = [t.leftPad, ty]
+    tl = makeLabel(world, title, 76, true, t.text)
+    if t.bigHero then tl.font = makeFont(88, true)
+    tl.translation = [t.leftPad, ty + 36]
     tl.width = 1150
     ml = makeLabel(world, meta, 28, false, t.textDim)
-    ml.translation = [t.leftPad, ty + 110]
+    ml.translation = [t.leftPad, ty + 146]
     ml.width = 1300
 
     rl = makeLabel(world, "Continue Watching", 30, true, t.text)
@@ -350,9 +351,9 @@ sub drawPreview(p as object, t as object, px as integer, py as integer, pw as in
         end if
         if i = 0
             track = card.CreateChild("Rectangle")
-            track.translation = [0, h - 6]
-            track.width = w * 0.6
-            track.height = 6
+            track.translation = [16, h - 19]
+            track.width = (w - 32) * 0.6
+            track.height = 5
             track.color = t.accent
             makeShape(card, t.ringUri, w, h, t.focusColor, 1.0)
             card.scale = [t.cardFocusScale, t.cardFocusScale]
@@ -367,16 +368,20 @@ sub drawPreview(p as object, t as object, px as integer, py as integer, pw as in
         strip.height = 1080
         strip.loadDisplayMode = "scaleToFill"
         strip.blendColor = t.bg
-        strip.opacity = 0.92
-        mk = makeLabel(world, "M", 46, true, t.accent)
-        mk.translation = [44, 52]
+        strip.opacity = 0.9
+        mk = makeLabel(world, "MATINEE", 30, true, t.accent)
+        mk.translation = [t.leftPad, 60]
+        cur = makeShape(world, t.fillUri, 64, 64, t.surface, t.surfaceOpacity * 1.25)
+        cur.translation = [24, 240]
         icons = ["home", "search", "movies", "shows", "settings"]
         for i = 0 to icons.Count() - 1
             ic = world.CreateChild("Poster")
             ic.uri = "pkg:/images/icon_" + icons[i] + ".png"
-            ic.width = 60
-            ic.height = 60
-            ic.translation = [40, 210 + i * 100]
+            ic.width = 36
+            ic.height = 36
+            iy = 254 + i * 76
+            if icons[i] = "settings" then iy = iy + 48
+            ic.translation = [38, iy]
             if i = 0
                 ic.blendColor = t.accent
             else
@@ -385,7 +390,7 @@ sub drawPreview(p as object, t as object, px as integer, py as integer, pw as in
         end for
     else
         bar = world.CreateChild("LayoutGroup")
-        bar.translation = [96, 56]
+        bar.translation = [96, 60]
         bar.layoutDirection = "horiz"
         bar.itemSpacings = [52]
         makeLabel(bar, "MATINEE", 34, true, t.accent)
@@ -404,9 +409,8 @@ sub drawPreview(p as object, t as object, px as integer, py as integer, pw as in
 end sub
 
 function themeDescription(name as string) as string
-    if name = "void" then return "Void: pure black and flat with sharp corners, so only the artwork has color."
-    if name = "classic" then return "Amber: the original look, with square Cards and an amber Accent."
-    return "Midnight Glass: a black base, rounded Cards and frosted panels that pick up the artwork behind them."
+    pal = themePalette(name)
+    return pal.label + ": " + pal.blurb
 end function
 
 ' Rebuild the menu so a new Menu style or Theme shows straight away.

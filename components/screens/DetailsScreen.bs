@@ -302,16 +302,17 @@ sub paintAll()
     for i = 0 to m.seasonLabels.Count() - 1
         chip = m.seasonLabels[i]
         if i = m.seasonIndex and m.area = "seasons"
-            chip.bg.blendColor = "0xFFFFFFFF"
+            chip.bg.blendColor = t.focusBg
             chip.bg.opacity = 1.0
-            chip.label.color = "0x0B0B0FFF"
+            chip.label.color = t.onFocus
         else if i = m.seasonIndex
             chip.bg.blendColor = t.surface
-            chip.bg.opacity = t.surfaceHiOpacity
+            chip.bg.opacity = t.surfaceHiOpacity * 2
             chip.label.color = t.text
         else
-            chip.bg.opacity = 0
-            chip.label.color = t.textFaint
+            chip.bg.blendColor = t.surface
+            chip.bg.opacity = t.surfaceOpacity
+            chip.label.color = t.textDim
         end if
     end for
 end sub

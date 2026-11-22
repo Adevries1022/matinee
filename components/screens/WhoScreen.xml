@@ -8,17 +8,17 @@
   <script type="text/brightscript" uri="WhoScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>
-    <Label id="brand" text="MATINEE" translation="[96,70]" color="0xE8A33DFF">
-      <Font role="font" uri="font:BoldSystemFontFile" size="44" />
+    <Label id="brand" text="MATINEE" translation="[160,60]">
+      <Font role="font" uri="font:BoldSystemFontFile" size="30" />
     </Label>
-    <Label translation="[0,210]" width="1920" horizAlign="center" color="0xFFFFFFFF" text="Who's watching?">
-      <Font role="font" uri="font:BoldSystemFontFile" size="64" />
+    <Label id="heading" translation="[0,250]" width="1920" horizAlign="center" text="Who's watching?">
+      <Font role="font" uri="font:BoldSystemFontFile" size="72" />
     </Label>
-    <Group id="strip" translation="[96,380]" />
-    <Label id="status" translation="[160,760]" width="1600" horizAlign="center" wrap="true" color="0xB0B0B8FF">
+    <Group id="strip" translation="[96,420]" />
+    <Label id="status" translation="[160,820]" width="1600" horizAlign="center" wrap="true">
       <Font role="font" uri="font:SystemFontFile" size="28" />
     </Label>
-    <Label translation="[0,1000]" width="1920" horizAlign="center" color="0x6E6E78FF" text="Press * on your remote to change server">
+    <Label id="tip" translation="[0,1000]" width="1920" horizAlign="center" text="Press * on your remote to change server">
       <Font role="font" uri="font:SystemFontFile" size="24" />
     </Label>
   </children>
