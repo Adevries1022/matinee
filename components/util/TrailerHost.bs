@@ -38,6 +38,7 @@ sub setupTrailer(layer as object, insertIndex as integer, hintY as integer)
     m.trailerTimer.observeField("fire", "trailerFetch")
 
     m.trailerFor = ""
+    m.trailerWant = ""
     m.trailerItem = invalid
     m.trailerTry = ""
     m.trailerPlaying = false
@@ -47,6 +48,7 @@ end sub
 ' Start the countdown for a Card. Episodes use their show's trailer.
 sub trailerSchedule(c as object)
     trailerStop()
+    m.trailerWant = ""
     if c = invalid then return
     if Left(c.itemType, 6) = "seerr-" then return
     id = c.itemId
@@ -54,15 +56,18 @@ sub trailerSchedule(c as object)
     trailerScheduleId(id)
 end sub
 
+' A hidden screen only remembers the title: the Hero timer can still fire
+' after the screen was left, and its trailer would play behind the next one.
 sub trailerScheduleId(id as string)
     trailerStop()
-    if id = "" then return
+    m.trailerWant = id
+    if id = "" or not m.top.visible then return
     m.trailerFor = id
     m.trailerTimer.control = "start"
 end sub
 
 sub trailerFetch()
-    if m.trailerFor = "" then return
+    if m.trailerFor = "" or not m.top.visible then return
     m.trailerLegacy = false
     print "[Matinee] trailer: looking for local trailers of "; m.trailerFor
     apiRequest("/Items/" + m.trailerFor + "/LocalTrailers", { "userId": m.global.userId }, "onTrailers", "GET", invalid, m.trailerFor)
@@ -70,7 +75,7 @@ end sub
 
 sub onTrailers(event as object)
     res = event.getData()
-    if safeStr(res.tag) <> m.trailerFor then return
+    if safeStr(res.tag) <> m.trailerFor or not m.top.visible then return
     ' Servers older than 10.9 use the per-user path.
     if not res.ok and res.code = 404 and not m.trailerLegacy
         m.trailerLegacy = true
@@ -170,6 +175,11 @@ function toggleTrailerSound() as boolean
     return true
 end function
 
+' Leaving stops the trailer; coming back counts down again for the title
+' that was Focused.
 sub onTrailerScreenVisible()
-    if not m.top.visible then trailerStop()
+    want = m.trailerWant
+    trailerStop()
+    if m.top.visible and trailersOn() then trailerScheduleId(want)
+    m.trailerWant = want
 end sub
