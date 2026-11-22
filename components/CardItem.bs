@@ -15,6 +15,8 @@ sub init()
     m.badgeText = m.top.findNode("badgeText")
     m.fadeIn = m.top.findNode("fadeIn")
     m.below = m.top.findNode("below")
+    m.remove = m.top.findNode("remove")
+    m.removable = false
     m.belowTitle = m.top.findNode("belowTitle")
     m.belowText = m.top.findNode("belowText")
     m.poster.observeField("loadStatus", "onPosterStatus")
@@ -47,6 +49,10 @@ sub init()
     m.badgeBg.opacity = 0.6
     m.badgeText.font = makeFont(16, "semibold")
     m.badgeText.color = t.text
+    removeBg = m.top.findNode("removeBg")
+    removeBg.blendColor = t.black
+    removeBg.opacity = 0.6
+    m.top.findNode("removeIcon").blendColor = t.text
     m.belowTitle.font = makeFont(22, "semibold")
     m.belowTitle.color = t.text
     m.belowText.font = makeFont(18)
@@ -159,6 +165,9 @@ sub layout()
         m.track.width = (w - 40) * c.progress
     end if
 
+    m.removable = c.removable
+    m.remove.translation = [w - 60, 12]
+
     hasBadge = (c.badge <> "")
     m.badge.visible = hasBadge
     if hasBadge
@@ -181,6 +190,7 @@ sub updateFocus()
         pct = m.top.focusPercent * m.top.rowFocusPercent
     end if
     m.ring.opacity = pct
+    m.remove.visible = m.removable and pct > 0.5
     if m.w = 0 or m.h = 0 then return
     ' Grow by whole pixels on each side, so the Card's rounded corners and the
     ' ring line up exactly instead of landing on fractional pixels.

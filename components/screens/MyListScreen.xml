@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- My List: the User's Jellyfin Favorites (movies and shows). See ADR 0005. -->
+<component name="MyListScreen" extends="Group">
+  <interface>
+    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="MyListScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <children>
+    <Group id="layer" />
+    <MarkupGrid
+      id="grid"
+      itemComponentName="CardItem"
+      numColumns="4"
+      numRows="3"
+      drawFocusFeedback="false"
+      vertFocusAnimationStyle="floatingFocus"
+      visible="false" />
+    <Group id="sink" focusable="true" />
+  </children>
+</component>

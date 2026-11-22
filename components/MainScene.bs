@@ -326,6 +326,9 @@ sub onNavigate(event as object)
         dv = CreateObject("roSGNode", "DiscoverScreen")
         pushScreen(dv)
         dv.begin = true
+    else if a = "mylist"
+        popTo(1)
+        pushScreen(CreateObject("roSGNode", "MyListScreen"))
     else if a = "series" or a = "movies"
         popTo(1)
         b = CreateObject("roSGNode", "BrowseScreen")

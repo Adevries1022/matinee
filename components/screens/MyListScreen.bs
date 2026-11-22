@@ -1,0 +1,230 @@
+' My List (the My List board): saved movies and shows, which are the User's
+' Jellyfin Favorites, so they show up on every device. Filter pills: All,
+' In progress, Not started. * removes the Focused title.
+
+sub init()
+    t = th()
+    m.layer = m.top.findNode("layer")
+    m.grid = m.top.findNode("grid")
+    m.sink = m.top.findNode("sink")
+
+    makeTitle(m.layer, "My List", 72).translation = [160, 88]
+    m.count = makeLabel(m.layer, "", 22, "regular", t.muted)
+    m.count.translation = [160, 184]
+    m.pillHost = m.layer.CreateChild("Group")
+    m.pills = makePills(m.pillHost, ["All", "In progress", "Not started"], 0)
+    last = m.pills[m.pills.Count() - 1]
+    pillsW = last.group.translation[0] + last.w
+    m.pillHost.translation = [1840 - pillsW, 160]
+
+    cellW = 400 + t.cellPadX * 2
+    m.grid.translation = [160 - t.cellPadX, 290 - t.cellPadY]
+    m.grid.itemSize = [cellW, 225 + t.cellPadY * 2 + 84]
+    m.grid.itemSpacing = [28 - t.cellPadX * 2, 40 - t.cellPadY * 2]
+
+    ' Empty state
+    m.empty = m.layer.CreateChild("Group")
+    m.empty.translation = [160, 290]
+    makePanel(m.empty, 760, 300, 18)
+    makeLabel(m.empty, "Nothing here yet", 30, "semibold", t.text).translation = [56, 56]
+    eb = makeLabel(m.empty, "Press the bookmark on any title to save it for later. Saved shows appear here on every device.", 22, "regular", t.muted)
+    eb.translation = [56, 108]
+    eb.width = 648
+    eb.wrap = true
+    eb.lineSpacing = 8
+    m.browse = makeBtn(m.empty, { kind: "primary", text: "Browse shows", h: 64, size: 22, padX: 32 })
+    m.browse.group.translation = [56, 196]
+    m.empty.visible = false
+
+    m.grid.observeField("itemSelected", "onSelected")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.filter = 0
+    m.zone = "grid"
+    m.items = []
+    m.shown = []
+    m.seenVersion = m.global.watchVersion
+    setupMenu("mylist")
+    load()
+end sub
+
+sub load()
+    apiRequest("/Items", { "userId": m.global.userId, "Filters": "IsFavorite", "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "DateLastContentAdded,SortName", "SortOrder": "Descending", "Fields": "Genres,ChildCount", "EnableTotalRecordCount": "false" }, "onItems")
+end sub
+
+sub onItems(event as object)
+    res = event.getData()
+    m.items = []
+    if res.ok and isValid(res.data)
+        if isValid(res.data.Items) then m.items = res.data.Items
+    end if
+    render()
+end sub
+
+' A show is in progress when some, but not all, episodes are watched.
+function started(item as object) as boolean
+    ud = item.UserData
+    if not isValid(ud) then return false
+    if ticksToSeconds(ud.PlaybackPositionTicks) > 0 then return true
+    if safeStr(item.Type) = "Series"
+        pct = 0
+        if isValid(ud.PlayedPercentage) then pct = ud.PlayedPercentage
+        return pct > 0 and pct < 100
+    end if
+    return false
+end function
+
+function cardMeta(item as object) as string
+    ud = item.UserData
+    if safeStr(item.Type) = "Movie" and isValid(ud)
+        if ticksToSeconds(ud.PlaybackPositionTicks) > 0 then return timeLeft(item)
+    end if
+    parts = []
+    g = firstGenre(item)
+    if g <> "" then parts.Push(g)
+    l = lengthText(item)
+    if l <> "" then parts.Push(l)
+    return parts.Join(" " + Chr(183) + " ")
+end function
+
+sub render()
+    n = m.items.Count()
+    if n = 1
+        m.count.text = "1 title saved " + Chr(183) + " Press * to remove"
+    else
+        m.count.text = n.ToStr() + " titles saved " + Chr(183) + " Press * to remove"
+    end if
+    if n = 0 then m.count.text = "0 titles saved"
+    root = CreateObject("roSGNode", "ContentNode")
+    m.shown = []
+    for each it in m.items
+        s = started(it)
+        keep = (m.filter = 0) or (m.filter = 1 and s) or (m.filter = 2 and not s)
+        if keep
+            c = itemToContent(it, true)
+            c.cardW = 400
+            c.cardH = 225
+            c.textBelow = true
+            c.description = cardMeta(it)
+            c.removable = true
+            if safeStr(it.Type) = "Series" and isValid(it.UserData)
+                if isValid(it.UserData.PlayedPercentage) then c.progress = it.UserData.PlayedPercentage / 100.0
+            end if
+            root.appendChild(c)
+            m.shown.Push(c)
+        end if
+    end for
+    m.grid.content = root
+    m.grid.visible = m.shown.Count() > 0
+    m.empty.visible = m.shown.Count() = 0
+    if m.zone = "grid" and not m.grid.visible then m.zone = "empty"
+    if m.zone = "empty" and m.grid.visible then m.zone = "grid"
+    paint()
+    if m.top.isInFocusChain() and not menuIsOpen() then restoreContentFocus()
+end sub
+
+sub paint()
+    focusPill = -1
+    if m.zone = "pills" then focusPill = m.filter
+    selectPill(m.pills, m.filter, focusPill)
+    paintBtn(m.browse, m.zone = "empty")
+end sub
+
+sub onSelected(event as object)
+    i = event.getData()
+    if i < 0 or i >= m.shown.Count() then return
+    m.top.navigate = { action: "details", itemId: m.shown[i].itemId }
+end sub
+
+sub removeFocused()
+    i = m.grid.itemFocused
+    if i < 0 or i >= m.shown.Count() then return
+    id = m.shown[i].itemId
+    setFavorite(id, false)
+    keep = []
+    for each it in m.items
+        if safeStr(it.Id) <> id then keep.Push(it)
+    end for
+    m.items = keep
+    render()
+    if m.shown.Count() > 0
+        if i > m.shown.Count() - 1 then i = m.shown.Count() - 1
+        m.grid.jumpToItem = i
+    end if
+end sub
+
+sub onRefresh()
+    if m.global.watchVersion <> m.seenVersion
+        m.seenVersion = m.global.watchVersion
+        load()
+    end if
+end sub
+
+sub setZone(zone as string)
+    m.zone = zone
+    paint()
+    restoreContentFocus()
+end sub
+
+sub restoreContentFocus()
+    if m.zone = "grid" and m.grid.visible
+        m.grid.setFocus(true)
+    else
+        m.sink.setFocus(true)
+    end if
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() and not menuIsOpen() then restoreContentFocus()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press or menuIsOpen() then return false
+    if m.zone = "grid"
+        if key = "options"
+            removeFocused()
+            return true
+        else if key = "up"
+            setZone("pills")
+            return true
+        else if key = "left"
+            openMenu()
+            return true
+        end if
+        return false
+    else if m.zone = "pills"
+        if key = "left"
+            if m.filter = 0
+                openMenu()
+            else
+                m.filter = m.filter - 1
+                render()
+            end if
+        else if key = "right"
+            if m.filter < 2
+                m.filter = m.filter + 1
+                render()
+            end if
+        else if key = "down" or key = "OK"
+            if m.grid.visible
+                setZone("grid")
+            else
+                setZone("empty")
+            end if
+        else
+            return false
+        end if
+        return true
+    else if m.zone = "empty"
+        if key = "OK"
+            m.top.navigate = { action: "home" }
+        else if key = "up"
+            setZone("pills")
+        else if key = "left"
+            openMenu()
+        else
+            return false
+        end if
+        return true
+    end if
+    return false
+end function

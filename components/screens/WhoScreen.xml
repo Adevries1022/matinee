@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Who's Watching: pick a User. -->
+<!-- Who's watching: pick a User, add one, or manage saved sign-ins. -->
 <component name="WhoScreen" extends="Group">
   <interface>
     <field id="message" type="string" onChange="onMessage" />
@@ -7,19 +7,10 @@
   </interface>
   <script type="text/brightscript" uri="WhoScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <children>
-    <Label id="brand" text="MATINEE" translation="[160,60]">
-      <Font role="font" uri="font:BoldSystemFontFile" size="30" />
-    </Label>
-    <Label id="heading" translation="[0,250]" width="1920" horizAlign="center" text="Who's watching?">
-      <Font role="font" uri="font:BoldSystemFontFile" size="72" />
-    </Label>
-    <Group id="strip" translation="[96,420]" />
-    <Label id="status" translation="[160,820]" width="1600" horizAlign="center" wrap="true">
-      <Font role="font" uri="font:SystemFontFile" size="28" />
-    </Label>
-    <Label id="tip" translation="[0,1000]" width="1920" horizAlign="center" text="Press * on your remote to change server">
-      <Font role="font" uri="font:SystemFontFile" size="24" />
-    </Label>
+    <Group id="layer" />
+    <Group id="strip" />
+    <Group id="modal" visible="false" />
   </children>
 </component>

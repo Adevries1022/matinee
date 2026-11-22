@@ -24,6 +24,8 @@
     <field id="favorite" type="boolean" />
     <!-- Episode Cards: title and description under the artwork, not over it. -->
     <field id="textBelow" type="boolean" />
+    <!-- My List: a remove badge at the top right while the Card is Focused. -->
+    <field id="removable" type="boolean" />
     <field id="badge" type="string" />
     <field id="requestStatus" type="integer" />
   </interface>

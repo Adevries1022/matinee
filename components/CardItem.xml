@@ -29,6 +29,10 @@
         <Label id="badgeText" vertAlign="center" horizAlign="center" />
       </Group>
       <Poster id="corners" />
+      <Group id="remove" visible="false">
+        <Poster id="removeBg" uri="pkg:/images/circle.png" width="48" height="48" />
+        <Poster id="removeIcon" uri="pkg:/images/icon_close.png" translation="[12,12]" width="24" height="24" />
+      </Group>
     </Group>
     <Group id="below" visible="false">
       <Label id="belowTitle" vertAlign="center" />

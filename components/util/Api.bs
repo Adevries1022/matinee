@@ -825,7 +825,7 @@ function makeAvatar(userId as string, name as string, avatarTag as string, size 
     initial.horizAlign = "center"
     initial.vertAlign = "center"
     initial.color = th().bg
-    initial.font = makeFont(Int(size * 0.42), true)
+    initial.font = makeFont(Int(size * 0.4), "display")
     if symbol <> ""
         initial.text = symbol
         initial.color = th().textDim

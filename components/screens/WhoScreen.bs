@@ -1,16 +1,51 @@
+' Who's watching (the Profiles board): 220 px colored circles with each
+' User's initial or picture, "Add profile", and "Manage profiles" below.
+' The Focused circle grows a little and gets a white ring.
+
 sub init()
     t = th()
-    m.top.findNode("brand").color = t.accent
-    m.top.findNode("heading").color = t.text
-    m.top.findNode("tip").color = t.textFaint
+    m.layer = m.top.findNode("layer")
     m.strip = m.top.findNode("strip")
-    m.status = m.top.findNode("status")
-    m.status.color = t.textDim
+    m.modal = m.top.findNode("modal")
+    wm = makeWordmark(m.layer)
+    wm.translation = [160, 64]
+    heading = makeTitle(m.layer, "Who's watching?", 72)
+    heading.translation = [0, 251]
+    heading.width = 1920
+    heading.height = 90
+    heading.horizAlign = "center"
+    heading.vertAlign = "center"
+
+    ' "Manage profiles": an outlined pill.
+    m.manage = m.layer.CreateChild("Group")
+    mw = measureText("Manage profiles", 22, "medium") + 72
+    m.manage.translation = [(1920 - mw) \ 2, 837]
+    m.manage.scaleRotateCenter = [mw / 2, 32]
+    m.manageBorder = makeOutline(m.manage, mw, 64, 32, t.dashed)
+    m.manageRing = makeFocusRing(m.manage, mw, 64, 32)
+    ml = makeLabel(m.manage, "Manage profiles", 22, "medium", t.soft)
+    ml.width = mw
+    ml.height = 64
+    ml.horizAlign = "center"
+    ml.vertAlign = "center"
+
+    m.status = makeLabel(m.layer, "", 22, "regular", t.muted)
+    m.status.translation = [160, 960]
+    m.status.width = 1600
+    m.status.horizAlign = "center"
+    m.status.wrap = true
+    tip = makeLabel(m.layer, "Press * to change server", 18, "regular", t.faint)
+    tip.translation = [0, 1020]
+    tip.width = 1920
+    tip.horizAlign = "center"
+
     m.top.observeField("focusedChild", "onFocusChanged")
     m.users = []
     m.tiles = []
     m.index = 0
+    m.zone = "row"
     m.panel = invalid
+    m.modalOpen = false
     m.tileSize = 220
     m.gap = 56
     m.status.text = "Loading..."
@@ -34,7 +69,7 @@ sub onUsers(event as object)
             end for
         end if
     end if
-    ' Hidden accounts that signed in on this TV before still get a tile.
+    ' Hidden accounts that signed in on this TV before still get a circle.
     sessions = readSessions()
     for each id in sessions
         if not ids.DoesExist(id)
@@ -42,7 +77,7 @@ sub onUsers(event as object)
             users.Push({ id: id, name: safeStr(s.name), imageTag: safeStr(s.imageTag), hasPassword: true })
         end if
     end for
-    users.Push({ id: "", name: "Someone else", imageTag: "", hasPassword: true, other: true })
+    users.Push({ id: "", name: "Add profile", imageTag: "", hasPassword: true, other: true })
     m.users = users
 
     if m.top.message = ""
@@ -54,81 +89,79 @@ sub onUsers(event as object)
     end if
 
     ' Start on the person who used the TV last.
-    reg = CreateObject("roRegistrySection", "Marquee")
+    last = readSetting("lastUserId")
     m.index = 0
-    if reg.Exists("lastUserId")
-        last = reg.Read("lastUserId")
-        for i = 0 to users.Count() - 1
-            if users[i].id = last then m.index = i
-        end for
-    end if
+    for i = 0 to users.Count() - 1
+        if users[i].id = last and last <> "" then m.index = i
+    end for
     render()
 end sub
 
 sub render()
+    t = th()
     m.strip.removeChildrenIndex(m.strip.getChildCount(), 0)
     m.tiles = []
     size = m.tileSize
     n = m.users.Count()
     total = n * size + (n - 1) * m.gap
-    m.centered = total <= 1728
-    startX = 96
-    if m.centered then startX = Int((1920 - total) / 2)
-    m.startX = startX
+    m.centered = total <= 1760
+    m.startX = 80
+    if m.centered then m.startX = Int((1920 - total) / 2)
 
     for i = 0 to n - 1
         u = m.users[i]
         g = m.strip.CreateChild("Group")
         g.translation = [i * (size + m.gap), 0]
-        g.scaleRotateCenter = [size / 2, size / 2]
-
-        ring = g.CreateChild("Poster")
-        ring.uri = "pkg:/images/avatar_ring.png"
-        ring.width = size + 26
-        ring.height = size + 26
-        ring.translation = [-13, -13]
-        ring.blendColor = th().text
-        ring.loadDisplayMode = "scaleToFill"
-
-        symbol = ""
-        if isTrue(u.other) then symbol = "+"
-        g.appendChild(makeAvatar(u.id, u.name, u.imageTag, size, symbol))
-
-        name = g.CreateChild("Label")
-        name.translation = [-40, size + 32]
+        circle = g.CreateChild("Group")
+        circle.scaleRotateCenter = [size / 2, size / 2]
+        if isTrue(u.other)
+            dashed = makeShape(circle, "pkg:/images/circle_dashed.png", 216, 216, t.dashed)
+            dashed.translation = [2, 2]
+            plus = makeIcon(circle, "plus", 64, t.idle)
+            plus.translation = [78, 78]
+        else
+            circle.appendChild(makeAvatar(u.id, u.name, u.imageTag, size))
+        end if
+        ' A white ring with a gap of background around the grown circle.
+        ring = makeShape(g, "pkg:/images/circle_ring.png", 262, 262, t.text)
+        ring.translation = [(size - 262) / 2, (size - 262) / 2]
+        name = makeLabel(g, u.name, 28, "semibold", t.idle)
+        name.translation = [-40, size + 24]
         name.width = size + 80
         name.horizAlign = "center"
-        name.font = makeFont(28, true)
-        name.text = u.name
-        m.tiles.Push({ group: g, ring: ring, name: name })
+        m.tiles.Push({ circle: circle, ring: ring, name: name, other: isTrue(u.other) })
     end for
     paint()
 end sub
 
 sub paint()
-    th0 = th()
-    grow = 1.06
-    if th0.reduceMotion then grow = 1.0
+    t = th()
     for i = 0 to m.tiles.Count() - 1
-        t = m.tiles[i]
-        if i = m.index
-            t.ring.visible = true
-            t.group.scale = [grow, grow]
-            t.name.color = th0.text
+        tile = m.tiles[i]
+        focused = (m.zone = "row" and i = m.index)
+        tile.ring.visible = focused
+        if focused
+            tile.circle.scale = [1.06, 1.06]
+            tile.name.color = t.text
         else
-            t.ring.visible = false
-            t.group.scale = [1.0, 1.0]
-            t.name.color = th0.textFaint
+            tile.circle.scale = [1.0, 1.0]
+            tile.name.color = t.idle
         end if
     end for
-    ' With many Users, slide the row so the focused tile stays on screen.
+    m.manageRing.visible = (m.zone = "manage")
+    if m.zone = "manage"
+        m.manage.scale = [t.focusScale, t.focusScale]
+    else
+        m.manage.scale = [1.0, 1.0]
+    end if
+    ' With many Users, slide the row so the Focused circle stays on screen.
     x = m.startX
     if not m.centered
         step2 = m.tileSize + m.gap
-        x = 96 - (m.index - 2) * step2
-        if x > 96 then x = 96
+        x = 80 - (m.index - 2) * step2
+        if x > 80 then x = 80
     end if
-    m.strip.translation = [x, 420]
+    m.strip.translation = [x, 403]
 end sub
 
 sub choose()
@@ -143,7 +176,7 @@ end sub
 
 sub openPanel()
     p = CreateObject("roSGNode", "TextEntryPanel")
-    p.title = "Username"
+    p.title = "Add profile"
     p.hint = "Type the Jellyfin username to sign in with."
     p.buttonText = "Next"
     p.text = ""
@@ -168,12 +201,105 @@ sub closePanel()
     m.top.setFocus(true)
 end sub
 
+' ---------- Manage profiles: forget saved sign-ins ----------
+
+sub openManage()
+    m.modalOpen = true
+    m.manageIndex = 0
+    drawManage()
+    m.modal.visible = true
+end sub
+
+sub drawManage()
+    t = th()
+    m.modal.removeChildrenIndex(m.modal.getChildCount(), 0)
+    sessions = readSessions()
+    m.manageRows = []
+    for each id in sessions
+        m.manageRows.Push({ id: id, name: safeStr(sessions[id].name) })
+    end for
+    m.manageRows.Push({ id: "", name: "Change server" })
+    h = 220 + m.manageRows.Count() * 80
+    md = makeModal(m.modal, 820, h)
+    makeTitle(md.body, "Manage profiles", 40).translation = [48, 48]
+    hint = makeLabel(md.body, "Forget a saved sign-in on this TV. That person signs in again next time.", 20, "regular", t.muted)
+    hint.translation = [48, 108]
+    hint.width = 724
+    hint.wrap = true
+    y = 170
+    for i = 0 to m.manageRows.Count() - 1
+        r = m.manageRows[i]
+        focused = (i = m.manageIndex)
+        bgColor = t.raised
+        if focused then bgColor = t.solid
+        makeBox(md.body, 724, 68, 14, bgColor).translation = [48, y]
+        color = t.text
+        if focused then color = t.onSolid
+        label = r.name
+        if r.id <> "" then label = "Forget " + r.name
+        l = makeLabel(md.body, label, 22, "semibold", color)
+        l.translation = [72, y]
+        l.height = 68
+        l.vertAlign = "center"
+        y = y + 80
+    end for
+end sub
+
+sub manageChoose()
+    r = m.manageRows[m.manageIndex]
+    if r.id = ""
+        closeManage()
+        m.top.navigate = { action: "changeServer" }
+        return
+    end if
+    sessions = readSessions()
+    sessions.Delete(r.id)
+    writeSessions(sessions)
+    if m.manageIndex > 0 then m.manageIndex = m.manageIndex - 1
+    drawManage()
+    apiRequest("/Users/Public", {}, "onUsers")
+end sub
+
+sub closeManage()
+    m.modalOpen = false
+    m.modal.visible = false
+end sub
+
 sub onFocusChanged()
     if m.top.hasFocus() and m.panel <> invalid then m.panel.setFocus(true)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press or m.panel <> invalid then return false
+    if m.modalOpen
+        if key = "up"
+            if m.manageIndex > 0 then m.manageIndex = m.manageIndex - 1
+            drawManage()
+        else if key = "down"
+            if m.manageIndex < m.manageRows.Count() - 1 then m.manageIndex = m.manageIndex + 1
+            drawManage()
+        else if key = "OK"
+            manageChoose()
+        else if key = "back"
+            closeManage()
+        end if
+        return true
+    end if
+    if key = "options"
+        m.top.navigate = { action: "changeServer" }
+        return true
+    end if
+    if m.zone = "manage"
+        if key = "up"
+            m.zone = "row"
+            paint()
+        else if key = "OK"
+            openManage()
+        else
+            return key <> "back"
+        end if
+        return true
+    end if
     if key = "left"
         if m.index > 0 then m.index = m.index - 1
         paint()
@@ -182,11 +308,12 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if m.index < m.users.Count() - 1 then m.index = m.index + 1
         paint()
         return true
+    else if key = "down"
+        m.zone = "manage"
+        paint()
+        return true
     else if key = "OK"
         choose()
-        return true
-    else if key = "options"
-        m.top.navigate = { action: "changeServer" }
         return true
     end if
     return false
