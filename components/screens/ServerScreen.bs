@@ -1,7 +1,8 @@
 ' Connect a server (the Connect board), step 1 of setup. On the left, three
 ' ways in: servers found on this network, typing an address, or Quick
 ' Connect from a phone. The panel on the right follows the Focused method;
-' Right moves into it.
+' Right moves into it. Nothing about the current server changes until one
+' is chosen, so Back can cancel.
 
 sub init()
     t = th()
@@ -47,8 +48,13 @@ sub init()
     m.versions = {}
     m.address = readSetting("server", "")
     if m.address = "" then m.address = "http://"
-    m.awayOn = readSetting("serverAway", "") <> ""
-    m.away = readSetting("serverAway", "")
+    m.away = readAway(normalizeUrl(m.address))
+    m.awayOn = m.away <> ""
+    m.awayTyped = false
+    m.selfSignedSaved = readSetting("allowSelfSigned")
+    m.chosen = false
+    m.qcPick = ""
+    m.qcUrl = ""
     m.selfSigned = readSetting("allowSelfSigned", "true") = "true"
     m.secret = ""
     m.qcDone = false
@@ -107,6 +113,11 @@ sub onMessage()
         m.status.text = m.top.message
         m.status.color = th().error
     end if
+end sub
+
+sub onCanCancel()
+    if not m.top.canCancel then return
+    m.status.text = "Press Back to keep your current server."
 end sub
 
 ' ---------- Finding servers ----------
@@ -259,9 +270,12 @@ sub renderPanel()
         m.qcStatus = makeLabel(sg, qcStatusText(), 20, "regular", t.muted)
         m.qcStatus.translation = [22, 0]
         m.qcStatus.width = 740
-        foot = makeLabel(p, "Quick Connect must be turned on in the server" + Chr(8217) + "s dashboard.", 18, "regular", t.muted)
+        footText = "Quick Connect must be turned on in the server" + Chr(8217) + "s dashboard."
+        if m.qcUrl <> "" then footText = "Signing in to " + m.qcUrl + ". " + footText
+        foot = makeLabel(p, footText, 18, "regular", t.muted)
         foot.translation = [x, 630]
         foot.width = 768
+        foot.wrap = true
     end if
     if m.item >= m.items.Count() then m.item = 0
     paintPanel()
@@ -273,6 +287,7 @@ sub paintPanel()
         focused = (m.zone = "panel" and i = m.item)
         if it.kind = "server"
             it.ring.visible = focused
+            if focused then m.qcPick = it.url
         else if it.kind = "field"
             paintField(it.field, focused)
         else if it.kind = "check"
@@ -301,12 +316,19 @@ sub connect(url as string, name as string, testOnly = false as boolean)
     m.busy = true
     m.pendingUrl = url
     m.pendingName = name
+    ' The away address only belongs to an address typed on "Enter address".
+    m.pendingAway = invalid
+    if m.method = 1
+        m.pendingAway = ""
+        if m.awayOn then m.pendingAway = m.away
+    end if
     m.testOnly = testOnly
     setMessage("Connecting to " + url + "...", th().muted)
     startRequest(url, "/System/Info/Public", {}, "onInfo", "GET", invalid, invalid, "", {})
 end sub
 
 sub onInfo(event as object)
+    if m.top.closed then return
     m.busy = false
     t = th()
     res = event.getData()
@@ -317,14 +339,8 @@ sub onInfo(event as object)
             setMessage("Connected " + Chr(183) + " " + name + ", Jellyfin " + safeStr(res.data.Version), t.ok)
             return
         end if
-        if m.method = 1
-            if m.awayOn
-                writeSetting("serverAway", normalizeUrl(m.away))
-            else
-                writeSetting("serverAway", "")
-            end if
-        end if
-        m.top.navigate = { action: "serverChosen", url: m.pendingUrl, name: name }
+        m.chosen = true
+        m.top.navigate = { action: "serverChosen", url: m.pendingUrl, name: name, away: m.pendingAway }
     else
         setMessage("Couldn" + Chr(8217) + "t reach the server " + Chr(8212) + " check the address", t.error)
         if m.method = 0
@@ -336,7 +352,9 @@ end sub
 
 ' ---------- Quick Connect ----------
 
+' Quick Connect's server: the one last highlighted or typed, else the first found.
 function qcServer() as string
+    if m.qcPick <> "" then return m.qcPick
     if m.found.Count() > 0 then return m.found[0].url
     a = normalizeUrl(m.address)
     if a <> "" and a <> "http:" then return a
@@ -364,14 +382,18 @@ sub startQuickConnect()
         return
     end if
     m.qcUrl = url
-    m.global.serverUrl = url
-    m.global.token = ""
     renderPanel()
-    apiRequest("/QuickConnect/Initiate", {}, "onInitiate", "POST")
+    qcRequest("/QuickConnect/Initiate", {}, "onInitiate", "POST", invalid, url)
+end sub
+
+' To the server being connected to, without the current server's token.
+sub qcRequest(path as string, query as object, callback as string, method as string, body as dynamic, tag as string)
+    startRequest(m.qcUrl, path, query, callback, method, body, tag, clientHeader(), {})
 end sub
 
 sub onInitiate(event as object)
     res = event.getData()
+    if m.top.closed or safeStr(res.tag) <> m.qcUrl then return
     if res.ok and isValid(res.data)
         if isValid(res.data.Code) and isValid(res.data.Secret)
             m.secret = safeStr(res.data.Secret)
@@ -399,26 +421,29 @@ end sub
 
 sub onPoll()
     if m.secret = "" or m.qcDone then return
-    apiRequest("/QuickConnect/Connect", { "secret": m.secret }, "onPollResult")
+    qcRequest("/QuickConnect/Connect", { "secret": m.secret }, "onPollResult", "GET", invalid, m.secret)
 end sub
 
 sub onPollResult(event as object)
     if m.qcDone then return
     res = event.getData()
+    if safeStr(res.tag) <> m.secret then return
     if res.ok and isValid(res.data)
         if isTrue(res.data.Authenticated)
             m.poll.control = "stop"
             m.clock.control = "stop"
-            apiRequest("/Users/AuthenticateWithQuickConnect", {}, "onQcAuth", "POST", { "Secret": m.secret })
+            qcRequest("/Users/AuthenticateWithQuickConnect", {}, "onQcAuth", "POST", { "Secret": m.secret }, m.secret)
         end if
     end if
 end sub
 
 sub onQcAuth(event as object)
     res = event.getData()
+    if m.qcDone or safeStr(res.tag) <> m.secret then return
     if res.ok and isValid(res.data)
         if isValid(res.data.AccessToken) and isValid(res.data.User)
             m.qcDone = true
+            m.chosen = true
             usr = res.data.User
             admin = false
             if isValid(usr.Policy) then admin = isTrue(usr.Policy.IsAdministrator)
@@ -459,8 +484,16 @@ sub onEntry()
     text = m.panel.submitted.Trim()
     if m.entryKey = "address"
         m.address = text
+        url = normalizeUrl(text)
+        if url <> "" and url <> "http:" and url <> "https:" then m.qcPick = url
+        ' Another server has its own away address.
+        if not m.awayTyped
+            m.away = readAway(url)
+            m.awayOn = m.away <> ""
+        end if
     else
         m.away = text
+        m.awayTyped = true
     end if
     closeEntry()
     renderPanel()
@@ -505,7 +538,8 @@ sub selectMethod(i as integer)
     m.item = 0
     paintMethods()
     renderPanel()
-    if i = 2 and m.secret = "" then startQuickConnect()
+    if i <> 2 then return
+    if m.secret = "" or qcServer() <> m.qcUrl then startQuickConnect()
 end sub
 
 ' ---------- Focus, keys, closing ----------
@@ -516,6 +550,8 @@ end sub
 
 sub onClosed()
     if m.top.closed
+        ' Cancelled: put back the one setting that applies while testing.
+        if not m.chosen then writeSetting("allowSelfSigned", m.selfSignedSaved)
         m.qcDone = true
         m.poll.control = "stop"
         m.clock.control = "stop"

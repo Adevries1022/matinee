@@ -14,6 +14,7 @@
   <children>
     <Group id="chrome" />
     <Group id="content" />
+    <Timer id="detailTimer" duration="0.15" repeat="false" />
     <Timer id="startTimer" duration="0.01" repeat="false" />
   </children>
 </component>

@@ -33,7 +33,6 @@ sub init()
     g.trackPrefs = {}
 
     migrateV1()
-    m.sessions = readSessions()
     reg = CreateObject("roRegistrySection", "Marquee")
     lastId = ""
     if reg.Exists("lastUserId") then lastId = reg.Read("lastUserId")
@@ -84,7 +83,7 @@ sub onPublicUsers(event as object)
     res = event.getData()
     if not res.ok and res.code <= 0
         ' Away from home: try the other address once.
-        away = readSetting("serverAway", "")
+        away = readAway(readSetting("server"))
         if away <> "" and m.global.serverUrl <> away
             print "[Matinee] server didn't answer, trying the away address"
             m.global.serverUrl = away
@@ -104,7 +103,8 @@ sub onPublicUsers(event as object)
             end for
         end if
     end if
-    for each id in m.sessions
+    sessions = readSessions()
+    for each id in sessions
         everyone[id] = true
     end for
 
@@ -115,7 +115,7 @@ sub onPublicUsers(event as object)
     if reg.Exists("alwaysAsk") then alwaysAsk = (reg.Read("alwaysAsk") = "true")
     ' Who's Watching appears when more than one User could be watching,
     ' or every time if an Administrator chose "Always ask".
-    if not alwaysAsk and last <> "" and m.sessions.DoesExist(last) and everyone.Count() <= 1
+    if not alwaysAsk and last <> "" and sessions.DoesExist(last) and everyone.Count() <= 1
         useSession(last)
     else
         showWho("")
@@ -123,15 +123,18 @@ sub onPublicUsers(event as object)
 end sub
 
 sub useSession(id as string)
-    s = m.sessions[id]
+    ' Saved sign-ins are always read fresh: Who's watching can forget one.
+    s = readSessions()[id]
     m.global.token = safeStr(s.token)
     m.global.userId = id
     m.global.userName = safeStr(s.name)
-    apiRequest("/Users/" + id, {}, "onSessionCheck")
+    apiRequest("/Users/" + id, {}, "onSessionCheck", "GET", invalid, id)
 end sub
 
 sub onSessionCheck(event as object)
     res = event.getData()
+    ' Ignore the answer for someone picked earlier: it carries their Administrator status.
+    if m.global.token = "" or safeStr(res.tag) <> m.global.userId then return
     if res.ok
         admin = false
         if isValid(res.data)
@@ -139,8 +142,7 @@ sub onSessionCheck(event as object)
         end if
         startUser(admin)
     else if res.code = 401 or res.code = 403
-        m.sessions.Delete(m.global.userId)
-        writeSessions(m.sessions)
+        forgetSession(m.global.userId)
         m.global.token = ""
         showWho("That sign-in has expired. Pick your name to sign in again.")
     else
@@ -249,6 +251,14 @@ sub showServerPicker(msg as string)
     pushScreen(s)
 end sub
 
+' Connect opened from inside the app: Back returns to the screen under it,
+' and nothing about the current server changes until another one is chosen.
+sub changeServer()
+    s = CreateObject("roSGNode", "ServerScreen")
+    s.canCancel = true
+    pushScreen(s)
+end sub
+
 sub showWho(msg as string)
     clearStack()
     m.global.token = ""
@@ -266,10 +276,15 @@ end sub
 
 sub signOut()
     apiRequest("/Sessions/Logout", {}, "onIgnore", "POST")
-    m.sessions.Delete(m.global.userId)
-    writeSessions(m.sessions)
+    forgetSession(m.global.userId)
     m.global.token = ""
     showWho("")
+end sub
+
+sub forgetSession(id as string)
+    sessions = readSessions()
+    sessions.Delete(id)
+    writeSessions(sessions)
 end sub
 
 sub pushScreen(s as object)
@@ -285,6 +300,7 @@ end sub
 function popScreen(refreshTop = true as boolean) as boolean
     if m.stack.Count() <= 1 then return false
     s = m.stack.Pop()
+    stopListening(s)
     if s.hasField("closed") then s.closed = true
     s.visible = false
     m.screens.removeChild(s)
@@ -315,12 +331,18 @@ end sub
 sub clearStack()
     while m.stack.Count() > 0
         s = m.stack.Pop()
+        stopListening(s)
         if s.hasField("closed") then s.closed = true
         s.visible = false
         m.screens.removeChild(s)
         m.graveyard.Push(s)
         if m.graveyard.Count() > 3 then m.graveyard.Shift()
     end while
+end sub
+
+' A closed screen's late network answer must not move the app.
+sub stopListening(s as object)
+    if s.hasField("navigate") then s.unobserveField("navigate")
 end sub
 
 sub onNavigate(event as object)
@@ -385,7 +407,7 @@ sub onNavigate(event as object)
     else if a = "switchUser"
         showWho("")
     else if a = "changeServer"
-        showServerPicker("")
+        changeServer()
     else if a = "serverChosen"
         onServerChosen(nav)
     else if a = "userChosen"
@@ -416,6 +438,9 @@ function screenLabel(s as object) as string
 end function
 
 sub onServerChosen(nav as object)
+    ' Close everything while the old server is still current, so last reports
+    ' (like "playback stopped") go to it and Back can't return to its screens.
+    clearStack()
     saveServer(nav)
     checkServer()
 end sub
@@ -434,13 +459,13 @@ sub saveServer(nav as object)
     reg.Write("serverName", safeStr(nav.name))
     reg.Flush()
     m.global.serverUrl = nav.url
-    m.sessions = readSessions()
+    if isValid(nav.away) then writeAway(nav.url, nav.away)
 end sub
 
 sub onUserChosen(u as object)
     id = safeStr(u.id)
     if id <> "" then applyPrefs(readPrefs(id))
-    if id <> "" and m.sessions.DoesExist(id)
+    if id <> "" and readSessions().DoesExist(id)
         useSession(id)
         return
     end if
@@ -450,14 +475,16 @@ sub onUserChosen(u as object)
 end sub
 
 sub onQuickConnected(nav as object)
+    clearStack()
     saveServer(nav)
     onAuthenticated(nav)
 end sub
 
 sub onAuthenticated(nav as object)
     m.offerServices = true
-    m.sessions[nav.userId] = { token: nav.token, name: nav.userName, imageTag: safeStr(nav.imageTag) }
-    writeSessions(m.sessions)
+    sessions = readSessions()
+    sessions[nav.userId] = { token: nav.token, name: nav.userName, imageTag: safeStr(nav.imageTag) }
+    writeSessions(sessions)
     m.global.token = nav.token
     m.global.userId = nav.userId
     m.global.userName = nav.userName

@@ -51,12 +51,14 @@ sub buildHero()
     m.heroArt.observeField("loadStatus", "onHeroArtStatus")
     setupTrailer(layer, 1, 600)
     makeFade(layer, "hero", 1920, 780)
-    fade = makeFadeUp(layer, 1920, 300, t.bg)
+    ' Solid by 684, the top of a Focused Card in the first Row: the Cards'
+    ' rounded corners are painted in the background color.
+    fade = makeFadeUp(layer, 1920, 204, t.bg)
     fade.translation = [0, 480]
     below = layer.CreateChild("Rectangle")
-    below.translation = [0, 780]
+    below.translation = [0, 684]
     below.width = 1920
-    below.height = 300
+    below.height = 396
     below.color = t.bg
 
     m.heroFade = layer.CreateChild("Animation")

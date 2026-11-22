@@ -1,8 +1,8 @@
 ' Activity (the Activity board): Radarr and Sonarr's download queue with
 ' progress, "Coming up this week" from their calendars, and Storage from
-' their disk space. The round button on a row removes it from the queue
-' (Radarr and Sonarr can't pause a download). Refreshes on the interval
-' set in Settings > Servers & services.
+' their disk space. For an Administrator the round button on a row removes it
+' from the queue (Radarr and Sonarr can't pause a download). Refreshes on the
+' interval set in Settings > Servers & services.
 
 sub init()
     t = th()
@@ -34,7 +34,10 @@ sub init()
     m.index = 0
     m.first = 0
     m.modalOpen = false
+    m.confirmItem = invalid
     m.shown = []
+    ' The API keys are the whole TV's, so removing is for Administrators only.
+    m.canRemove = m.global.isAdmin = true
 
     m.poll.duration = readSetting("arrRefresh", "30").ToInt()
     m.poll.observeField("fire", "loadQueue")
@@ -262,8 +265,11 @@ function drawRow(parent as object, it as object, y as integer) as object
     dl.translation = [x, 82]
     dl.width = barW
     dl.horizAlign = "right"
-    btn = makeBtn(g, { kind: "round", icon: "close", h: 60, iconSize: 24 })
-    btn.group.translation = [1040 - 24 - 60, 35]
+    btn = invalid
+    if m.canRemove
+        btn = makeBtn(g, { kind: "round", icon: "close", h: 60, iconSize: 24 })
+        btn.group.translation = [1040 - 24 - 60, 35]
+    end if
     return { ring: ring, btn: btn }
 end function
 
@@ -271,7 +277,7 @@ sub paint()
     for i = 0 to m.rows.Count() - 1
         focused = (m.zone = "queue" and m.first + i = m.index)
         m.rows[i].ring.visible = focused
-        paintBtn(m.rows[i].btn, false)
+        if m.rows[i].btn <> invalid then paintBtn(m.rows[i].btn, false)
     end for
     focusPill = -1
     if m.zone = "filters" then focusPill = m.filter
@@ -392,8 +398,14 @@ end sub
 
 sub openConfirm()
     if m.shown.Count() = 0 then return
+    if not m.canRemove
+        m.summary.text = "Only an Administrator can remove a download."
+        return
+    end if
     t = th()
     it = m.shown[m.index]
+    ' The list refreshes under the dialog, so keep hold of what it names.
+    m.confirmItem = it
     m.modalOpen = true
     m.confirmCol = 1
     m.modal.removeChildrenIndex(m.modal.getChildCount(), 0)
@@ -415,7 +427,9 @@ sub closeConfirm()
 end sub
 
 sub removeItem()
-    it = m.shown[m.index]
+    it = m.confirmItem
+    if it = invalid or not m.canRemove then return
+    m.confirmItem = invalid
     arrRequest(it.name, "/queue/" + it.id.ToStr(), { "removeFromClient": "true", "blocklist": "false" }, "onRemoved", "DELETE")
     closeConfirm()
     m.summary.text = "Removing " + it.title + "..."

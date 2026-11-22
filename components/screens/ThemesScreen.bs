@@ -207,9 +207,6 @@ sub paint()
     paintBtn(m.back, m.zone = "back")
     m.back.bg.blendColor = t.panel
     m.back.bg.opacity = 1.0
-    if m.zone = "back"
-        m.back.bg.blendColor = t.solid
-    end if
 end sub
 
 ' Apply one change and redraw in the new look.

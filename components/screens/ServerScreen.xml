@@ -4,6 +4,8 @@
 <component name="ServerScreen" extends="Group">
   <interface>
     <field id="message" type="string" onChange="onMessage" />
+    <!-- canCancel: opened from inside the app, so Back returns to it -->
+    <field id="canCancel" type="boolean" onChange="onCanCancel" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
     <field id="closed" type="boolean" onChange="onClosed" />
   </interface>

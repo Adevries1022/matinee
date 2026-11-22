@@ -40,9 +40,11 @@ sub init()
     m.loadingMore = false
     m.gen = 0
     m.userId = ""
-    m.autoApprove = false
+    m.perms = 0
     m.modalOpen = false
-    m.can4k = readSetting("seerr4k", "false") = "true"
+    ' 4K needs the setting here and a 4K server in Seerr for that media type.
+    m.show4k = readSetting("seerr4k", "false") = "true"
+    m.has4k = { movie: false, tv: false }
     setupMenu("requests")
     start()
 end sub
@@ -51,6 +53,7 @@ sub start()
     st = m.global.seerrState
     if st = "ready"
         seerrRequest("/auth/me", {}, "onMe")
+        if m.show4k then seerrRequest("/settings/public", {}, "onPublicSettings")
         loadTab()
     else
         showEmpty()
@@ -65,12 +68,22 @@ sub onMe(event as object)
     res = event.getData()
     if res.ok and isValid(res.data)
         m.userId = safeStr(res.data.id)
-        perms = safeInt(res.data.permissions)
-        m.autoApprove = (perms and 2) <> 0 or (perms and 128) <> 0
+        m.perms = safeInt(res.data.permissions)
+        if m.modalOpen then drawPanel()
         if m.tab > 0 then loadTab()
     else if res.code = 401 or res.code = 403
         m.top.navigate = { action: "seerrSignedOut" }
     end if
+end sub
+
+sub onPublicSettings(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    m.has4k = { movie: isTrue(res.data.movie4kEnabled), tv: isTrue(res.data.series4kEnabled) }
+    if not m.modalOpen then return
+    ' The panel can open first when coming from Search.
+    if not m.qualityPicked then m.quality = defaultQuality()
+    drawPanel()
 end sub
 
 ' ---------- Loading ----------
@@ -292,8 +305,8 @@ end sub
 sub openPanel(c as object)
     m.cur = c
     m.isTv = (c.itemType = "seerr-tv")
-    m.quality = 0
-    if readSetting("seerrQuality", "1080p") = "4K" and m.can4k then m.quality = 1
+    m.quality = defaultQuality()
+    m.qualityPicked = false
     m.seasonChoice = 0
     m.seasonCount = 0
     m.modalRow = 0
@@ -326,8 +339,19 @@ function seasonLabels() as object
     return labels
 end function
 
+function can4k() as boolean
+    if not m.show4k then return false
+    if m.isTv then return m.has4k.tv
+    return m.has4k.movie
+end function
+
+function defaultQuality() as integer
+    if can4k() and readSetting("seerrQuality", "1080p") = "4K" then return 1
+    return 0
+end function
+
 function qualityLabels() as object
-    if m.can4k then return ["1080p", "4K"]
+    if can4k() then return ["1080p", "4K"]
     return ["1080p"]
 end function
 
@@ -384,7 +408,7 @@ sub drawPanel()
     dest = "Radarr"
     if m.isTv then dest = "Sonarr"
     approval = "needs an admin to approve"
-    if m.autoApprove then approval = "approved automatically"
+    if seerrAutoApproves(m.perms, m.isTv, m.quality = 1) then approval = "approved automatically"
     makeBox(b, 724, 60, 12, t.raised).translation = [48, y]
     il = makeLabel(b, "Sends to " + dest + " " + Chr(183) + " " + approval, 18, "regular", t.meta)
     il.translation = [68, y]
@@ -469,6 +493,7 @@ function modalKey(key as string) as boolean
     else if key = "OK"
         if row = "quality"
             m.quality = m.modalCol
+            m.qualityPicked = true
         else if row = "seasons"
             m.seasonChoice = m.modalCol
         else if m.modalCol = 0

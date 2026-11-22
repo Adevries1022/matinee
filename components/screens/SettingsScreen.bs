@@ -30,6 +30,9 @@ sub init()
     m.message = ""
     m.messageColor = ""
     m.seenPrefs = m.global.prefsVersion
+    m.detailPending = false
+    m.detailTimer = m.top.findNode("detailTimer")
+    m.detailTimer.observeField("fire", "flushDetail")
     loadDrafts()
     t = m.top.findNode("startTimer")
     t.observeField("fire", "build")
@@ -88,6 +91,8 @@ sub paintFrame()
 end sub
 
 sub render()
+    m.detailPending = false
+    m.detailTimer.control = "stop"
     m.content.removeChildrenIndex(m.content.getChildCount(), 0)
     key = m.sections[m.section].key
     if key = "services" or m.top.setup
@@ -197,9 +202,14 @@ sub onSeerrMe(event as object)
     if res.ok and isValid(res.data)
         perms = safeInt(res.data.permissions)
         m.extra.seerrUser = safeStr(res.data.displayName)
-        ' Seerr permissions: 2 = admin, 128 = auto-approve.
-        if (perms and 2) <> 0 or (perms and 128) <> 0
+        movies = seerrAutoApproves(perms, false, false)
+        shows = seerrAutoApproves(perms, true, false)
+        if movies and shows
             m.extra.seerrAuto = "Yes"
+        else if movies
+            m.extra.seerrAuto = "Movies only"
+        else if shows
+            m.extra.seerrAuto = "Series only"
         else
             m.extra.seerrAuto = "Needs approval"
         end if
@@ -229,7 +239,7 @@ end function
 function serviceTiles(name as string) as object
     p = m.global.prefs
     if name = "jellyfin"
-        away = readSetting("serverAway", "")
+        away = readAway(readSetting("server"))
         if away = "" then away = "Not set"
         dp = "Prefer"
         if p.directPlay = "off" then dp = "Always transcode"
@@ -273,28 +283,22 @@ sub renderServices()
     c = m.content
     names = serviceNames()
     listX = 500
-    detailX = 1080
-    if m.top.setup
-        listX = 500
-        detailX = 1080
-    end if
     h = makeLabel(c, "Connected services", 28, "semibold", t.text)
     h.translation = [listX, 150]
     h.height = 66
     h.vertAlign = "center"
-    m.svcRings = []
+    m.svcRows = []
     y = 224
     for i = 0 to names.Count() - 1
         n = names[i]
         info = serviceInfo(n)
         g = c.CreateChild("Group")
         g.translation = [listX, y]
-        bgColor = t.panel
-        if i = m.svcIndex then bgColor = t.raised
-        makeBox(g, 520, 100, 16, bgColor)
-        m.svcRings.Push(makeFocusRing(g, 520, 100, 16))
-        makeBox(g, 56, 56, 14, t.raised).translation = [24, 22]
-        if i = m.svcIndex then makeBox(g, 56, 56, 14, t.bg).translation = [24, 22]
+        bg = makeBox(g, 520, 100, 16, t.panel)
+        ring = makeFocusRing(g, 520, 100, 16)
+        monoBg = makeBox(g, 56, 56, 14, t.raised)
+        monoBg.translation = [24, 22]
+        m.svcRows.Push({ bg: bg, ring: ring, monoBg: monoBg })
         mono = makeLabel(g, info.mono, 24, "display", info.tint)
         mono.translation = [24, 22]
         mono.width = 56
@@ -321,7 +325,18 @@ sub renderServices()
     al.height = 72
     al.vertAlign = "center"
 
-    ' Detail panel: on "Add another server" it keeps showing the service above.
+    m.detailHost = c.CreateChild("Group")
+    renderDetail()
+end sub
+
+' The panel on the right. On "Add another server" it keeps showing the
+' service above.
+sub renderDetail()
+    t = th()
+    names = serviceNames()
+    c = m.detailHost
+    c.removeChildrenIndex(c.getChildCount(), 0)
+    detailX = 1080
     if m.svcIndex < names.Count() then m.detailSvc = m.svcIndex
     n = names[m.detailSvc]
     info = serviceInfo(n)
@@ -419,8 +434,17 @@ sub renderServices()
 end sub
 
 sub paintServices()
-    for i = 0 to m.svcRings.Count() - 1
-        m.svcRings[i].visible = (m.zone = "list" and i = m.svcIndex)
+    t = th()
+    for i = 0 to m.svcRows.Count() - 1
+        row = m.svcRows[i]
+        row.ring.visible = (m.zone = "list" and i = m.svcIndex)
+        if i = m.svcIndex
+            row.bg.blendColor = t.raised
+            row.monoBg.blendColor = t.bg
+        else
+            row.bg.blendColor = t.panel
+            row.monoBg.blendColor = t.raised
+        end if
     end for
     m.addRing.visible = (m.zone = "list" and m.svcIndex = 4)
     for i = 0 to m.detailItems.Count() - 1
@@ -493,7 +517,9 @@ sub detailOk()
             setMessage("Only an Administrator can change this.", t.warn)
             return
         else if tl.key = "serverAway"
-            openEntry("serverAway", "Remote address", "The address that works outside your home, for example https://jellyfin.example.com", readSetting("serverAway", "https://"), false)
+            away = readAway(readSetting("server"))
+            if away = "" then away = "https://"
+            openEntry("serverAway", "Remote address", "The address that works outside your home, for example https://jellyfin.example.com", away, false)
             return
         else if tl.key = "seerrQuality"
             if readSetting("seerrQuality", "1080p") = "1080p"
@@ -533,7 +559,7 @@ sub detailOk()
             if cur = "" then cur = "http://"
             openEntry("url", serviceInfo(n).name + " address", "Include the port, for example http://192.168.1.20:7878", cur, false)
         else
-            openEntry("key", serviceInfo(n).name + " API key", "Find it in " + serviceInfo(n).name + " under Settings " + Chr(8250) + " General.", m.draft[n].key, false)
+            openEntry("key", serviceInfo(n).name + " API key", "Find it in " + serviceInfo(n).name + " under Settings " + Chr(8250) + " General.", m.draft[n].key, true)
         end if
     end if
 end sub
@@ -629,7 +655,7 @@ sub onEntry()
     closeEntry()
     n = currentService()
     if m.entryKey = "serverAway"
-        writeSetting("serverAway", normalizeUrl(text))
+        writeAway(readSetting("server"), text)
     else if m.entryKey = "url"
         m.draft[n].url = text
         setMessage("Press Save to keep this.", th().muted)
@@ -678,9 +704,17 @@ function sectionRows(key as string) as object
             { label: "Size and style", value: "Roku settings " + Chr(8250) + " Accessibility " + Chr(8250) + " Captions style", kind: "info", key: "" }
         ]
     else if key = "users"
+        ask = readSetting("alwaysAsk", "false") = "true"
+        askRow = { label: "Always show Who" + Chr(8217) + "s watching", value: "", kind: "toggle", key: "alwaysAsk", on: ask }
+        if m.global.isAdmin <> true
+            askRow.kind = "info"
+            askRow.value = "Off (an Administrator can change this)"
+            if ask then askRow.value = "On (an Administrator can change this)"
+        end if
         return [
             { label: "Switch user", value: "Who" + Chr(8217) + "s watching", kind: "action", key: "switchUser" },
             { label: "Manage profiles", value: "Forget saved sign-ins", kind: "action", key: "switchUser" },
+            askRow,
             { label: "Sign out of " + m.global.userName, value: "", kind: "action", key: "signout" }
         ]
     end if
@@ -767,7 +801,10 @@ sub rowOk()
         m.top.navigate = { action: r.key }
         return
     end if
-    if r.kind = "toggle"
+    if r.kind = "toggle" and r.key = "alwaysAsk"
+        ' For the whole TV, unlike the other rows.
+        if r.on then writeSetting(r.key, "false") else writeSetting(r.key, "true")
+    else if r.kind = "toggle"
         setPref(r.key, not r.on)
     else if r.key = "maxBitrate"
         steps = [0, 40000000, 20000000, 10000000, 6000000, 3000000]
@@ -895,8 +932,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
             if m.svcIndex < 4 then m.svcIndex = m.svcIndex + 1
             refreshDetail()
         else if key = "OK" or key = "right"
+            flushDetail()
             if m.svcIndex = 4
-                if key = "OK" then m.top.navigate = { action: "changeServer" }
+                if key = "OK" then addServer()
             else
                 m.zone = "detail"
                 m.detailIndex = 0
@@ -908,7 +946,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
             else
                 m.zone = "nav"
             end if
-            render()
+            flushDetail()
+            paintServices()
+            paintFrame()
             if key = "back" and m.top.setup then return false
         else
             return false
@@ -989,9 +1029,28 @@ sub moveDetail(key as string)
     paintServices()
 end sub
 
+' Up and Down only move the highlight, so they keep up on entry-level Rokus.
+' The panel follows once the presses pause, or at once on OK or Right.
 sub refreshDetail()
-    m.message = ""
-    m.messageColor = ""
+    setMessage("", th().muted)
     m.detailIndex = 0
-    render()
+    paintServices()
+    m.detailPending = true
+    m.detailTimer.control = "stop"
+    m.detailTimer.control = "start"
+end sub
+
+sub flushDetail()
+    if not m.detailPending then return
+    m.detailPending = false
+    m.detailTimer.control = "stop"
+    renderDetail()
+end sub
+
+sub addServer()
+    if m.global.isAdmin = true
+        m.top.navigate = { action: "changeServer" }
+    else
+        setMessage("Only an Administrator can add a server.", th().warn)
+    end if
 end sub

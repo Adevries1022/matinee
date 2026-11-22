@@ -509,7 +509,7 @@ function makeTopBadges(parent as object) as object
     if s <> invalid then avatarTag = safeStr(s.imageTag)
     av = g.CreateChild("Group")
     av.translation = [right - avatarSize, 56]
-    av.appendChild(makeAvatar(m.global.userId, m.global.userName, avatarTag, avatarSize))
+    av.appendChild(makeAvatar(m.global.userId, m.global.userName, avatarTag, avatarSize, true))
     border = makeOutline(av, avatarSize, avatarSize, 28, t.white)
     border.opacity = 0.25
     avRing = makeFocusRing(av, avatarSize, avatarSize, 28)

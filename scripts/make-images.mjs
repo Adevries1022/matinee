@@ -259,6 +259,7 @@ for (const r of [10, 12, 14]) corners(r);
 
 // Circles: a solid dot (seek thumb, status dots), avatars and the profile focus ring.
 save('circle.png', 64, 64, raster(64, 64, 1, [P.fillCircle(32, 32, 31.5)]));
+save('circle_fill.png', 240, 240, raster(240, 240, 1, [P.fillCircle(120, 120, 119.5)]));
 save('circle_ring.png', 248, 248, raster(248, 248, 1, [P.circle(124, 124, 120, 4)]));
 save('circle_mask.png', 240, 240, raster(240, 240, 1, [(x, y) => hypot(x - 120, y - 120) > 119.5]));
 save('circle_dashed.png', 216, 216, raster(216, 216, 1, [(x, y) => {

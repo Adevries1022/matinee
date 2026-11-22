@@ -5,13 +5,20 @@
 ' ================= Network =================
 
 function authHeader() as string
+    h = clientHeader()
     q = Chr(34)
-    h = "MediaBrowser Client=" + q + "Matinee" + q + ", Device=" + q + "Roku" + q
-    h = h + ", DeviceId=" + q + m.global.deviceId + q + ", Version=" + q + "2.2.0" + q
     if m.global.token <> ""
         h = h + ", Token=" + q + m.global.token + q
     end if
     return h
+end function
+
+' Names this app without a token, for a server nobody has signed in to yet.
+function clientHeader() as string
+    if m.appVersion = invalid then m.appVersion = CreateObject("roAppInfo").GetVersion()
+    q = Chr(34)
+    h = "MediaBrowser Client=" + q + "Matinee" + q + ", Device=" + q + "Roku" + q
+    return h + ", DeviceId=" + q + m.global.deviceId + q + ", Version=" + q + m.appVersion + q
 end function
 
 ' Jellyfin request. The callback receives an event whose data is
@@ -749,6 +756,21 @@ function tmdbImage(path as dynamic, size as string) as string
     return "https://image.tmdb.org/t/p/" + size + p
 end function
 
+' Whether Seerr approves this person's request by itself. Seerr's permissions:
+' 2 admin, 16 manage requests; then auto-approve 128 (all), 256 (movies) and
+' 512 (series), or for 4K 32768, 65536 and 131072.
+function seerrAutoApproves(perms as integer, isTv as boolean, is4k as boolean) as boolean
+    mask = 2 + 16
+    if is4k
+        mask = mask + 32768
+        if isTv then mask = mask + 131072 else mask = mask + 65536
+    else
+        mask = mask + 128
+        if isTv then mask = mask + 512 else mask = mask + 256
+    end if
+    return (perms and mask) <> 0
+end function
+
 ' Seerr's media status number as a short badge, or "" for none.
 function requestStatusLabel(status as integer) as string
     if status = 2 then return "Requested"
@@ -821,6 +843,34 @@ function hostBase(url as string) as string
     return Left(url, sep + 2) + Left(rest, cut - 1)
 end function
 
+' The away address belongs to one server, so one server's tokens never go to
+' another's: "serverAways" holds { server address: away address }.
+function readAwayMap() as object
+    saved = readSetting("serverAways")
+    if saved <> ""
+        map = ParseJson(saved)
+        if map <> invalid then return map
+    end if
+    return {}
+end function
+
+function readAway(server as string) as string
+    map = readAwayMap()
+    return safeStr(map[LCase(server)])
+end function
+
+sub writeAway(server as string, away as string)
+    map = readAwayMap()
+    key = LCase(server)
+    url = normalizeUrl(away)
+    if url = "" or url = "http:" or url = "https:"
+        map.Delete(key)
+    else
+        map[key] = url
+    end if
+    writeSetting("serverAways", FormatJson(map))
+end sub
+
 ' Saved sign-ins are kept per server, so connecting to another server
 ' doesn't sign everyone out of this one: { userId: { token, name, imageTag } }
 function sessionsKey() as string
@@ -866,14 +916,14 @@ function avatarColor(name as string) as string
     return colors[total mod colors.Count()]
 end function
 
-' A round avatar: colored circle with an initial, the User's picture on
-' top if they have one, and a mask that rounds the corners.
-function makeAvatar(userId as string, name as string, avatarTag as string, size as integer) as object
+' A round avatar: colored circle with an initial, and the User's picture on
+' top if they have one. On the plain background a picture's corners are
+' covered in the background color. Over artwork (overArt) that would show as
+' a square, so the picture is clipped with a MaskGroup instead, and left out
+' on Rokus without OpenGL, which can't clip.
+function makeAvatar(userId as string, name as string, avatarTag as string, size as integer, overArt = false as boolean) as object
     g = CreateObject("roSGNode", "Group")
-    bg = g.CreateChild("Rectangle")
-    bg.width = size
-    bg.height = size
-    bg.color = avatarColor(name)
+    makeShape(g, "pkg:/images/circle_fill.png", size, size, avatarColor(name))
     initial = g.CreateChild("Label")
     initial.width = size
     initial.height = size
@@ -882,15 +932,25 @@ function makeAvatar(userId as string, name as string, avatarTag as string, size 
     initial.color = th().bg
     initial.font = makeFont(Int(size * 0.4), "display")
     initial.text = UCase(Left(name, 1))
-    if userId <> "" and avatarTag <> ""
-        pic = g.CreateChild("Poster")
-        pic.width = size
-        pic.height = size
-        pic.loadWidth = size
-        pic.loadHeight = size
-        pic.loadDisplayMode = "scaleToZoom"
-        pic.uri = m.global.serverUrl + "/Users/" + userId + "/Images/Primary?tag=" + avatarTag + "&fillWidth=" + size.ToStr() + "&fillHeight=" + size.ToStr() + "&quality=90"
+    if userId = "" or avatarTag = "" then return g
+    holder = g
+    if overArt
+        di = CreateObject("roDeviceInfo")
+        if LCase(di.GetGraphicsPlatform()) <> "opengl" then return g
+        holder = g.CreateChild("MaskGroup")
+        holder.maskUri = "pkg:/images/circle_fill.png"
+        ' maskSize is in screen pixels, not the 1920 wide design's.
+        px = size * di.GetUIResolution().width / 1920
+        holder.maskSize = [px, px]
     end if
+    pic = holder.CreateChild("Poster")
+    pic.width = size
+    pic.height = size
+    pic.loadWidth = size
+    pic.loadHeight = size
+    pic.loadDisplayMode = "scaleToZoom"
+    pic.uri = m.global.serverUrl + "/Users/" + userId + "/Images/Primary?tag=" + avatarTag + "&fillWidth=" + size.ToStr() + "&fillHeight=" + size.ToStr() + "&quality=90"
+    if overArt then return g
     mask = g.CreateChild("Poster")
     mask.width = size
     mask.height = size
