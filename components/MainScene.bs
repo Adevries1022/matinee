@@ -23,14 +23,25 @@ sub init()
     g.addField("seerrUrl", "string", false)
     g.addField("seerrCookie", "string", false)
     g.addField("seerrState", "string", false)
+    ' The signed-in User's Seerr account id, and how many of their requests
+    ' are downloading (the number on My requests in the Rail).
+    g.addField("seerrUserId", "string", false)
+    g.addField("requestsDownloading", "integer", false)
     g.addField("servicesVersion", "integer", false)
     g.deviceId = di.GetChannelClientId()
     g.watchVersion = 0
     g.prefsVersion = 0
     g.seerrState = "none"
+    g.requestsDownloading = 0
     g.views = []
     g.previewItems = []
     g.trackPrefs = {}
+
+    m.downloadWatch = m.top.CreateChild("Timer")
+    m.downloadWatch.duration = 60
+    m.downloadWatch.repeat = true
+    m.downloadWatch.observeField("fire", "checkDownloads")
+    g.observeField("seerrState", "onSeerrStateForWatch")
 
     migrateV1()
     reg = CreateObject("roRegistrySection", "Marquee")
@@ -178,6 +189,7 @@ end sub
 ' ---------- Seerr ----------
 
 sub initSeerr()
+    m.global.seerrUserId = ""
     m.global.seerrState = "none"
     if readSetting("seerrEnabled", "true") <> "true" then return
     reg = CreateObject("roRegistrySection", "Marquee")
@@ -217,6 +229,7 @@ end sub
 sub onSeerrMe(event as object)
     res = event.getData()
     if res.ok
+        if isValid(res.data) then m.global.seerrUserId = safeStr(res.data.id)
         m.global.seerrState = "ready"
     else if res.code = 401 or res.code = 403
         forgetSeerrSession()
@@ -230,7 +243,52 @@ sub forgetSeerrSession()
     reg.Delete("seerr_" + m.global.userId)
     reg.Flush()
     m.global.seerrCookie = ""
+    m.global.seerrUserId = ""
     m.global.seerrState = "signedOut"
+end sub
+
+' ---------- Downloading requests (the Rail's count) ----------
+
+' While Seerr is ready, count the User's downloading requests every minute.
+sub onSeerrStateForWatch()
+    if m.global.seerrState = "ready"
+        checkDownloads()
+        m.downloadWatch.control = "start"
+    else
+        m.downloadWatch.control = "stop"
+        m.global.requestsDownloading = 0
+    end if
+end sub
+
+sub checkDownloads()
+    if m.global.seerrState <> "ready" then return
+    if m.global.seerrUserId = ""
+        seerrRequest("/auth/me", {}, "onWatchMe")
+        return
+    end if
+    seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": "processing", "requestedBy": m.global.seerrUserId }, "onWatchRequests")
+end sub
+
+sub onWatchMe(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    m.global.seerrUserId = safeStr(res.data.id)
+    checkDownloads()
+end sub
+
+sub onWatchRequests(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    n = 0
+    if isValid(res.data.results)
+        for each rq in res.data.results
+            if isValid(rq.media)
+                if seerrDownloads(rq.media).count > 0 then n = n + 1
+            end if
+        end for
+    end if
+    if n <> m.global.requestsDownloading then print "[Matinee] requests downloading: "; n
+    m.global.requestsDownloading = n
 end sub
 
 sub onSeerrAuthenticated(cookie as string)
@@ -262,6 +320,7 @@ end sub
 sub showWho(msg as string)
     clearStack()
     m.global.token = ""
+    m.global.seerrUserId = ""
     m.global.seerrState = "none"
     w = CreateObject("roSGNode", "WhoScreen")
     w.message = msg
@@ -367,6 +426,9 @@ sub onNavigate(event as object)
         rq = CreateObject("roSGNode", "RequestsScreen")
         pushScreen(rq)
         if isValid(nav.tmdbId) then rq.open = { tmdbId: nav.tmdbId, mediaType: nav.mediaType }
+    else if a = "myrequests"
+        popTo(1)
+        pushScreen(CreateObject("roSGNode", "MyRequestsScreen"))
     else if a = "activity"
         popTo(1)
         pushScreen(CreateObject("roSGNode", "ActivityScreen"))
@@ -434,6 +496,7 @@ function screenLabel(s as object) as string
     if kind = "SearchScreen" then return "Search"
     if kind = "MyListScreen" then return "My List"
     if kind = "RequestsScreen" then return "Requests"
+    if kind = "MyRequestsScreen" then return "My requests"
     return "Back"
 end function
 

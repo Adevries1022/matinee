@@ -1,0 +1,239 @@
+' My requests: the signed-in User's Seerr requests that aren't ready to
+' watch yet (waiting for approval, searching or downloading), newest first,
+' with a progress bar for each download. Progress comes from the Radarr and
+' Sonarr status Seerr attaches to each request, so it works without Radarr
+' or Sonarr being set up on this TV. Refreshes every 30 seconds while shown.
+' Ready titles are in Requests > Ready to watch.
+
+sub init()
+    t = th()
+    m.layer = m.top.findNode("layer")
+    m.list = m.top.findNode("list")
+    m.sink = m.top.findNode("sink")
+    m.poll = m.top.findNode("poll")
+
+    makeTitle(m.layer, "My requests", 64).translation = [160, 80]
+    m.summary = makeLabel(m.layer, "Loading...", 20, "regular", t.muted)
+    m.summary.translation = [160, 166]
+    m.summary.width = 1200
+
+    m.items = []
+    ' Title and artwork per request, kept across refreshes.
+    m.details = {}
+    m.index = 0
+    m.first = 0
+    m.rows = []
+    m.gen = 0
+
+    m.poll.observeField("fire", "load")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.top.observeField("visible", "onVisible")
+    m.global.observeField("seerrState", "onSeerrState")
+    setupMenu("myrequests")
+    onVisible()
+end sub
+
+sub onVisible()
+    if m.top.visible and m.global.seerrState = "ready"
+        load()
+        m.poll.control = "start"
+    else
+        m.poll.control = "stop"
+        if m.global.seerrState <> "ready" then render()
+    end if
+end sub
+
+sub onSeerrState()
+    onVisible()
+end sub
+
+' ---------- Loading ----------
+
+sub load()
+    if m.global.seerrUserId = ""
+        seerrRequest("/auth/me", {}, "onMe")
+        return
+    end if
+    m.gen = m.gen + 1
+    seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": "all", "requestedBy": m.global.seerrUserId }, "onRequests", "GET", invalid, m.gen)
+end sub
+
+sub onMe(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        m.global.seerrUserId = safeStr(res.data.id)
+        load()
+    else if res.code = 401 or res.code = 403
+        m.top.navigate = { action: "seerrSignedOut" }
+    end if
+end sub
+
+sub onRequests(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    if not res.ok or not isValid(res.data)
+        if res.code = 401 or res.code = 403 then m.top.navigate = { action: "seerrSignedOut" }
+        m.summary.text = "Couldn" + Chr(8217) + "t reach Seerr."
+        return
+    end if
+    list = []
+    downloading = 0
+    if isValid(res.data.results)
+        for each rq in res.data.results
+            md = rq.media
+            if isValid(md)
+                ms = safeInt(md.status)
+                ' Declined requests and ready titles aren't shown.
+                if safeInt(rq.status) <> 3 and (ms = 2 or ms = 3 or safeInt(rq.status) = 1)
+                    it = requestRow(rq, md)
+                    if it.downloading then downloading = downloading + 1
+                    list.Push(it)
+                end if
+            end if
+        end for
+    end if
+    m.items = list
+    m.global.requestsDownloading = downloading
+    print "[Matinee] my requests: "; list.Count(); " open, "; downloading; " downloading"
+    render()
+end sub
+
+' One request as a row for makeQueueRow. Its title and artwork come from
+' the title's Seerr details, fetched once.
+function requestRow(rq as object, md as object) as object
+    t = th()
+    mt = safeStr(md.mediaType)
+    key = mt + "/" + safeStr(md.tmdbId)
+    d = m.details[key]
+    if d = invalid
+        d = { title: "", image: "" }
+        m.details[key] = d
+        seerrRequest("/" + key, {}, "onDetail", "GET", invalid, { key: key })
+    end if
+    dl = seerrDownloads(md)
+    kind = "Movie"
+    if mt = "tv" then kind = "Series"
+    quality = ""
+    if isTrue(rq.is4k) then quality = "4K"
+    it = { key: key, title: d.title, image: d.image, source: kind, quality: quality, pct: 0.0, barColor: t.dashed, stateColor: t.muted, detail: "", downloading: dl.count > 0 }
+    if safeInt(rq.status) = 1
+        it.stateLabel = "Waiting for approval"
+        it.stateColor = t.warn
+    else if dl.count > 0
+        it.stateLabel = "Downloading " + Int(dl.pct * 100).ToStr() + "%"
+        it.stateColor = t.info
+        it.barColor = t.accent
+        it.pct = dl.pct
+        it.detail = dl.detail
+    else
+        it.stateLabel = "Approved " + Chr(183) + " looking for a download"
+    end if
+    if it.title = "" then it.title = "Loading..."
+    return it
+end function
+
+sub onDetail(event as object)
+    res = event.getData()
+    tag = res.tag
+    if tag = invalid or not res.ok or not isValid(res.data) then return
+    r = res.data
+    name = safeStr(r.title)
+    if name = "" then name = safeStr(r.name)
+    img = tmdbImage(r.backdropPath, "w300")
+    if img = "" then img = tmdbImage(r.posterPath, "w185")
+    m.details[tag.key] = { title: name, image: img }
+    for each it in m.items
+        if it.key = tag.key
+            it.title = name
+            it.image = img
+        end if
+    end for
+    render()
+end sub
+
+' ---------- Drawing ----------
+
+sub render()
+    h = m.list
+    h.removeChildrenIndex(h.getChildCount(), 0)
+    m.rows = []
+    st = m.global.seerrState
+    if st <> "ready"
+        m.items = []
+        m.summary.text = ""
+        msg = "Seerr isn" + Chr(8217) + "t set up. An Administrator can add it in Settings " + Chr(8250) + " Servers & services."
+        if st = "signedOut" then msg = "Sign in to Seerr in Requests to see what you" + Chr(8217) + "ve asked for."
+        emptyPanel(msg)
+        return
+    end if
+    downloading = 0
+    for each it in m.items
+        if it.downloading then downloading = downloading + 1
+    end for
+    m.summary.text = downloading.ToStr() + " downloading " + Chr(183) + " " + m.items.Count().ToStr() + " not ready yet " + Chr(183) + " from Seerr"
+    if m.items.Count() = 0
+        emptyPanel("Nothing waiting. Titles you request in Requests show up here until they" + Chr(8217) + "re ready to watch.")
+        return
+    end if
+    if m.index > m.items.Count() - 1 then m.index = m.items.Count() - 1
+    if m.index < m.first then m.first = m.index
+    if m.index > m.first + 4 then m.first = m.index - 4
+    y = 260
+    for i = m.first to m.items.Count() - 1
+        if i <= m.first + 4
+            m.rows.Push(makeQueueRow(h, m.items[i], y, false, 1600))
+            y = y + 144
+        end if
+    end for
+    paint()
+end sub
+
+sub emptyPanel(msg as string)
+    t = th()
+    g = m.list.CreateChild("Group")
+    g.translation = [160, 260]
+    makePanel(g, 1040, 140, 16)
+    l = makeLabel(g, msg, 22, "regular", t.text)
+    l.translation = [32, 0]
+    l.width = 976
+    l.height = 140
+    l.wrap = true
+    l.vertAlign = "center"
+end sub
+
+sub paint()
+    for i = 0 to m.rows.Count() - 1
+        m.rows[i].ring.visible = (m.first + i = m.index)
+    end for
+end sub
+
+' ---------- Focus & keys ----------
+
+sub restoreContentFocus()
+    m.sink.setFocus(true)
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() and not menuIsOpen() then restoreContentFocus()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press or menuIsOpen() then return false
+    if key = "left"
+        openMenu()
+        return true
+    else if key = "up"
+        if m.index > 0
+            m.index = m.index - 1
+            render()
+        end if
+        return true
+    else if key = "down"
+        if m.index < m.items.Count() - 1
+            m.index = m.index + 1
+            render()
+        end if
+        return true
+    end if
+    return false
+end function

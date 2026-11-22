@@ -27,7 +27,8 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 - **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays behind the Hero, with sound (turn Trailer sound off in Playback & quality to start them muted). The header fades out while it plays.
 
 ### Requests and downloads
-- **Requests** appears in the Rail when Matinee finds Seerr. It looks on port 5055 of the Jellyfin machine unless an Administrator enters an address. Each person signs in to Seerr with their Jellyfin account, so requests are in their name. Its tabs are Discover, My requests and Ready to watch.
+- **Requests** appears in the Rail when Matinee finds Seerr. It looks on port 5055 of the Jellyfin machine unless an Administrator enters an address. Each person signs in to Seerr with their Jellyfin account, so requests are in their name. Its tabs are Discover and Ready to watch.
+- **My requests** sits under Requests in the Rail. It lists your requests that aren't ready yet (waiting for approval, looking for a download, or downloading), with a progress bar for each download from Seerr. While any are downloading, its Rail icon shows how many.
 - A show can be requested as all seasons, Season 1 or only the latest season. **4K** is offered only when "Show 4K requests" is on and Seerr has a 4K server for that kind of title.
 - **Activity** appears once Radarr or Sonarr is set up, with the download queue, what's coming up this week and storage space. Anyone can look; only an Administrator can remove a download. "Show queue on Home" adds a Row of downloads.
 
@@ -54,7 +55,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 ### Getting around
 | Where | Button | What it does |
 |---|---|---|
-| Home, Series, Movies, Search, My List, Requests, Activity | Left from the leftmost item | Opens the Rail |
+| Home, Series, Movies, Search, My List, Requests, My requests, Activity | Left from the leftmost item | Opens the Rail |
 | Rail | Up / Down, then OK | Goes to that screen |
 | Rail | Right or Back | Closes it |
 | Most screens | Back | Goes back. From Home or Who's watching, exits Matinee |

@@ -209,69 +209,12 @@ sub renderQueue()
     y = 260
     for i = m.first to m.shown.Count() - 1
         if i <= m.first + 4
-            m.rows.Push(drawRow(h, m.shown[i], y))
+            m.rows.Push(makeQueueRow(h, m.shown[i], y, m.canRemove))
             y = y + 144
         end if
     end for
     paint()
 end sub
-
-function drawRow(parent as object, it as object, y as integer) as object
-    t = th()
-    g = parent.CreateChild("Group")
-    g.translation = [160, y]
-    makeBox(g, 1040, 130, 16, t.panel)
-    ring = makeFocusRing(g, 1040, 130, 16)
-    makeBox(g, 160, 90, 10, t.raised).translation = [24, 20]
-    if it.image <> ""
-        p = g.CreateChild("Poster")
-        p.translation = [24, 20]
-        p.width = 160
-        p.height = 90
-        p.loadWidth = 160
-        p.loadHeight = 90
-        p.loadDisplayMode = "scaleToZoom"
-        p.uri = it.image
-        makeShape(g, "pkg:/images/corners_r10.9.png", 160, 90, t.panel).translation = [24, 20]
-    end if
-    x = 208
-    title = makeLabel(g, it.title, 22, "semibold", t.text)
-    title.translation = [x, 18]
-    tw = measureText(it.title, 22, "semibold")
-    if tw > 480 then tw = 480
-    title.width = tw + 4
-    cx = x + tw + 16
-    src = makeTag(g, it.source, { size: 15, h: 28 })
-    src.group.translation = [cx, 20]
-    cx = cx + src.w + 10
-    if it.quality <> ""
-        q = makeTag(g, it.quality, { size: 15, h: 28 })
-        q.group.translation = [cx, 20]
-    end if
-    barW = 1040 - x - 24 - 60 - 24
-    bg = g.CreateChild("Rectangle")
-    bg.translation = [x, 62]
-    bg.width = barW
-    bg.height = 8
-    bg.color = t.barBg
-    fill = g.CreateChild("Rectangle")
-    fill.translation = [x, 62]
-    fill.width = Int(barW * it.pct)
-    fill.height = 8
-    fill.color = it.barColor
-    st = makeLabel(g, it.stateLabel, 17, "regular", it.stateColor)
-    st.translation = [x, 82]
-    dl = makeLabel(g, it.detail, 17, "regular", t.muted)
-    dl.translation = [x, 82]
-    dl.width = barW
-    dl.horizAlign = "right"
-    btn = invalid
-    if m.canRemove
-        btn = makeBtn(g, { kind: "round", icon: "close", h: 60, iconSize: 24 })
-        btn.group.translation = [1040 - 24 - 60, 35]
-    end if
-    return { ring: ring, btn: btn }
-end function
 
 sub paint()
     for i = 0 to m.rows.Count() - 1

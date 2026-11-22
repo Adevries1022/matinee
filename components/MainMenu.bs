@@ -1,16 +1,20 @@
 ' The Rail: an always-visible 112 px column of icons down the left edge.
 ' The current screen's icon sits on a soft square in the Accent; while the
 ' Rail has focus, the Focused icon turns solid with its name beside it.
+' My requests carries a count of downloading requests while there are any.
 sub init()
     m.layer = m.top.findNode("layer")
     m.index = 0
     m.nodes = []
+    m.badge = invalid
+    m.global.observeField("requestsDownloading", "paintBadge")
 end sub
 
 sub build()
     t = th()
     m.layer.removeChildrenIndex(m.layer.getChildCount(), 0)
     m.nodes = []
+    m.badge = invalid
     items = m.top.items
     if items = invalid then items = []
     y = 240
@@ -32,10 +36,36 @@ sub build()
         tl.height = 44
         tl.vertAlign = "center"
         tip.visible = false
+        if it.key = "myrequests" then m.badge = makeCountBadge(g)
         m.nodes.Push({ square: sq, icon: ic, tip: tip })
         y = y + 76
     end for
     paint()
+    paintBadge()
+end sub
+
+' A small Accent dot with a number, on the icon's top right corner.
+function makeCountBadge(parent as object) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    g.translation = [42, -4]
+    disc = makeShape(g, "pkg:/images/circle_fill.png", 28, 28, t.accent)
+    l = makeLabel(g, "", 16, "semibold", t.onAccent)
+    l.width = 28
+    l.height = 28
+    l.horizAlign = "center"
+    l.vertAlign = "center"
+    return { group: g, disc: disc, label: l }
+end function
+
+sub paintBadge()
+    if m.badge = invalid then return
+    n = m.global.requestsDownloading
+    if n = invalid then n = 0
+    m.badge.group.visible = n > 0
+    text = n.ToStr()
+    if n > 9 then text = "9+"
+    m.badge.label.text = text
 end sub
 
 function keyIndex(key as string) as integer

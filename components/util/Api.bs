@@ -774,6 +774,34 @@ end function
 
 ' ================= Seerr data =================
 
+' How far along a requested title's downloads are, from the Radarr and
+' Sonarr progress Seerr attaches to its media (downloadStatus, and
+' downloadStatus4k for 4K). A show can have several episodes at once.
+' Returns { count, pct, detail }; count = 0 when nothing is downloading.
+function seerrDownloads(media as object) as object
+    items = []
+    for each key in ["downloadStatus", "downloadStatus4k"]
+        list = media[key]
+        if type(list) = "roArray" then items.Append(list)
+    end for
+    size = 0#
+    remain = 0#
+    eta = ""
+    for each d in items
+        if isValid(d.size) then size = size + d.size * 1#
+        if isValid(d.sizeLeft) then remain = remain + d.sizeLeft * 1#
+        tl = arrTimeLeft(safeStr(d.timeLeft))
+        if eta = "" then eta = tl
+    end for
+    pct = 0.0
+    if size > 0 then pct = (size - remain) / size
+    detail = ""
+    if size > 0 then detail = formatBytes(size - remain) + " of " + formatBytes(size)
+    if items.Count() > 1 then detail = items.Count().ToStr() + " episodes " + Chr(183) + " " + detail
+    if eta <> "" then detail = detail + " " + Chr(183) + " " + eta
+    return { count: items.Count(), pct: pct, detail: detail }
+end function
+
 function tmdbImage(path as dynamic, size as string) as string
     p = safeStr(path)
     if p = "" then return ""

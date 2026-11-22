@@ -331,6 +331,72 @@ sub placeLogo(logo as object, label as object, area as object)
     end if
 end sub
 
+' ================= Download rows =================
+
+' A download as a row w px wide: artwork, title, tags, a progress bar with
+' its state and details, and, when removable, a round remove button. it has
+' title, image, source, quality (tags; "" for none), pct, barColor,
+' stateLabel, stateColor and detail. Used by Activity and My requests.
+function makeQueueRow(parent as object, it as object, y as integer, removable as boolean, w = 1040 as integer) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    g.translation = [160, y]
+    makeBox(g, w, 130, 16, t.panel)
+    ring = makeFocusRing(g, w, 130, 16)
+    makeBox(g, 160, 90, 10, t.raised).translation = [24, 20]
+    if it.image <> ""
+        p = g.CreateChild("Poster")
+        p.translation = [24, 20]
+        p.width = 160
+        p.height = 90
+        p.loadWidth = 160
+        p.loadHeight = 90
+        p.loadDisplayMode = "scaleToZoom"
+        p.uri = it.image
+        makeShape(g, "pkg:/images/corners_r10.9.png", 160, 90, t.panel).translation = [24, 20]
+    end if
+    x = 208
+    title = makeLabel(g, it.title, 22, "semibold", t.text)
+    title.translation = [x, 18]
+    tw = measureText(it.title, 22, "semibold")
+    if tw > 480 then tw = 480
+    title.width = tw + 4
+    cx = x + tw + 16
+    if it.source <> ""
+        src = makeTag(g, it.source, { size: 15, h: 28 })
+        src.group.translation = [cx, 20]
+        cx = cx + src.w + 10
+    end if
+    if it.quality <> ""
+        q = makeTag(g, it.quality, { size: 15, h: 28 })
+        q.group.translation = [cx, 20]
+    end if
+    barW = w - x - 24
+    if removable then barW = barW - 60 - 24
+    bg = g.CreateChild("Rectangle")
+    bg.translation = [x, 62]
+    bg.width = barW
+    bg.height = 8
+    bg.color = t.barBg
+    fill = g.CreateChild("Rectangle")
+    fill.translation = [x, 62]
+    fill.width = Int(barW * it.pct)
+    fill.height = 8
+    fill.color = it.barColor
+    st = makeLabel(g, it.stateLabel, 17, "regular", it.stateColor)
+    st.translation = [x, 82]
+    dl = makeLabel(g, it.detail, 17, "regular", t.muted)
+    dl.translation = [x, 82]
+    dl.width = barW
+    dl.horizAlign = "right"
+    btn = invalid
+    if removable
+        btn = makeBtn(g, { kind: "round", icon: "close", h: 60, iconSize: 24 })
+        btn.group.translation = [w - 24 - 60, 35]
+    end if
+    return { ring: ring, btn: btn }
+end function
+
 ' ================= Fields =================
 
 ' A text field drawn like an input. OK opens the on-screen keyboard.

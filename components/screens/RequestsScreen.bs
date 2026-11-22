@@ -1,5 +1,6 @@
 ' Requests (the Requests board), powered by Seerr. Tabs: Discover (what's
-' trending), My requests (pending or downloading) and Ready to watch.
+' trending) and Ready to watch. Requests that aren't ready yet are on the
+' My requests screen.
 ' OK on a title that isn't on the server opens the request panel: quality,
 ' seasons for shows, then Send request. Requests go out as the signed-in
 ' User's own Seerr account.
@@ -16,7 +17,7 @@ sub init()
     m.sub.translation = [160, 166]
     m.sub.width = 1000
     m.tabHost = m.layer.CreateChild("Group")
-    m.tabs = makePills(m.tabHost, ["Discover", "My requests", "Ready to watch"], 0)
+    m.tabs = makePills(m.tabHost, ["Discover", "Ready to watch"], 0)
     last = m.tabs[m.tabs.Count() - 1]
     m.tabHost.translation = [1800 - (last.group.translation[0] + last.w), 150]
 
@@ -96,8 +97,7 @@ sub loadTab()
         seerrRequest("/discover/trending", { "page": "1" }, "onDiscover", "GET", invalid, m.gen)
     else
         if m.userId = "" then return
-        filter = "all"
-        if m.tab = 2 then filter = "available"
+        filter = "available"
         seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": filter, "requestedBy": m.userId }, "onRequests", "GET", invalid, m.gen)
     end if
 end sub
@@ -142,15 +142,11 @@ sub onRequests(event as object)
         if isValid(res.data.results)
             for each rq in res.data.results
                 md = rq.media
-                if isValid(md)
-                    ms = safeInt(md.status)
-                    keep = (m.tab = 2) or ms = 2 or ms = 3 or safeInt(rq.status) = 1
-                    if keep and m.slots.Count() < 24
-                        mt = safeStr(md.mediaType)
-                        m.slots.Push(invalid)
-                        m.pendingDetails = m.pendingDetails + 1
-                        seerrRequest("/" + mt + "/" + safeStr(md.tmdbId), {}, "onDetail", "GET", invalid, { gen: m.gen, slot: m.slots.Count() - 1, mediaType: mt })
-                    end if
+                if isValid(md) and m.slots.Count() < 24
+                    mt = safeStr(md.mediaType)
+                    m.slots.Push(invalid)
+                    m.pendingDetails = m.pendingDetails + 1
+                    seerrRequest("/" + mt + "/" + safeStr(md.tmdbId), {}, "onDetail", "GET", invalid, { gen: m.gen, slot: m.slots.Count() - 1, mediaType: mt })
                 end if
             end for
         end if
@@ -236,8 +232,6 @@ sub showEmpty()
         title = "Seerr isn" + Chr(8217) + "t set up"
         body = "An Administrator can add it in Settings " + Chr(8250) + " Servers & services."
     else if m.tab = 1
-        body = "Titles you request show up here until they" + Chr(8217) + "re ready to watch."
-    else if m.tab = 2
         body = "When something you asked for arrives, it shows up here."
     else
         body = "Loading..."
@@ -554,7 +548,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
                 loadTab()
             end if
         else if key = "right"
-            if m.tab < 2
+            if m.tab < 1
                 m.tab = m.tab + 1
                 paint()
                 loadTab()

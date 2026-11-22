@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- My requests: the signed-in User's Seerr requests that aren't ready yet,
+     with download progress. -->
+<component name="MyRequestsScreen" extends="Group">
+  <interface>
+    <field id="refresh" type="boolean" alwaysNotify="true" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="MyRequestsScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <children>
+    <Group id="layer" />
+    <Group id="list" />
+    <Group id="sink" focusable="true" />
+    <Timer id="poll" repeat="true" duration="30" />
+  </children>
+</component>

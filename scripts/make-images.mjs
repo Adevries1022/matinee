@@ -136,6 +136,21 @@ function save(name, w, h, rgba) {
 }
 
 // ---------- Icons (24-unit viewBox, drawn at 64 px) ----------
+// A gear outline: teeth flat-topped trapezoids between outer and inner radii.
+function gearPoints(cx, cy, outer, inner, teeth) {
+    const pts = [];
+    const step = (Math.PI * 2) / teeth;
+    const at = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    for (let i = 0; i < teeth; i++) {
+        const a = i * step - Math.PI / 2;
+        pts.push(at(inner, a - step * 0.5));
+        pts.push(at(inner, a - step * 0.27));
+        pts.push(at(outer, a - step * 0.17));
+        pts.push(at(outer, a + step * 0.17));
+        pts.push(at(inner, a + step * 0.27));
+    }
+    return pts;
+}
 const S = 1.8;
 const mirror = (pts) => pts.map(([x, y]) => [24 - x, y]);
 const icons = {
@@ -150,10 +165,9 @@ const icons = {
     mylist_on: [P.fillPoly([[6, 3], [18, 3], [18, 21], [12, 17], [6, 21]]), P.poly([[6, 3], [18, 3], [18, 21], [12, 17], [6, 21]], S, true)],
     requests: [P.poly([[12, 3], [14.6, 8.6], [20.6, 9.3], [16.1, 13.4], [17.3, 19.4], [12, 16.5], [6.7, 19.4], [7.9, 13.4], [3.4, 9.3], [9.4, 8.6]], S, true)],
     activity: [P.line(12, 4, 12, 15, S), P.poly([[7, 10.5], [12, 15.5], [17, 10.5]], S), P.line(5, 20, 19, 20, S)],
-    settings: [
-        P.circle(12, 12, 3, S), P.line(12, 2, 12, 5, S), P.line(12, 19, 12, 22, S), P.line(2, 12, 5, 12, S), P.line(19, 12, 22, 12, S),
-        P.line(4.9, 4.9, 7, 7, S), P.line(17, 17, 19.1, 19.1, S), P.line(4.9, 19.1, 7, 17, S), P.line(17, 7, 19.1, 4.9, S),
-    ],
+    settings: [P.poly(gearPoints(12, 12, 9.5, 7, 8), S, true), P.circle(12, 12, 3, S)],
+    // My requests: a download arrow inside a circle (Activity's arrow sits on a line).
+    downloads: [P.circle(12, 12, 9, S), P.line(12, 7, 12, 16, S), P.poly([[8.5, 12.5], [12, 16], [15.5, 12.5]], S)],
     play: [P.fillPoly([[7, 4.5], [7, 19.5], [19.5, 12]])],
     pause: [P.fillRect(6, 5, 4, 14, 1), P.fillRect(14, 5, 4, 14, 1)],
     info: [P.circle(12, 12, 9, 2), P.line(12, 11, 12, 17, 2), P.line(12, 7.5, 12, 8, 2)],

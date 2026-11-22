@@ -108,8 +108,12 @@ A User asking Seerr to add a movie, or some or all seasons of a show, in their o
 _Avoid_: Download, add
 
 **Requests**:
-The main screen for finding titles to Request and following one's own, with the tabs Discover, My requests and Ready to watch.
+The main screen for finding titles to Request, with the tabs Discover and Ready to watch.
 _Avoid_: Discover screen, Explore
+
+**My requests**:
+The main screen listing a User's own Requests that aren't ready to watch yet, with a progress bar for each download. Its Rail icon shows how many are downloading.
+_Avoid_: Downloads, request queue
 
 **Request Status**:
 Where a title stands in Seerr: Not requested, Pending approval, Downloading, Partly available or Available.
