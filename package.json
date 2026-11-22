@@ -15,7 +15,8 @@
     "sideload": "node scripts/sideload.mjs",
     "logs": "node scripts/logs.mjs",
     "screenshot": "node scripts/screenshot.mjs",
-    "key": "node scripts/key.mjs"
+    "key": "node scripts/key.mjs",
+    "images": "node scripts/make-images.mjs"
   },
   "devDependencies": {
     "@rokucommunity/bslint": "0.8.47",

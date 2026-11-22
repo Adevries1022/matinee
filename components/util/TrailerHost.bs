@@ -18,7 +18,7 @@ sub setupTrailer(layer as object, insertIndex as integer, hintY as integer)
     m.trailerVideo = v
 
     ' A quiet hint so people know the sound is one press away.
-    m.trailerHint = makeLabel(layer, "Press Play for sound", 24, true, th().textDim)
+    m.trailerHint = makeLabel(layer, "Press Play for sound", 24, true, th().muted)
     m.trailerHint.translation = [1920 - 96 - 400, hintY]
     m.trailerHint.width = 400
     m.trailerHint.horizAlign = "right"

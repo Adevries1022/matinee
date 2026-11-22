@@ -208,34 +208,6 @@ function themeTokens(prefs as object) as object
     t.cellPadX = 12
     t.cellPadY = 16
 
-    ' Kept until every screen moves to the Lumen kit.
-    t.textDim = t.muted
-    t.textFaint = t.faint
-    t.surface = t.white
-    t.surfaceOpacity = 0.10
-    t.surfaceHiOpacity = 0.14
-    t.focusBg = t.solid
-    t.onFocus = t.onSolid
-    t.onFocusDim = "0x4A505CFF"
-    t.focusColor = t.accent
-    t.scrim = t.black
-    t.trackBg = "0xFFFFFF40"
-    t.online = t.ok
-    t.frosted = false
-    t.reduceMotion = false
-    t.bigHero = false
-    t.miniCards = false
-    t.navStyle = "rail"
-    t.heroTop = 120
-    t.contentWidth = 1920 - t.leftPad
-    t.cardFocusScale = t.focusScale
-    t.fillUri = "pkg:/images/fill_r14.9.png"
-    t.pillUri = "pkg:/images/fill_r28.9.png"
-    t.ringUri = "pkg:/images/ring_r18_w4.9.png"
-    t.cornerUri = "pkg:/images/corners_r14.9.png"
-    t.ringInset = 0
-    t.ringStroke = 4
-    t.ringGap = 0
     return t
 end function
 
@@ -386,37 +358,6 @@ function makeIcon(parent as object, name as string, size as integer, color as st
     return p
 end function
 
-' A legacy themed button, kept for screens not yet on the Lumen kit.
-function makeButton(parent as object, text as string, minWidth = 0 as integer) as object
-    t = th()
-    g = parent.CreateChild("Group")
-    w = measureText(text, 24, "semibold") + 80
-    if w < minWidth then w = minWidth
-    bg = makeBox(g, w, 72, 14, t.white, 0.14)
-    l = g.CreateChild("Label")
-    l.font = makeFont(24, "semibold")
-    l.text = text
-    l.width = w
-    l.height = 72
-    l.horizAlign = "center"
-    l.vertAlign = "center"
-    l.color = t.text
-    return { group: g, bg: bg, label: l, width: w }
-end function
-
-sub paintButton(b as object, focused as boolean)
-    t = th()
-    if focused
-        b.bg.blendColor = t.solid
-        b.bg.opacity = 1.0
-        b.label.color = t.onSolid
-    else
-        b.bg.blendColor = t.white
-        b.bg.opacity = 0.14
-        b.label.color = t.text
-    end if
-end sub
-
 ' A horizontal fade from the Theme background on the left, as on the
 ' Home Hero ("hero") or the Detail screen ("detail").
 function makeFade(parent as object, kind as string, w as integer, h as integer) as object
@@ -441,32 +382,10 @@ function makeFadeUp(parent as object, w as integer, h as integer, color as strin
     return p
 end function
 
-' Legacy Hero shading, kept for screens not yet on the Lumen kit.
-sub addBackdropShade(parent as object, solidFrom as integer)
-    t = th()
-    makeFade(parent, "hero", 1920, 1080)
-    fade = makeFadeUp(parent, 1920, 300, t.bg)
-    fade.translation = [0, solidFrom - 300]
-    solid = parent.CreateChild("Rectangle")
-    solid.translation = [0, solidFrom]
-    solid.width = 1920
-    solid.height = 1080 - solidFrom
-    solid.color = t.bg
-end sub
-
 ' ================= Jellyfin data =================
 
 function imageUrl(itemId as string, imgType as string, width as integer) as string
     return m.global.serverUrl + "/Items/" + itemId + "/Images/" + imgType + "?fillWidth=" + width.ToStr() + "&quality=85"
-end function
-
-' A soft, pre-blurred copy of a backdrop for frosted panels.
-function blurredUrl(sharpUrl as string) as string
-    if sharpUrl = "" then return ""
-    if Left(sharpUrl, 8) = "https://" and Instr(1, sharpUrl, "image.tmdb.org") > 0
-        return sharpUrl.Replace("/w1280/", "/w300/")
-    end if
-    return sharpUrl.Replace("fillWidth=1920", "fillWidth=320") + "&blur=24"
 end function
 
 function imageTag(item as object, name as string) as string
@@ -949,7 +868,7 @@ end function
 
 ' A round avatar: colored circle with an initial, the User's picture on
 ' top if they have one, and a mask that rounds the corners.
-function makeAvatar(userId as string, name as string, avatarTag as string, size as integer, symbol = "" as string) as object
+function makeAvatar(userId as string, name as string, avatarTag as string, size as integer) as object
     g = CreateObject("roSGNode", "Group")
     bg = g.CreateChild("Rectangle")
     bg.width = size
@@ -962,13 +881,7 @@ function makeAvatar(userId as string, name as string, avatarTag as string, size 
     initial.vertAlign = "center"
     initial.color = th().bg
     initial.font = makeFont(Int(size * 0.4), "display")
-    if symbol <> ""
-        initial.text = symbol
-        initial.color = th().textDim
-        bg.color = th().raised
-    else
-        initial.text = UCase(Left(name, 1))
-    end if
+    initial.text = UCase(Left(name, 1))
     if userId <> "" and avatarTag <> ""
         pic = g.CreateChild("Poster")
         pic.width = size
@@ -994,23 +907,6 @@ function measureText(text as string, size as integer, style = "regular" as dynam
     w = l.boundingRect().width
     if w <= 0 then w = Len(text) * size * 0.55
     return Int(w)
-end function
-
-' A pill-shaped chip: { group, bg, label, width }
-function makeChip(parent as object, text as string) as object
-    t = th()
-    g = parent.CreateChild("Group")
-    w = measureText(text, 28, true) + 56
-    bg = makeShape(g, t.pillUri, w, 56, t.surface, 0)
-    l = g.CreateChild("Label")
-    l.font = makeFont(28, true)
-    l.text = text
-    l.width = w
-    l.height = 56
-    l.horizAlign = "center"
-    l.vertAlign = "center"
-    l.color = t.textFaint
-    return { group: g, bg: bg, label: l, width: w }
 end function
 
 ' The size of the cell a Card sits in (the Card plus room to grow).
