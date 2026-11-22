@@ -1,4 +1,10 @@
+---
+status: superseded
+---
+
 # Themes control the look; Layout Add-ons control layout
+
+**Superseded (November 2026) by the Lumen rebuild.** The app follows one set of design boards, so Layout Add-ons (Big Hero, Mini Cards) and Navigation Style are gone. Themes still set only the look and still belong to each User; Larger text and Portrait posters are plain per-User settings. The original decision follows.
 
 A Theme only sets visual style: colors, Accent, corner rounding, type and Card styling. Changes to layout, such as Big Hero and Mini Cards, are separate Layout Add-ons that can be combined with any Theme and with each other. We chose this over bundling layout into each Theme, as many Steam Deck themes do, so the user can mix and match. It also keeps the number of combinations we have to make look right manageable: every Theme has to work with every Add-on, but no Theme has to reimplement a layout.
 

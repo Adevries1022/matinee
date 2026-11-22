@@ -1,70 +1,142 @@
-# Matinee: a Jellyfin app for Roku (v2.3)
+# Matinee: a Jellyfin app for Roku
+
+Matinee is a Roku app for Jellyfin, with requests through Seerr and downloads from Radarr and Sonarr.
+
+> **This source is an unreleased rebuild.** It still reports version 2.3.1, but looks and works differently from the v2.3 releases, and parts of it have had little or no testing on a TV.
 
 ## Install or update (sideload)
 1. **Turn on Developer Mode on the Roku** (first time only). On the remote, press Home 3 times, Up 2 times, then Right, Left, Right, Left, Right. Accept the terms, set a password, and let the Roku restart. Write down the IP address it shows.
-2. On a computer on the same network, open `http://<roku-ip>` in a browser. Sign in with the username `rokudev` and your password.
-3. Click **Upload**, choose `matinee-v2.3.zip`, then click **Install with zip** (or **Replace**). Your server and sign-ins are kept.
-4. If Matinee asks, pick your server, then pick your name on **Who's watching?**. Approve the code it shows: in Jellyfin on your phone, go to your profile → **Quick Connect** and enter it. You can also press OK to use your password.
+2. Build `dist/matinee.zip` from source (see [Building from source](#building-from-source)). The zips from v2.3 and earlier don't include the rebuild.
+3. On a computer on the same network, open `http://<roku-ip>` in a browser. Sign in with the username `rokudev` and your password.
+4. Click **Upload**, choose the zip, then click **Install with zip** (or **Replace**).
+5. If Matinee asks, pick your server, then pick your name on **Who's watching?**. Approve the code it shows: in Jellyfin on your phone, go to your profile → **Quick Connect** and enter it. You can also press OK to use your password.
 
-Needs Jellyfin 10.9 or newer. Requests need Seerr.
+Updating keeps your server and sign-ins. **Going back to v2.3.x after installing this build means everyone signs in again**, because sign-ins are now saved per server and older versions can't read them.
+
+Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
+
+## Features
+
+### Watching
+- **Home:** a Hero for the title you're on, with Play or Resume, Details and My List, above Rows for Continue watching, Next up, Recently added, Picked for you and Highly rated.
+- **Series and Movies:** every show or movie from all your libraries, with Rows for what you're watching, what's new, what you haven't watched, and up to 14 genres.
+- **Details:** seasons and episodes for shows, More like this for movies, and buttons for My List, Watched, Start over (a movie you've started) and Trailer.
+- **My List:** your Jellyfin Favorites (movies and shows), so it's the same on every device. Filter by All, In progress or Not started.
+- **Search:** finds titles by name as you type. If you're signed in to Seerr, titles you could request follow the matches from your library.
+- **Player:** Matinee's own controls, with seeking, subtitle and audio choice, the next episode, and a countdown near the end of an episode. Picture-based subtitles (like PGS) are burned in by the server.
+- **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays behind the Hero, muted.
+
+### Requests and downloads
+- **Requests** appears in the Rail when Matinee finds Seerr. It looks on port 5055 of the Jellyfin machine unless an Administrator enters an address. Each person signs in to Seerr with their Jellyfin account, so requests are in their name. Its tabs are Discover, My requests and Ready to watch.
+- A show can be requested as all seasons, Season 1 or only the latest season. **4K** is offered only when "Show 4K requests" is on and Seerr has a 4K server for that kind of title.
+- **Activity** appears once Radarr or Sonarr is set up, with the download queue, what's coming up this week and storage space. Anyone can look; only an Administrator can remove a download. "Show queue on Home" adds a Row of downloads.
+
+### Settings
+| Section | What's there | Who can change it |
+|---|---|---|
+| Servers & services | Jellyfin, Seerr, Radarr and Sonarr, the away address, Test connection, Add another server | Administrators. Each person controls their own Seerr sign-in, bitrate and Direct play |
+| Themes | Six Themes, five Accents or the Theme's default, Larger text, Portrait posters | Each person, for themselves |
+| Users | Switch user, Manage profiles, Sign out | Anyone |
+| Users | Always show Who's watching | Administrators |
+| Playback & quality | Bitrate, Direct play, Trailer previews, playing the next episode automatically | Each person, for themselves |
+| Subtitles | On, off or the server's default, and a preferred language | Each person, for themselves |
+| About this device | Matinee, Roku and server details | View only |
+
+### Servers and sign-ins
+- **Connect** finds servers on your network, takes a typed address, or signs you in with Quick Connect on the server you highlighted or entered.
+- Sign-ins are saved separately for each server. Manage profiles on Who's watching forgets one.
+- **Who's watching?** opens at start when more than one person could be watching, or every time if "Always show Who's watching" is on.
+- An **away address** belongs to one server and is tried at start when that server's main address doesn't answer.
+- After an Administrator first signs in to a server, an optional step offers to set up the other services.
 
 ## Remote controls
+
+### Getting around
 | Where | Button | What it does |
 |---|---|---|
-| Any browse screen | Left (Side Rail) or Up (Top Bar) | Opens the main menu |
-| Main menu | Right or Back | Closes the menu |
-| Home rows | OK on **Continue Watching** or **Next Up** | Plays right away, picking up where you left off |
-| Home rows | OK on anything else | Opens details |
-| Any row | * (options) | Opens details for the selected title |
-| Lower rows | Back | Jumps back to the first row |
-| Show details | Down | Goes to seasons, then episodes |
-| Any row (after a few seconds) | Play | Turns the Trailer Preview's sound on or off |
-| Search | Right / Left | Moves between the keyboard and the results grid |
-| Playing | * (options) | Opens the Track Picker for audio and subtitles |
-| Near the end of an episode | OK / Back | Plays the next episode now / keeps watching |
-| Settings | OK | Opens a setting's options; Up/Down previews each one live, OK keeps it, Back cancels |
-| Who's watching? | * (options) | Change server |
+| Home, Series, Movies, Search, My List, Requests, Activity | Left from the leftmost item | Opens the Rail |
+| Rail | Up / Down, then OK | Goes to that screen |
+| Rail | Right or Back | Closes it |
+| Most screens | Back | Goes back. From Home or Who's watching, exits Matinee |
 
-## What's new in v2.3
-- **Cleaner Focused Cards:** each Card grows from its centre inside its own space, with a single ring just outside its edge. No more double border or clipped edges.
-- **Bigger menu:** larger Side Rail icons and labels.
-- **Trailer Preview:** works with servers older than 10.9 too, and writes what it's doing to the Roku debug log (`telnet <roku-ip> 8085`) so missing trailers are easy to diagnose.
+### Home, Series and Movies
+| Where | Button | What it does |
+|---|---|---|
+| Continue watching, Next up | OK | Plays, picking up where you left off |
+| Other Rows | OK | Opens details (or Activity, for a download) |
+| Any Row | * | Opens details |
+| First Row | Up | Moves to Play, Details and My List |
+| Play, Details and My List | Up | Moves to the server pill (opens Settings) and your avatar (switches user) |
+| Any Row or button | Play | Turns a playing Trailer Preview's sound on or off. With none playing, plays the Hero's title |
+| Rows, away from the first Card | Back | Jumps to the first Card |
 
-## What's new in v2.2
-- **New name:** Marquee is now **Matinee**. The Marquee Classic Theme is now called **Amber**. Your sign-ins and settings carry over.
-- **Trailer Preview:** stay on a title for about 3 seconds and its trailer fades in behind the title, muted. Press Play for sound. Works on Home, in libraries and on details pages. It uses trailer files stored on your server; **Trailarr** (an arr-stack app) can download them for your whole library. Reduce Motion turns it off.
-- **Search is a grid again:** your library first, then **Not in your library** for titles you can request, with an **Info Line** naming whatever you're on.
-- **Redesigned Settings:** two tiles, Appearance and Connections. Each setting opens a short list of options that previews live, and Themes show as picture cards.
-- **Fixed:** Focused Cards no longer get their tops cut off.
+### Other screens
+| Where | Button | What it does |
+|---|---|---|
+| Details | Up / Down | Moves between the back pill, buttons, seasons and Cards |
+| Details, on the seasons | Left / Right | Shows another season |
+| Details, on a button | Play | Plays or resumes |
+| Search, on the keys | Right past the last column | Moves to the results |
+| Search, on the keys | Instant Replay | Deletes a letter |
+| Search, in the results | Left from the first column, or Back | Returns to the keys |
+| My List | * | Removes the title from My List and from your Jellyfin Favorites |
+| My List, Requests, Activity | Up from the top | Moves to the filters or tabs |
+| Requests | OK | Opens details for an available title, or the request panel for one you can ask for |
+| Activity | OK | Administrators: asks before removing the download |
+| Settings | Right or OK / Left or Back | Goes into a section / back out (Themes opens with OK) |
+| Settings, on a value | OK | Changes it to the next choice, or opens the keyboard |
+| Who's watching? | Down | Moves to Manage profiles |
+| Who's watching? | * | Changes server (anyone can) |
+| Connect | Right or OK / Left or Back | Goes into a method / back to the list |
+| Connect, on the list of methods | Back | Cancels if you opened it from inside Matinee; otherwise exits |
+| Sign in | OK or Play | Uses a password instead of the code |
+| Keyboard | Play, or Down then OK | Done |
+| Keyboard | Back | Cancels |
 
-## What's new in v2.1
-- **Themes:** Midnight Glass (the default: black, rounded and frosted), Void (pure black, flat and sharp) and Amber (the original look). Each has its own Accent, which you can change.
-- **Layout Add-ons** that mix with any Theme: **Big Hero** (taller artwork, less text) and **Mini Cards** (more titles on screen).
-- **Menu style:** a Side Rail down the left edge, or the Top Bar.
-- **Settings**, with a live preview. **Appearance** is set separately for each person. **Connections** applies to the whole TV, and only Jellyfin administrators can change it.
-- **Track Picker** during playback. It follows each person's Jellyfin audio and subtitle preferences, and your choice carries on to the next episode. Picture-based subtitles (like PGS) are burned in by the server.
-- **Requests through Seerr:** Matinee finds Seerr on its own (port 5055 on the Jellyfin machine). Each person signs in once with Quick Connect. You get a **Discover** page, plus a **Not in your library** row in Search with status badges (Requested, Downloading, Partly available). Shows can be requested in full or season by season.
-- **Smoother on lower-end TVs:** artwork loads at the size it's shown and fades in, the next row loads ahead, and there's a **Reduce Motion** setting.
+### Playing
+| Where | Button | What it does |
+|---|---|---|
+| Controls hidden | OK, Up or Down | Shows the controls. They hide again after 5 seconds |
+| Controls hidden, or on the seek bar | Left / Right | Back or forward 10 seconds. Presses add up before the jump |
+| Seek bar | OK | Pauses or resumes |
+| Controls showing | Up / Down | Moves between the back button, seek bar and buttons |
+| Anywhere | Play/Pause | Pauses or resumes |
+| Anywhere | Rewind / Fast-forward | Back or forward 30 seconds |
+| Anywhere | * | Opens the subtitle choices |
+| Subtitle or audio choices | OK | Chooses |
+| Subtitle or audio choices | Back, Left or * | Closes |
+| End-of-episode countdown | OK or Play | Plays the next episode now |
+| End-of-episode countdown | Back | Keeps watching |
+| Anywhere else | Back | Stops and leaves the Player |
 
-## Earlier
-- v1.1: finds your server automatically, Who's watching?, Quick Connect sign-in, Switch User.
-- v1: the first version, with a Netflix-style home screen, search, details, playback and Up Next.
+## Limits
+- **Self-signed certificates** are accepted for API calls only, and are allowed by default (turn "Allow self-signed certificates" off on Connect to refuse them). The Roku loads video and artwork itself, so those need a certificate it trusts.
+- **Trailers** are only those stored on your Jellyfin server; online trailer links aren't played. Trailarr can download trailers for your library.
+- **Downloads can't be paused**, because Radarr and Sonarr can't pause them. Removing one also removes it from the download client.
+- **Administrator-only settings don't lock the TV:** anyone can change the server from Who's watching.
+- **View only:** which libraries are shown, Radarr and Sonarr's quality profile and root folder, and Seerr's auto-approve.
+- The seek bar doesn't show what's buffered and has no thumbnails.
+- Subtitle size and style come from the Roku's own captions settings.
 
 ## Not yet
-Music, Live TV, Collections rows.
+Music, Live TV, Collections Rows.
 
 ## Files
 - `components/screens/`: the screens
-- `components/MainMenu.*`: the Side Rail and Top Bar
-- `components/CardItem.*`: the poster and thumbnail card
-- `components/util/Api.bs`: Theme tokens, Jellyfin and Seerr requests, shared drawing helpers
+- `components/MainScene.*`: start-up, the screen stack and saved sign-ins
+- `components/MainMenu.*`: the Rail
+- `components/CardItem.*`, `components/RequestItem.*`: the Cards
+- `components/util/Api.bs`: Theme tokens, requests to each service, shared drawing helpers
+- `components/util/Ui.bs`: buttons, pills, fields and the rest of the component kit
+- `fonts/`: Inter and Space Grotesk, under the SIL Open Font License (included)
+- `images/`: icons and shapes, mostly drawn by `scripts/make-images.mjs`
 - `CONTEXT.md` and `docs/adr/`: the project glossary and design decisions
 
 ## Building from source
 Matinee is written in [BrighterScript](https://github.com/rokucommunity/brighterscript) (`.bs` files) and compiled to plain BrightScript before it goes on the TV. You need Node.js 20.12 or newer; it works the same on Windows, macOS and Linux.
 
 1. `npm install`
-2. Copy `.env.example` to `.env` and fill in your Roku's IP address and developer password (plus the Jellyfin and Seerr details if you use them). `.env` is never committed.
+2. Copy `.env.example` to `.env` and fill in your Roku's IP address and developer password. The Jellyfin, Seerr, Radarr and Sonarr entries are optional, for checking things from the computer; the app on the TV doesn't read them. `.env` is never committed.
 3. Use these commands:
 
 | Command | What it does |
@@ -72,4 +144,8 @@ Matinee is written in [BrighterScript](https://github.com/rokucommunity/brighter
 | `npm run build` | Compiles and lints, then writes `dist/matinee.zip`. Stops on any error. |
 | `npm run lint` | Compiles and lints without making the zip. |
 | `npm run deploy` | Builds, then installs the zip on the Roku. |
+| `npm run sideload` | Installs the zip that's already built. |
 | `npm run logs` | Streams the Roku's debug log. Ctrl+C to stop. |
+| `npm run images` | Redraws the icons and shapes in `images/`. |
+| `npm run screenshot -- <name>` | Saves what Matinee shows to `screenshots/<name>.jpg`. Video isn't captured. |
+| `npm run key -- Left Down OK` | Presses remote buttons. The TV needs Control by mobile apps → Network access set to Permissive. |
