@@ -13,6 +13,7 @@ sub setupMenu(currentKey as string)
     m.top.appendChild(m.menu)
     m.global.observeField("seerrState", "onMenuSourcesChanged")
     m.global.observeField("views", "onMenuSourcesChanged")
+    m.global.observeField("servicesVersion", "onMenuSourcesChanged")
 end sub
 
 function menuItems() as object

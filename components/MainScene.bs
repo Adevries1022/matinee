@@ -23,6 +23,7 @@ sub init()
     g.addField("seerrUrl", "string", false)
     g.addField("seerrCookie", "string", false)
     g.addField("seerrState", "string", false)
+    g.addField("servicesVersion", "integer", false)
     g.deviceId = di.GetChannelClientId()
     g.watchVersion = 0
     g.prefsVersion = 0
@@ -40,6 +41,7 @@ sub init()
     g.observeField("prefsVersion", "onPrefsChanged")
     onPrefsChanged()
 
+    m.offerServices = false
     if reg.Exists("server")
         g.serverUrl = reg.Read("server")
         checkServer()
@@ -81,6 +83,14 @@ end sub
 sub onPublicUsers(event as object)
     res = event.getData()
     if not res.ok and res.code <= 0
+        ' Away from home: try the other address once.
+        away = readSetting("serverAway", "")
+        if away <> "" and m.global.serverUrl <> away
+            print "[Matinee] server didn't answer, trying the away address"
+            m.global.serverUrl = away
+            checkServer()
+            return
+        end if
         showServerPicker("Couldn't reach your server at " + m.global.serverUrl + ". Pick it again, or choose another one.")
         return
     end if
@@ -147,6 +157,14 @@ sub startUser(admin as boolean)
     clearStack()
     showHome()
     initSeerr()
+    ' Step 3 of setup, once per server, for an Administrator who just signed in.
+    if admin and m.offerServices and readSetting("servicesOffered_" + sessionsKey(), "") = ""
+        writeSetting("servicesOffered_" + sessionsKey(), "true")
+        s = CreateObject("roSGNode", "SettingsScreen")
+        s.setup = true
+        pushScreen(s)
+    end if
+    m.offerServices = false
 end sub
 
 sub rememberLast(id as string)
@@ -159,6 +177,7 @@ end sub
 
 sub initSeerr()
     m.global.seerrState = "none"
+    if readSetting("seerrEnabled", "true") <> "true" then return
     reg = CreateObject("roRegistrySection", "Marquee")
     m.global.seerrCookie = ""
     cookieKey = "seerr_" + m.global.userId
@@ -338,6 +357,8 @@ sub onNavigate(event as object)
     else if a = "settings"
         popTo(1)
         pushScreen(CreateObject("roSGNode", "SettingsScreen"))
+    else if a = "themes"
+        pushScreen(CreateObject("roSGNode", "ThemesScreen"))
     else if a = "seerrDetails"
         sd = CreateObject("roSGNode", "SeerrDetailsScreen")
         pushScreen(sd)
@@ -370,6 +391,8 @@ sub onNavigate(event as object)
         onServerChosen(nav)
     else if a = "userChosen"
         onUserChosen(nav.user)
+    else if a = "quickConnected"
+        onQuickConnected(nav)
     else if a = "authenticated"
         onAuthenticated(nav)
     end if
@@ -394,13 +417,17 @@ function screenLabel(s as object) as string
 end function
 
 sub onServerChosen(nav as object)
+    saveServer(nav)
+    checkServer()
+end sub
+
+' Remember the chosen server. Sign-ins are kept per server; Seerr is
+' looked for again on the new one.
+sub saveServer(nav as object)
     reg = CreateObject("roRegistrySection", "Marquee")
     previous = ""
     if reg.Exists("server") then previous = reg.Read("server")
-    ' Saved sign-ins and Seerr belong to one server.
     if previous <> nav.url
-        m.sessions = {}
-        writeSessions(m.sessions)
         reg.Delete("lastUserId")
         reg.Delete("seerrUrl")
     end if
@@ -408,7 +435,7 @@ sub onServerChosen(nav as object)
     reg.Write("serverName", safeStr(nav.name))
     reg.Flush()
     m.global.serverUrl = nav.url
-    checkServer()
+    m.sessions = readSessions()
 end sub
 
 sub onUserChosen(u as object)
@@ -423,7 +450,13 @@ sub onUserChosen(u as object)
     s.user = u
 end sub
 
+sub onQuickConnected(nav as object)
+    saveServer(nav)
+    onAuthenticated(nav)
+end sub
+
 sub onAuthenticated(nav as object)
+    m.offerServices = true
     m.sessions[nav.userId] = { token: nav.token, name: nav.userName, imageTag: safeStr(nav.imageTag) }
     writeSessions(m.sessions)
     m.global.token = nav.token

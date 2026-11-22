@@ -1,15 +1,23 @@
+' Typing on the TV: a title, the Roku keyboard and a solid button under it.
+' Play on the remote submits from anywhere; Back cancels.
 sub init()
-    m.titleLabel = m.top.findNode("titleLabel")
-    m.hintLabel = m.top.findNode("hintLabel")
-    m.kb = m.top.findNode("kb")
-    m.btn = m.top.findNode("btn")
-    m.btnRect = m.top.findNode("btnRect")
-    m.btnLabel = m.top.findNode("btnLabel")
     t = th()
     m.top.findNode("veil").color = t.bg
-    m.titleLabel.color = t.text
-    m.hintLabel.color = t.textDim
-    m.top.findNode("tip").color = t.textFaint
+    m.layer = m.top.findNode("layer")
+    m.kb = m.top.findNode("kb")
+    m.titleLabel = makeTitle(m.layer, "", 48)
+    m.titleLabel.translation = [0, 96]
+    m.titleLabel.width = 1920
+    m.titleLabel.horizAlign = "center"
+    m.hintLabel = makeLabel(m.layer, "", 22, "regular", t.muted)
+    m.hintLabel.translation = [260, 168]
+    m.hintLabel.width = 1400
+    m.hintLabel.horizAlign = "center"
+    m.hintLabel.wrap = true
+    tip = makeLabel(m.layer, "Press Down to reach the button, or Play to continue. Back cancels.", 20, "regular", t.faint)
+    tip.translation = [0, 1010]
+    tip.width = 1920
+    tip.horizAlign = "center"
 
     m.kb.textEditBox.maxTextLength = 200
     m.onButton = false
@@ -23,21 +31,27 @@ sub init()
         if br.width > 200 then kbW = br.width
         if br.height > 200 then kbH = br.height
     end if
-    top = 250
+    top = 240
     m.kb.translation = [Int((1920 - kbW) / 2), top]
-    btnY = top + kbH + 36
-    if btnY > 920 then btnY = 920
-    m.btn.translation = [Int((1920 - 440) / 2), btnY]
-
+    m.btnY = top + kbH + 36
+    if m.btnY > 920 then m.btnY = 920
+    m.btn = makeBtn(m.layer, { kind: "primary", text: m.top.buttonText, padX: 48, w: 320 })
+    placeButton()
     applyLabels()
     paint()
     m.top.observeField("focusedChild", "onFocusChanged")
 end sub
 
+sub placeButton()
+    m.btn.group.translation = [Int((1920 - m.btn.w) / 2), m.btnY]
+end sub
+
 sub applyLabels()
+    if m.titleLabel = invalid then return
     m.titleLabel.text = m.top.title
     m.hintLabel.text = m.top.hint
-    m.btnLabel.text = m.top.buttonText
+    setBtnText(m.btn, m.top.buttonText)
+    placeButton()
 end sub
 
 sub applyText()
@@ -51,16 +65,7 @@ sub applySecure()
 end sub
 
 sub paint()
-    t = th()
-    if m.onButton
-        m.btnRect.blendColor = t.focusBg
-        m.btnRect.opacity = 1.0
-        m.btnLabel.color = t.onFocus
-    else
-        m.btnRect.blendColor = t.surface
-        m.btnRect.opacity = t.surfaceHiOpacity
-        m.btnLabel.color = t.text
-    end if
+    paintBtn(m.btn, m.onButton)
 end sub
 
 sub onFocusChanged()
@@ -95,7 +100,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "down"
         m.onButton = true
         paint()
-        m.top.setFocus(true)
+        m.top.findNode("sink").setFocus(true)
         return true
     end if
     return false

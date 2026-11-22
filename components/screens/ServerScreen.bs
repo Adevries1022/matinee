@@ -1,195 +1,575 @@
+' Connect a server (the Connect board), step 1 of setup. On the left, three
+' ways in: servers found on this network, typing an address, or Quick
+' Connect from a phone. The panel on the right follows the Focused method;
+' Right moves into it.
+
 sub init()
     t = th()
-    m.top.findNode("brand").color = t.accent
-    m.top.findNode("heading").color = t.text
-    m.status = m.top.findNode("status")
-    m.status.color = t.textDim
-    m.list = m.top.findNode("list")
+    m.layer = m.top.findNode("layer")
+    m.panelLayer = m.top.findNode("panelLayer")
+    m.poll = m.top.findNode("poll")
+    m.clock = m.top.findNode("clock")
+    m.poll.observeField("fire", "onPoll")
+    m.clock.observeField("fire", "onClock")
+
+    makeWordmark(m.layer).translation = [160, 64]
+    makeSteps(m.layer, 1, 1760, 70)
+    title = makeTitle(m.layer, "Connect to Jellyfin", 72)
+    title.translation = [160, 200]
+    title.width = 600
+    title.wrap = true
+    title.lineSpacing = -14
+    titleH = Int(title.boundingRect().height)
+    intro = makeLabel(m.layer, "Pick a server on your network, type its address, or sign in with a code from your phone.", 24, "regular", t.meta)
+    intro.translation = [160, 200 + titleH + 20]
+    intro.width = 600
+    intro.wrap = true
+    intro.lineSpacing = 10
+    m.status = makeLabel(m.layer, "", 20, "regular", t.muted)
+    m.status.translation = [160, 880]
+    m.status.width = 600
+    m.status.wrap = true
+
+    m.methods = []
+    defs = [["Found on your network", "Looking for servers"], ["Enter address", "For remote or reverse-proxied servers"], ["Quick Connect", "Sign in from another device"]]
+    top = 200 + titleH + 20 + Int(intro.boundingRect().height) + 40
+    for i = 0 to 2
+        m.methods.Push(makeMethod(defs[i][0], defs[i][1], top + i * 100))
+    end for
+
     m.top.observeField("focusedChild", "onFocusChanged")
-    m.items = []
-    m.rows = []
-    m.index = 0
+    m.method = 0
+    m.zone = "methods"
+    m.item = 0
     m.panel = invalid
     m.busy = false
     m.found = []
+    m.versions = {}
+    m.address = readSetting("server", "")
+    if m.address = "" then m.address = "http://"
+    m.awayOn = readSetting("serverAway", "") <> ""
+    m.away = readSetting("serverAway", "")
+    m.selfSigned = readSetting("allowSelfSigned", "true") = "true"
+    m.secret = ""
+    m.qcDone = false
+    m.message = ""
     scan()
+    paintMethods()
+    renderPanel()
+end sub
+
+function makeMethod(label as string, hint as string, y as integer) as object
+    t = th()
+    g = m.layer.CreateChild("Group")
+    g.translation = [160, y]
+    bg = makeBox(g, 600, 88, 16, t.panel)
+    ring = makeFocusRing(g, 600, 88, 16)
+    l = makeLabel(g, label, 24, "semibold", t.text)
+    l.translation = [28, 14]
+    h = makeLabel(g, hint, 18, "regular", t.muted)
+    h.translation = [28, 50]
+    h.width = 550
+    return { bg: bg, ring: ring, label: l, hint: h }
+end function
+
+sub paintMethods()
+    t = th()
+    for i = 0 to m.methods.Count() - 1
+        mt = m.methods[i]
+        on = (i = m.method)
+        if on
+            mt.bg.blendColor = t.solid
+            mt.label.color = t.onSolid
+            mt.hint.color = "0x3A4150FF"
+        else
+            mt.bg.blendColor = t.panel
+            mt.label.color = t.text
+            mt.hint.color = t.muted
+        end if
+        mt.ring.visible = on and m.zone = "methods"
+    end for
+    n = m.found.Count()
+    hint = "Looking for servers"
+    if m.scanDone = true
+        if n = 0
+            hint = "None found yet"
+        else if n = 1
+            hint = "1 server nearby"
+        else
+            hint = n.ToStr() + " servers nearby"
+        end if
+    end if
+    m.methods[0].hint.text = hint
 end sub
 
 sub onMessage()
-    if m.top.message <> "" then m.status.text = m.top.message
+    if m.top.message <> ""
+        m.status.text = m.top.message
+        m.status.color = th().error
+    end if
 end sub
 
+' ---------- Finding servers ----------
+
 sub scan()
-    if m.top.message = "" then m.status.text = "Looking for Jellyfin servers on your network..."
-    m.found = []
-    renderList()
+    m.scanDone = false
     m.disc = CreateObject("roSGNode", "DiscoveryTask")
     m.disc.observeField("servers", "onServers")
     m.disc.control = "RUN"
 end sub
 
 sub onServers()
-    m.found = m.disc.servers
-    if m.found = invalid then m.found = []
-    n = m.found.Count()
-    if m.top.message = ""
-        if n = 0
-            m.status.text = "No servers found automatically. Make sure the TV and the server are on the same network, or enter the address yourself."
-        else if n = 1
-            m.status.text = "Found your server. Press OK to connect."
-        else
-            m.status.text = "Found " + n.ToStr() + " servers. Pick one."
-        end if
+    m.scanDone = true
+    list = m.disc.servers
+    if list = invalid then list = []
+    m.found = []
+    for each s in list
+        m.found.Push({ name: safeStr(s.name), url: normalizeUrl(safeStr(s.address)) })
+    end for
+    ' The server used last stays on the list even when it doesn't answer.
+    saved = readSetting("server", "")
+    if saved <> ""
+        known = false
+        for each f in m.found
+            if f.url = saved then known = true
+        end for
+        if not known then m.found.Push({ name: readSetting("serverName", "Last used server"), url: saved })
     end if
-    m.index = 0
-    renderList()
+    for i = 0 to m.found.Count() - 1
+        startRequest(m.found[i].url, "/System/Info/Public", {}, "onVersion", "GET", invalid, m.found[i].url, "", {})
+    end for
+    paintMethods()
+    if m.method = 0 then renderPanel()
 end sub
 
-sub renderList()
-    m.items = []
-    for each s in m.found
-        m.items.Push({ kind: "server", name: s.name, url: normalizeUrl(s.address) })
-    end for
-    reg = CreateObject("roRegistrySection", "Marquee")
-    if reg.Exists("server")
-        saved = reg.Read("server")
-        known = false
-        for each it in m.items
-            if it.url = saved then known = true
-        end for
-        if not known and saved <> ""
-            savedName = "Last used server"
-            if reg.Exists("serverName") then savedName = reg.Read("serverName")
-            m.items.Push({ kind: "server", name: savedName, url: saved })
-        end if
+sub onVersion(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        v = safeStr(res.data.Version)
+        parts = v.Split(".")
+        if parts.Count() >= 2 then v = parts[0] + "." + parts[1]
+        m.versions[safeStr(res.tag)] = "v" + v
+        if m.method = 0 then renderPanel()
     end if
-    m.items.Push({ kind: "manual", name: "Enter address manually", url: "" })
-    m.items.Push({ kind: "rescan", name: "Search again", url: "" })
+end sub
 
-    m.list.removeChildrenIndex(m.list.getChildCount(), 0)
-    m.rows = []
+' ---------- The panel ----------
+
+sub renderPanel()
+    t = th()
+    p = m.panelLayer
+    p.removeChildrenIndex(p.getChildCount(), 0)
+    makePanel(p, 880, 760, 24).translation = [880, 200]
+    m.items = []
+    x = 936
+    if m.method = 0
+        h = makeLabel(p, "Servers on this network", 30, "semibold", t.text)
+        h.translation = [x, 256]
+        if not m.scanDone
+            sc = makeIcon(p, "scan", 24, t.muted)
+            sc.translation = [1580, 264]
+            sl = makeLabel(p, "Scanning", 18, "regular", t.muted)
+            sl.translation = [1614, 262]
+        end if
+        y = 320
+        for i = 0 to m.found.Count() - 1
+            if y < 760
+                f = m.found[i]
+                g = p.CreateChild("Group")
+                g.translation = [x, y]
+                makeBox(g, 768, 112, 16, t.raised)
+                ring = makeFocusRing(g, 768, 112, 16)
+                makeBox(g, 64, 64, 14, t.bg).translation = [28, 24]
+                makeIcon(g, "server", 36, t.accent).translation = [42, 38]
+                makeLabel(g, f.name, 26, "semibold", t.text).translation = [116, 24]
+                makeLabel(g, Mid(f.url, Instr(1, f.url, "//") + 2), 18, "regular", t.muted).translation = [116, 62]
+                ver = m.versions[f.url]
+                if ver <> invalid
+                    vl = makeLabel(p, ver, 18, "regular", t.muted)
+                    vl.translation = [x + 600, y + 44]
+                    vl.width = 140
+                    vl.horizAlign = "right"
+                end if
+                m.items.Push({ kind: "server", ring: ring, url: f.url, name: f.name })
+                y = y + 128
+            end if
+        end for
+        note = makeLabel(p, "Don" + Chr(8217) + "t see yours? Make sure the Roku and the server are on the same network, or enter the address manually.", 18, "regular", t.muted)
+        note.translation = [x, y + 8]
+        note.width = 768
+        note.wrap = true
+        note.lineSpacing = 8
+    else if m.method = 1
+        makeLabel(p, "Server address", 30, "semibold", t.text).translation = [x, 256]
+        makeLabel(p, "Address, including port or https", 18, "regular", t.muted).translation = [x, 316]
+        f = makeField(p, 768, 80, { r: 14, size: 26, text: m.address })
+        f.group.translation = [x, 350]
+        m.items.Push({ kind: "field", field: f, key: "address" })
+        c1 = makeCheck(p, "Allow self-signed certificates")
+        c1.group.translation = [x, 466]
+        setCheck(c1, m.selfSigned)
+        m.items.Push({ kind: "check", check: c1, key: "self" })
+        c2 = makeCheck(p, "Use a different address when away from home")
+        c2.group.translation = [x, 516]
+        setCheck(c2, m.awayOn)
+        m.items.Push({ kind: "check", check: c2, key: "away" })
+        y = 576
+        if m.awayOn
+            f2 = makeField(p, 768, 68, { size: 22, text: m.away, placeholder: "Away address, e.g. https://jellyfin.example.com" })
+            f2.group.translation = [x, y]
+            m.items.Push({ kind: "field", field: f2, key: "awayAddress" })
+            y = y + 92
+        end if
+        b1 = makeBtn(p, { kind: "primary", text: "Connect", padX: 40 })
+        b2 = makeBtn(p, { kind: "secondary", text: "Test connection", size: 22, padX: 32 })
+        rowBtns([b1, b2], x, y + 12, 16)
+        m.items.Push({ kind: "buttons", buttons: [b1, b2], col: 0 })
+        m.msg = makeLabel(p, m.message, 20, "regular", t.muted)
+        m.msg.translation = [x, y + 108]
+        m.msg.width = 768
+        m.msg.wrap = true
+        if m.messageColor <> invalid then m.msg.color = m.messageColor
+        note = makeLabel(p, "Self-signed certificates work for browsing; video playback still needs a certificate the Roku trusts.", 16, "regular", t.faint)
+        note.translation = [x, 900]
+        note.width = 768
+        note.wrap = true
+    else
+        makeLabel(p, "Quick Connect", 30, "semibold", t.text).translation = [x, 256]
+        intro = makeLabel(p, "On your phone or computer, open Jellyfin, go to Quick Connect in your user menu and enter:", 22, "regular", t.meta)
+        intro.translation = [x, 312]
+        intro.width = 768
+        intro.wrap = true
+        intro.lineSpacing = 10
+        code = m.qcCode
+        if code = invalid then code = ""
+        for i = 0 to 5
+            g = p.CreateChild("Group")
+            g.translation = [x + i * 110, 420]
+            makeBox(g, 96, 120, 16, t.bg)
+            makeOutline(g, 96, 120, 16, t.line)
+            d = makeLabel(g, Mid(code, i + 1, 1), 64, "display", t.text)
+            d.width = 96
+            d.height = 120
+            d.horizAlign = "center"
+            d.vertAlign = "center"
+        end for
+        sg = p.CreateChild("Group")
+        sg.translation = [x, 576]
+        makeShape(sg, "pkg:/images/circle.png", 10, 10, t.accent).translation = [0, 11]
+        m.qcStatus = makeLabel(sg, qcStatusText(), 20, "regular", t.muted)
+        m.qcStatus.translation = [22, 0]
+        m.qcStatus.width = 740
+        foot = makeLabel(p, "Quick Connect must be turned on in the server" + Chr(8217) + "s dashboard.", 18, "regular", t.muted)
+        foot.translation = [x, 630]
+        foot.width = 768
+    end if
+    if m.item >= m.items.Count() then m.item = 0
+    paintPanel()
+end sub
+
+sub paintPanel()
     for i = 0 to m.items.Count() - 1
         it = m.items[i]
-        g = m.list.CreateChild("Group")
-        g.translation = [0, i * 124]
-        r = makeShape(g, th().fillUri, 1100, 108, th().panel)
-        n = g.CreateChild("Label")
-        n.translation = [36, 0]
-        n.width = 1030
-        n.font = makeFont(34, true)
-        n.text = it.name
-        u = g.CreateChild("Label")
-        u.translation = [36, 62]
-        u.width = 1030
-        u.font = makeFont(24)
-        u.text = it.url
-        if it.url = ""
-            n.height = 108
-            n.vertAlign = "center"
-        else
-            n.translation = [36, 14]
-        end if
-        m.rows.Push({ rect: r, name: n, url: u })
-    end for
-    if m.index >= m.items.Count() then m.index = 0
-    paint()
-end sub
-
-sub paint()
-    t = th()
-    for i = 0 to m.rows.Count() - 1
-        row = m.rows[i]
-        if i = m.index
-            row.rect.blendColor = t.focusBg
-            row.name.color = t.onFocus
-            row.url.color = t.onFocusDim
-        else
-            row.rect.blendColor = t.panel
-            row.name.color = t.text
-            row.url.color = t.textDim
+        focused = (m.zone = "panel" and i = m.item)
+        if it.kind = "server"
+            it.ring.visible = focused
+        else if it.kind = "field"
+            paintField(it.field, focused)
+        else if it.kind = "check"
+            it.check.ring.visible = focused
+        else if it.kind = "buttons"
+            fi = -1
+            if focused then fi = it.col
+            paintBtns(it.buttons, fi)
         end if
     end for
 end sub
 
-sub choose()
-    it = m.items[m.index]
-    if it.kind = "server"
-        connect(it.url, it.name)
-    else if it.kind = "manual"
-        openPanel()
-    else if it.kind = "rescan"
-        m.top.message = ""
-        scan()
+sub setMessage(text as string, color as string)
+    m.message = text
+    m.messageColor = color
+    if m.msg <> invalid and m.method = 1
+        m.msg.text = text
+        m.msg.color = color
     end if
 end sub
 
-sub connect(url as string, name as string)
+' ---------- Connecting ----------
+
+sub connect(url as string, name as string, testOnly = false as boolean)
     if m.busy or url = "" then return
     m.busy = true
     m.pendingUrl = url
     m.pendingName = name
-    m.global.serverUrl = url
-    m.global.token = ""
-    m.status.text = "Connecting to " + name + "..."
-    apiRequest("/System/Info/Public", {}, "onInfo")
+    m.testOnly = testOnly
+    setMessage("Connecting to " + url + "...", th().muted)
+    startRequest(url, "/System/Info/Public", {}, "onInfo", "GET", invalid, invalid, "", {})
 end sub
 
 sub onInfo(event as object)
     m.busy = false
+    t = th()
     res = event.getData()
     if res.ok and isValid(res.data)
         name = safeStr(res.data.ServerName)
         if name = "" then name = m.pendingName
+        if m.testOnly
+            setMessage("Connected " + Chr(183) + " " + name + ", Jellyfin " + safeStr(res.data.Version), t.ok)
+            return
+        end if
+        if m.method = 1
+            if m.awayOn
+                writeSetting("serverAway", normalizeUrl(m.away))
+            else
+                writeSetting("serverAway", "")
+            end if
+        end if
         m.top.navigate = { action: "serverChosen", url: m.pendingUrl, name: name }
     else
-        m.status.text = "Couldn't connect to " + m.pendingUrl + ". Check that Jellyfin is running and the address is right."
+        setMessage("Couldn" + Chr(8217) + "t reach the server " + Chr(8212) + " check the address", t.error)
+        if m.method = 0
+            m.status.text = "Couldn" + Chr(8217) + "t connect to " + m.pendingUrl + ". Check that Jellyfin is running."
+            m.status.color = t.error
+        end if
     end if
 end sub
 
-sub openPanel()
+' ---------- Quick Connect ----------
+
+function qcServer() as string
+    if m.found.Count() > 0 then return m.found[0].url
+    a = normalizeUrl(m.address)
+    if a <> "" and a <> "http:" then return a
+    return ""
+end function
+
+function qcStatusText() as string
+    if m.qcError <> invalid then return m.qcError
+    if m.qcCode = invalid or m.qcCode = "" then return "Getting a code..."
+    secs = m.qcLeft
+    if secs = invalid then secs = 300
+    return "Waiting for approval " + Chr(183) + " code refreshes in " + formatClock(secs)
+end function
+
+sub startQuickConnect()
+    m.qcError = invalid
+    m.qcCode = ""
+    m.secret = ""
+    m.poll.control = "stop"
+    m.clock.control = "stop"
+    url = qcServer()
+    if url = ""
+        m.qcError = "Find your server first: pick it on the network or enter its address."
+        renderPanel()
+        return
+    end if
+    m.qcUrl = url
+    m.global.serverUrl = url
+    m.global.token = ""
+    renderPanel()
+    apiRequest("/QuickConnect/Initiate", {}, "onInitiate", "POST")
+end sub
+
+sub onInitiate(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        if isValid(res.data.Code) and isValid(res.data.Secret)
+            m.secret = safeStr(res.data.Secret)
+            m.qcCode = safeStr(res.data.Code)
+            m.qcLeft = 300
+            m.poll.control = "start"
+            m.clock.control = "start"
+            if m.method = 2 then renderPanel()
+            return
+        end if
+    end if
+    m.qcError = "Quick Connect isn" + Chr(8217) + "t available on " + m.qcUrl + ". Turn it on in the dashboard, or enter the address."
+    if m.method = 2 then renderPanel()
+end sub
+
+sub onClock()
+    if m.qcLeft = invalid then return
+    m.qcLeft = m.qcLeft - 1
+    if m.qcLeft <= 0
+        startQuickConnect()
+        return
+    end if
+    if m.method = 2 and m.qcStatus <> invalid then m.qcStatus.text = qcStatusText()
+end sub
+
+sub onPoll()
+    if m.secret = "" or m.qcDone then return
+    apiRequest("/QuickConnect/Connect", { "secret": m.secret }, "onPollResult")
+end sub
+
+sub onPollResult(event as object)
+    if m.qcDone then return
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        if isTrue(res.data.Authenticated)
+            m.poll.control = "stop"
+            m.clock.control = "stop"
+            apiRequest("/Users/AuthenticateWithQuickConnect", {}, "onQcAuth", "POST", { "Secret": m.secret })
+        end if
+    end if
+end sub
+
+sub onQcAuth(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        if isValid(res.data.AccessToken) and isValid(res.data.User)
+            m.qcDone = true
+            usr = res.data.User
+            admin = false
+            if isValid(usr.Policy) then admin = isTrue(usr.Policy.IsAdministrator)
+            name = ""
+            if isValid(res.data.SessionInfo) then name = safeStr(res.data.SessionInfo.ServerName)
+            m.top.navigate = { action: "quickConnected", url: m.qcUrl, name: name, token: safeStr(res.data.AccessToken), userId: safeStr(usr.Id), userName: safeStr(usr.Name), imageTag: safeStr(usr.PrimaryImageTag), isAdmin: admin }
+            return
+        end if
+    end if
+    m.qcError = "Sign-in failed (error " + res.code.ToStr() + "). Try again."
+    if m.method = 2 then renderPanel()
+end sub
+
+' ---------- Typing ----------
+
+sub openEntry(key as string)
     p = CreateObject("roSGNode", "TextEntryPanel")
-    p.title = "Server address"
-    p.hint = "Include the port. For example: http://192.168.1.50:8096"
-    p.buttonText = "Connect"
-    p.text = "http://"
-    p.observeField("submitted", "onManual")
-    p.observeField("cancelled", "closePanel")
+    if key = "address"
+        p.title = "Server address"
+        p.hint = "Include the port, or https. For example: http://192.168.1.50:8096"
+        p.text = m.address
+    else
+        p.title = "Away address"
+        p.hint = "The address that works outside your home, for example https://jellyfin.example.com"
+        p.text = m.away
+        if p.text = "" then p.text = "https://"
+    end if
+    p.buttonText = "Done"
+    m.entryKey = key
+    p.observeField("submitted", "onEntry")
+    p.observeField("cancelled", "closeEntry")
     m.top.appendChild(p)
     m.panel = p
     p.setFocus(true)
 end sub
 
-sub onManual()
-    url = normalizeUrl(m.panel.submitted)
-    closePanel()
-    if url = "" or url = "http:" then return
-    connect(url, url)
+sub onEntry()
+    text = m.panel.submitted.Trim()
+    if m.entryKey = "address"
+        m.address = text
+    else
+        m.away = text
+    end if
+    closeEntry()
+    renderPanel()
 end sub
 
-sub closePanel()
+sub closeEntry()
     if m.panel = invalid then return
     m.top.removeChild(m.panel)
     m.panel = invalid
     m.top.setFocus(true)
 end sub
 
+sub panelOk()
+    if m.items.Count() = 0 then return
+    it = m.items[m.item]
+    if it.kind = "server"
+        connect(it.url, it.name)
+    else if it.kind = "field"
+        openEntry(it.key)
+    else if it.kind = "check"
+        if it.key = "self"
+            m.selfSigned = not m.selfSigned
+            if m.selfSigned
+                writeSetting("allowSelfSigned", "true")
+            else
+                writeSetting("allowSelfSigned", "false")
+            end if
+        else
+            m.awayOn = not m.awayOn
+        end if
+        renderPanel()
+    else if it.kind = "buttons"
+        url = normalizeUrl(m.address)
+        if url = "" or url = "http:" then return
+        connect(url, url, it.col = 1)
+    end if
+end sub
+
+sub selectMethod(i as integer)
+    if i = m.method then return
+    m.method = i
+    m.item = 0
+    paintMethods()
+    renderPanel()
+    if i = 2 and m.secret = "" then startQuickConnect()
+end sub
+
+' ---------- Focus, keys, closing ----------
+
 sub onFocusChanged()
     if m.top.hasFocus() and m.panel <> invalid then m.panel.setFocus(true)
 end sub
 
+sub onClosed()
+    if m.top.closed
+        m.qcDone = true
+        m.poll.control = "stop"
+        m.clock.control = "stop"
+    end if
+end sub
+
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press or m.panel <> invalid then return false
-    if key = "up"
-        if m.index > 0 then m.index = m.index - 1
-        paint()
-        return true
-    else if key = "down"
-        if m.index < m.items.Count() - 1 then m.index = m.index + 1
-        paint()
-        return true
-    else if key = "OK"
-        choose()
+    if m.zone = "methods"
+        if key = "up"
+            if m.method > 0 then selectMethod(m.method - 1)
+        else if key = "down"
+            if m.method < 2 then selectMethod(m.method + 1)
+        else if key = "right" or key = "OK"
+            if m.items.Count() > 0
+                m.zone = "panel"
+                paintMethods()
+                paintPanel()
+            else if key = "OK" and m.method = 2
+                startQuickConnect()
+            end if
+        else
+            return false
+        end if
         return true
     end if
-    return false
+    ' In the panel
+    it = m.items[m.item]
+    if key = "up"
+        if m.item > 0 then m.item = m.item - 1
+        paintPanel()
+    else if key = "down"
+        if m.item < m.items.Count() - 1 then m.item = m.item + 1
+        paintPanel()
+    else if key = "left"
+        if it.kind = "buttons" and it.col > 0
+            it.col = it.col - 1
+            paintPanel()
+        else
+            m.zone = "methods"
+            paintMethods()
+            paintPanel()
+        end if
+    else if key = "right"
+        if it.kind = "buttons" and it.col < it.buttons.Count() - 1
+            it.col = it.col + 1
+            paintPanel()
+        end if
+    else if key = "OK"
+        panelOk()
+    else if key = "back"
+        m.zone = "methods"
+        paintMethods()
+        paintPanel()
+    end if
+    return true
 end function

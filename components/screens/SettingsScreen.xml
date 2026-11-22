@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Settings: Appearance (per User) and Connections (whole TV). -->
+<!-- Settings: a section list on the left (Servers & services, Themes, Users,
+     Playback & quality, Subtitles, About this device) and the section on
+     the right. With "setup" set it is step 3 of setup: Add services. -->
 <component name="SettingsScreen" extends="Group">
   <interface>
+    <field id="setup" type="boolean" />
     <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="SettingsScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
-  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <children>
-    <Group id="page" />
+    <Group id="chrome" />
+    <Group id="content" />
+    <Timer id="startTimer" duration="0.01" repeat="false" />
   </children>
 </component>

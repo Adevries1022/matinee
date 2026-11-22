@@ -1,541 +1,809 @@
-' Settings: opens to two tiles, Appearance and Connections.
-' Each setting opens a short list of its options; moving through the list
-' previews each option live, OK keeps it and Back cancels.
+' Settings (the Servers & services board). The section list on the left;
+' Themes opens its own screen. Servers & services lists Jellyfin, Seerr,
+' Radarr and Sonarr with a detail panel: address, API key or sign-in, four
+' option tiles, Test connection and Save. Only an Administrator can change
+' the services; everyone can change their own Playback and Subtitles.
+' Zones: back, nav, list (services), detail (services), rows (other sections).
+
 sub init()
-    m.page = m.top.findNode("page")
-    m.view = "home"
-    m.homeIndex = 0
-    m.index = 0
-    m.optionsOpen = false
-    m.optIndex = 0
-    m.panel = invalid
-    m.toastText = ""
+    m.chrome = m.top.findNode("chrome")
+    m.content = m.top.findNode("content")
     m.top.observeField("focusedChild", "onFocusChanged")
-    m.global.observeField("seerrState", "render")
-    render()
-    rebuildMenu()
+    m.sections = [
+        { key: "services", label: "Servers & services" },
+        { key: "themes", label: "Themes" },
+        { key: "users", label: "Users" },
+        { key: "playback", label: "Playback & quality" },
+        { key: "subtitles", label: "Subtitles" },
+        { key: "about", label: "About this device" }
+    ]
+    m.section = 0
+    m.navIndex = 0
+    m.zone = "nav"
+    m.svcIndex = 0
+    m.detailSvc = 0
+    m.detailIndex = 0
+    m.rowIndex = 0
+    m.panel = invalid
+    m.status = {}
+    m.extra = {}
+    m.message = ""
+    m.messageColor = ""
+    m.seenPrefs = m.global.prefsVersion
+    loadDrafts()
+    t = m.top.findNode("startTimer")
+    t.observeField("fire", "build")
+    t.control = "start"
 end sub
 
-' ---------- What each page holds ----------
+' ---------- Frame ----------
 
-function themeChoices() as object
-    list = []
-    for each name in themeNames()
-        list.Push({ v: name, l: themePalette(name).label })
-    end for
-    return list
-end function
-
-function accentChoices() as object
-    return [{ v: "", l: "Theme default" }, { v: "amber", l: "Amber" }, { v: "sky", l: "Sky" }, { v: "coral", l: "Coral" }, { v: "lime", l: "Lime" }, { v: "violet", l: "Violet" }]
-end function
-
-function onOff() as object
-    return [{ v: false, l: "Off" }, { v: true, l: "On" }]
-end function
-
-function appearanceRows() as object
-    return [
-        { key: "theme", label: "Theme", choices: themeChoices(), help: "The overall look: background, panels and the default Accent." },
-        { key: "accent", label: "Accent", choices: accentChoices(), help: "The highlight color for focus, progress and badges." },
-        { key: "bigHero", label: "Big Hero", choices: onOff(), help: "Taller artwork at the top, with just the title and details." },
-        { key: "miniCards", label: "Mini Cards", choices: onOff(), help: "Smaller Cards, so more titles fit on screen." },
-        { key: "navStyle", label: "Menu style", choices: [{ v: "rail", l: "Side Rail" }, { v: "top", l: "Top Bar" }], help: "Where the main menu lives." },
-        { key: "reduceMotion", label: "Reduce Motion", choices: onOff(), help: "Turns off Card zoom, fades and Trailer Previews." }
-    ]
-end function
-
-function connectionRows() as object
-    reg = CreateObject("roRegistrySection", "Marquee")
-    serverName = "Your server"
-    if reg.Exists("serverName") then serverName = reg.Read("serverName")
-    state = m.global.seerrState
-    seerrValue = "Not found"
-    if state = "ready" then seerrValue = "Connected"
-    if state = "signedOut" then seerrValue = "Sign in"
-    return [
-        { key: "server", label: "Jellyfin server", value: serverName, admin: true, help: "Switch to a different Jellyfin server." },
-        { key: "seerr", label: "Seerr", value: seerrValue, admin: false, help: "Requests. Sign in with a Quick Connect code; an administrator can change the address." },
-        { key: "alwaysAsk", label: "Who's Watching", choices: [{ v: "false", l: "Only when needed" }, { v: "true", l: "Always ask" }], admin: true, help: "Show the Who's Watching screen every time Matinee opens, or only when there's more than one person." },
-        { key: "signout", label: "Sign out", value: m.global.userName, admin: false, help: "Sign out of this account on this TV." }
-    ]
-end function
-
-function currentRows() as object
-    if m.view = "appearance" then return appearanceRows()
-    return connectionRows()
-end function
-
-function valueKey(v as dynamic) as string
-    t = type(v)
-    if t = "Boolean" or t = "roBoolean"
-        if v then return "true"
-        return "false"
+sub build()
+    t = th()
+    m.chrome.removeChildrenIndex(m.chrome.getChildCount(), 0)
+    m.navBtns = []
+    m.finish = invalid
+    m.back = invalid
+    if m.top.setup
+        m.zone = "list"
+        makeWordmark(m.chrome).translation = [80, 64]
+        makeSteps(m.chrome, 3, 1840, 70)
+        makeTitle(m.chrome, "Add services", 56).translation = [80, 150]
+        p = makeLabel(m.chrome, "Optional. Connect Seerr for requests, and Radarr or Sonarr to see downloads. You can do this later in Settings.", 22, "regular", t.meta)
+        p.translation = [80, 240]
+        p.width = 360
+        p.wrap = true
+        p.lineSpacing = 8
+        m.finish = makeBtn(m.chrome, { kind: "primary", text: "Finish", padX: 40 })
+        m.finish.group.translation = [80, 470]
+    else
+        m.back = makeBackPill(m.chrome, "Home")
+        makeTitle(m.chrome, "Settings", 56).translation = [80, 150]
+        for i = 0 to m.sections.Count() - 1
+            b = makeBtn(m.chrome, { kind: "nav", text: m.sections[i].label, h: 64, size: 22, style: "regular", padX: 24, w: 360, align: "left" })
+            b.group.translation = [80, 260 + i * 72]
+            m.navBtns.Push(b)
+        end for
     end if
-    return safeStr(v)
-end function
+    startChecks()
+    render()
+end sub
 
-function currentValue(r as object) as string
-    if r.key = "alwaysAsk"
-        reg = CreateObject("roRegistrySection", "Marquee")
-        if reg.Exists("alwaysAsk") then return reg.Read("alwaysAsk")
-        return "false"
-    end if
-    if r.key = "theme" then return legacyTheme(safeStr(m.global.prefs.theme))
-    if r.key = "accent" then return legacyAccent(safeStr(m.global.prefs.accent))
-    return valueKey(m.global.prefs[r.key])
-end function
-
-function choiceIndex(r as object) as integer
-    cur = currentValue(r)
-    for i = 0 to r.choices.Count() - 1
-        if valueKey(r.choices[i].v) = cur then return i
+sub paintFrame()
+    t = th()
+    for i = 0 to m.navBtns.Count() - 1
+        b = m.navBtns[i]
+        b.selected = (i = m.section)
+        paintBtn(b, m.zone = "nav" and i = m.navIndex)
+        b.label.width = 312
+        if b.selected
+            b.label.font = makeFont(22, "semibold")
+        else
+            b.label.font = makeFont(22, "regular")
+            b.label.color = t.meta
+        end if
     end for
-    return 0
-end function
-
-' ---------- Drawing ----------
+    if m.back <> invalid then paintBtn(m.back, m.zone = "back")
+    if m.finish <> invalid then paintBtn(m.finish, m.zone = "finish")
+end sub
 
 sub render()
-    t = th()
-    p = m.page
-    p.removeChildrenIndex(p.getChildCount(), 0)
-    x = t.leftPad
-    if m.view = "home"
-        renderHome(p, t, x)
+    m.content.removeChildrenIndex(m.content.getChildCount(), 0)
+    key = m.sections[m.section].key
+    if key = "services" or m.top.setup
+        renderServices()
     else
-        renderPage(p, t, x)
+        renderRows()
     end if
-    toast = makeLabel(p, m.toastText, 26, false, t.accent)
-    toast.translation = [x, 1020]
-    toast.width = 1600
+    paintFrame()
 end sub
 
-sub renderHome(p as object, t as object, x as integer)
-    head = makeLabel(p, "Settings", 56, true, t.text)
-    head.translation = [x, 56]
-    tiles = [
-        { title: "Appearance", icon: "settings", body: "Theme, accent, layout and menu style. Just for " + m.global.userName + "." },
-        { title: "Connections", icon: "switch", body: "Jellyfin server, Seerr requests and Who's Watching. For everyone on this TV." }
-    ]
-    for i = 0 to 1
-        tile = tiles[i]
-        focused = (i = m.homeIndex) and not menuIsOpen()
-        g = p.CreateChild("Group")
-        g.translation = [x + i * 640, 260]
-        bgColor = t.panel
-        textColor = t.text
-        bodyColor = t.textDim
-        if focused
-            bgColor = t.focusBg
-            textColor = t.onFocus
-            bodyColor = t.onFocusDim
-        end if
-        makeShape(g, t.fillUri, 600, 340, bgColor, 1.0)
-        ic = g.CreateChild("Poster")
-        ic.uri = "pkg:/images/icon_" + tile.icon + ".png"
-        ic.width = 56
-        ic.height = 56
-        ic.translation = [44, 44]
-        ic.blendColor = t.accent
-        if focused then ic.blendColor = t.onFocus
-        tl = makeLabel(g, tile.title, 44, true, textColor)
-        tl.translation = [44, 130]
-        bl = makeLabel(g, tile.body, 28, false, bodyColor)
-        bl.translation = [44, 196]
-        bl.width = 512
-        bl.wrap = true
-        bl.lineSpacing = 4
-    end for
-    if not m.global.isAdmin
-        note = makeLabel(p, "Connections can only be changed by a Jellyfin administrator.", 26, false, t.textFaint)
-        note.translation = [x, 640]
-    end if
-end sub
+' ---------- Servers & services ----------
 
-sub renderPage(p as object, t as object, x as integer)
-    rows = currentRows()
-    m.rows = rows
-    if m.index >= rows.Count() then m.index = 0
-    title = "Appearance"
-    note = "Just for " + m.global.userName
-    if m.view = "connections"
-        title = "Connections"
-        note = "For everyone on this TV"
-        if not m.global.isAdmin then note = "Only an administrator can change most of these"
-    end if
-    crumb = makeLabel(p, "Settings", 26, true, t.textFaint)
-    crumb.translation = [x, 50]
-    head = makeLabel(p, title, 56, true, t.text)
-    head.translation = [x, 84]
-    sub1 = makeLabel(p, note, 24, false, t.textFaint)
-    sub1.translation = [x, 156]
-
-    rowW = 560
-    y = 220
-    for i = 0 to rows.Count() - 1
-        r = rows[i]
-        focused = (i = m.index) and not m.optionsOpen and not menuIsOpen()
-        opened = (i = m.index) and m.optionsOpen
-        bg = makeShape(p, t.fillUri, rowW + 40, 72, t.surface, 0)
-        bg.translation = [x - 20, y]
-        textColor = t.text
-        valueColor = t.textDim
-        if focused
-            bg.blendColor = t.focusBg
-            bg.opacity = 1
-            textColor = t.onFocus
-            valueColor = t.onFocusDim
-        else if opened
-            bg.blendColor = t.panel
-            bg.opacity = 1
-        end if
-        locked = isTrue(r.admin) and not m.global.isAdmin
-        if locked and not focused then textColor = t.textFaint
-        lbl = makeLabel(p, r.label, 30, true, textColor)
-        lbl.translation = [x, y]
-        lbl.height = 72
-        lbl.vertAlign = "center"
-        value = ""
-        if r.choices <> invalid
-            value = r.choices[choiceIndex(r)].l
-        else
-            value = safeStr(r.value)
-        end if
-        v = makeLabel(p, value, 26, false, valueColor)
-        v.translation = [x + 250, y]
-        v.width = rowW - 250
-        v.height = 72
-        v.vertAlign = "center"
-        v.horizAlign = "right"
-        y = y + 84
-    end for
-
-    ' Help for the focused setting.
-    help = makeLabel(p, safeStr(rows[m.index].help), 26, false, t.textDim)
-    help.translation = [x, y + 20]
-    help.width = rowW
-    help.wrap = true
-    help.lineSpacing = 4
-
-    if m.optionsOpen then drawOptions(p, t, x + rowW + 60, 220)
-    if m.view = "appearance" then drawPreview(p, t, 1160, 220, 680)
-end sub
-
-' The open setting's options. Themes are shown as picture cards.
-sub drawOptions(p as object, t as object, ox as integer, oy as integer)
-    r = m.rows[m.optIndexRow]
-    y = oy
-    for i = 0 to r.choices.Count() - 1
-        c = r.choices[i]
-        focused = (i = m.optIndex)
-        if r.key = "theme"
-            drawThemeCard(p, t, c, ox, y, focused)
-            y = y + 112
-        else
-            bgColor = t.panel
-            color = t.text
-            if focused
-                bgColor = t.focusBg
-                color = t.onFocus
-            end if
-            bg = makeShape(p, t.fillUri, 340, 64, bgColor, 1.0)
-            bg.translation = [ox, y]
-            if r.key = "accent"
-                swatch = themePalette(legacyTheme(safeStr(m.global.prefs.theme))).accent
-                if c.v <> "" then swatch = accentColors()[c.v]
-                dotShape = makeShape(p, t.fillUri, 28, 28, swatch, 1)
-                dotShape.translation = [ox + 24, y + 18]
-            end if
-            l = makeLabel(p, c.l, 28, focused, color)
-            l.translation = [ox + 70, y]
-            l.height = 64
-            l.width = 260
-            l.vertAlign = "center"
-            y = y + 76
-        end if
-    end for
-    tip = makeLabel(p, "OK keeps it. Back cancels.", 22, false, t.textFaint)
-    tip.translation = [ox, y + 10]
-end sub
-
-' A small picture of a Theme: its background, two panels and its Accent.
-sub drawThemeCard(p as object, t as object, c as object, ox as integer, oy as integer, focused as boolean)
-    other = themePalette(c.v)
-    g = p.CreateChild("Group")
-    g.translation = [ox, oy]
-    if focused
-        ring = makeShape(g, t.ringUri, 352, 112, t.focusColor, 1)
-        ring.translation = [-6, -6]
-    end if
-    makeShape(g, t.fillUri, 340, 100, other.bg, 1)
-    for k = 0 to 1
-        block = makeShape(g, t.fillUri, 64, 36, other.panel, 1)
-        block.translation = [20 + k * 76, 50]
-    end for
-    dotShape = makeShape(g, t.fillUri, 28, 28, other.accent, 1)
-    dotShape.translation = [292, 18]
-    l = makeLabel(g, c.l, 24, true, other.text)
-    l.translation = [20, 12]
-end sub
-
-' A scaled-down picture of the home screen in the current Appearance.
-sub drawPreview(p as object, t as object, px as integer, py as integer, pw as integer)
-    scale = pw / 1920.0
-    ph = Int(1080 * scale)
-    frame = p.CreateChild("Group")
-    frame.translation = [px, py]
-    border = makeShape(frame, t.fillUri, pw + 8, ph + 8, t.surface, t.surfaceHiOpacity)
-    border.translation = [-4, -4]
-    clip = frame.CreateChild("Group")
-    clip.clippingRect = [0, 0, pw, ph]
-    world = clip.CreateChild("Group")
-    world.scale = [scale, scale]
-
-    bg = world.CreateChild("Rectangle")
-    bg.width = 1920
-    bg.height = 1080
-    bg.color = t.bg
-    items = m.global.previewItems
-    if items = invalid then items = []
-    if items.Count() > 0
-        bd = world.CreateChild("Poster")
-        bd.width = 1920
-        bd.height = 1080
-        bd.loadWidth = 960
-        bd.loadHeight = 540
-        bd.loadDisplayMode = "scaleToZoom"
-        bd.uri = items[0].backdrop
-    end if
-    addBackdropShade(world, t.rowsTop - 6)
-
-    title = "Your next favorite"
-    meta = "2026" + dot() + "Drama"
-    if items.Count() > 0
-        title = items[0].heading
-        meta = items[0].meta
-    end if
-    ty = t.heroTop + 45
-    if t.bigHero then ty = t.rowsTop - 330
-    eb = makeLabel(world, "MOVIE", 22, true, t.accent)
-    eb.translation = [t.leftPad, ty]
-    tl = makeLabel(world, title, 76, true, t.text)
-    if t.bigHero then tl.font = makeFont(88, true)
-    tl.translation = [t.leftPad, ty + 36]
-    tl.width = 1150
-    ml = makeLabel(world, meta, 28, false, t.textDim)
-    ml.translation = [t.leftPad, ty + 146]
-    ml.width = 1300
-
-    rl = makeLabel(world, "Continue Watching", 30, true, t.text)
-    rl.translation = [t.leftPad, t.rowsTop + 14]
-    cx = t.leftPad
-    cy = t.rowsTop + 64
-    for i = 0 to 5
-        w = t.landW
-        h = t.landH
-        card = world.CreateChild("Group")
-        card.translation = [cx, cy]
-        makeShape(card, t.fillUri, w, h, t.surface, t.surfaceOpacity * 1.6)
-        if i < items.Count()
-            img = card.CreateChild("Poster")
-            img.width = w
-            img.height = h
-            img.loadWidth = Int(w / 2)
-            img.loadHeight = Int(h / 2)
-            img.loadDisplayMode = "scaleToZoom"
-            img.uri = items[i].image
-        end if
-        if t.cornerUri <> ""
-            makeShape(card, t.cornerUri, w, h, t.bg, 1.0)
-        end if
-        if i = 0
-            track = card.CreateChild("Rectangle")
-            track.translation = [16, h - 19]
-            track.width = (w - 32) * 0.6
-            track.height = 5
-            track.color = t.accent
-            makeShape(card, t.ringUri, w, h, t.focusColor, 1.0)
-            card.scale = [t.cardFocusScale, t.cardFocusScale]
-        end if
-        cx = cx + w + 28
-    end for
-
-    if t.navStyle = "rail"
-        strip = world.CreateChild("Poster")
-        strip.uri = "pkg:/images/grad_left.png"
-        strip.width = 300
-        strip.height = 1080
-        strip.loadDisplayMode = "scaleToFill"
-        strip.blendColor = t.bg
-        strip.opacity = 0.9
-        mk = makeLabel(world, "MATINEE", 30, true, t.accent)
-        mk.translation = [t.leftPad, 60]
-        cur = makeShape(world, t.fillUri, 64, 64, t.surface, t.surfaceOpacity * 1.25)
-        cur.translation = [24, 240]
-        icons = ["home", "search", "movies", "shows", "settings"]
-        for i = 0 to icons.Count() - 1
-            ic = world.CreateChild("Poster")
-            ic.uri = "pkg:/images/icon_" + icons[i] + ".png"
-            ic.width = 36
-            ic.height = 36
-            iy = 254 + i * 76
-            if icons[i] = "settings" then iy = iy + 48
-            ic.translation = [38, iy]
-            if i = 0
-                ic.blendColor = t.accent
-            else
-                ic.blendColor = t.textDim
-            end if
-        end for
-    else
-        bar = world.CreateChild("LayoutGroup")
-        bar.translation = [96, 60]
-        bar.layoutDirection = "horiz"
-        bar.itemSpacings = [52]
-        makeLabel(bar, "MATINEE", 34, true, t.accent)
-        makeLabel(bar, "Home", 30, true, t.text)
-        makeLabel(bar, "Search", 30, true, t.textFaint)
-        makeLabel(bar, "Movies", 30, true, t.textFaint)
-        makeLabel(bar, "Shows", 30, true, t.textFaint)
-    end if
-
-    cap = makeLabel(p, "Live preview", 24, true, t.textFaint)
-    cap.translation = [px, py + ph + 20]
-    desc = makeLabel(p, themeDescription(t.name), 24, false, t.textDim)
-    desc.translation = [px, py + ph + 56]
-    desc.width = pw
-    desc.wrap = true
-end sub
-
-function themeDescription(name as string) as string
-    pal = themePalette(name)
-    return pal.label + ": " + pal.blurb
+function serviceNames() as object
+    return ["jellyfin", "seerr", "radarr", "sonarr"]
 end function
 
-' Rebuild the menu so a new Menu style or Theme shows straight away.
-sub rebuildMenu()
-    if m.menu <> invalid then m.top.removeChild(m.menu)
-    m.menu = invalid
-    setupMenu("settings")
+sub loadDrafts()
+    m.draft = {}
+    seerrUrl = m.global.seerrUrl
+    if seerrUrl = invalid then seerrUrl = ""
+    m.draft.seerr = { url: readSetting("seerrUrl", seerrUrl), key: "", enabled: readSetting("seerrEnabled", "true") = "true" }
+    for each n in ["radarr", "sonarr"]
+        s = arrService(n)
+        m.draft[n] = { url: s.url, key: s.key, enabled: s.enabled }
+    end for
 end sub
 
-' ---------- Options list ----------
+function serviceInfo(name as string) as object
+    if name = "jellyfin" then return { name: "Jellyfin", mono: "J", tint: "0xA78BFAFF", role: "Library & playback" }
+    if name = "seerr" then return { name: "Seerr", mono: "S", tint: "0x60A5FAFF", role: "Requests & discovery" }
+    if name = "radarr" then return { name: "Radarr", mono: "R", tint: "0xFBBF24FF", role: "Movies" }
+    return { name: "Sonarr", mono: "S", tint: "0x38BDF8FF", role: "Series" }
+end function
 
-sub openOptions()
-    r = m.rows[m.index]
-    m.toastText = ""
-    if isTrue(r.admin) and not m.global.isAdmin
-        m.toastText = "Only an administrator can change this."
+' Ask each service whether it answers, for the status dots.
+sub startChecks()
+    t = th()
+    m.status.jellyfin = { text: "Connected", color: t.ok }
+    st = m.global.seerrState
+    if not m.draft.seerr.enabled
+        m.status.seerr = { text: "Turned off", color: t.dashed }
+    else if st = "ready"
+        m.status.seerr = { text: "Connected", color: t.ok }
+        seerrRequest("/auth/me", {}, "onSeerrMe")
+    else if st = "signedOut"
+        m.status.seerr = { text: "Not signed in", color: t.warn }
+    else
+        m.status.seerr = { text: "Not set up", color: t.dashed }
+    end if
+    for each n in ["radarr", "sonarr"]
+        d = m.draft[n]
+        if d.url = "" or d.key = ""
+            m.status[n] = { text: "Not set up", color: t.dashed }
+        else if not d.enabled
+            m.status[n] = { text: "Turned off", color: t.dashed }
+        else
+            m.status[n] = { text: "Checking", color: t.muted }
+            m.checkStart = CreateObject("roTimespan")
+            arrRequest(n, "/system/status", {}, "onArrStatus", "GET", invalid, n)
+            arrRequest(n, "/qualityprofile", {}, "onArrProfiles", "GET", invalid, n)
+            arrRequest(n, "/rootfolder", {}, "onArrRoots", "GET", invalid, n)
+        end if
+    end for
+    apiRequest("/System/Info/Public", {}, "onServerInfo")
+end sub
+
+sub onArrStatus(event as object)
+    t = th()
+    res = event.getData()
+    n = safeStr(res.tag)
+    if res.ok
+        slow = false
+        if m.checkStart <> invalid then slow = m.checkStart.TotalMilliseconds() > 2500
+        if slow
+            m.status[n] = { text: "Slow", color: t.warn }
+        else
+            m.status[n] = { text: "Connected", color: t.ok }
+        end if
+    else if res.code = 401
+        m.status[n] = { text: "Wrong API key", color: t.error }
+    else
+        m.status[n] = { text: "Can" + Chr(8217) + "t reach", color: t.error }
+    end if
+    if isServices() then render()
+end sub
+
+sub onArrProfiles(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    if res.ok and type(res.data) = "roArray"
+        if res.data.Count() > 0 then m.extra[n + "Profile"] = safeStr(res.data[0].name)
+    end if
+    if isServices() then render()
+end sub
+
+sub onArrRoots(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    if res.ok and type(res.data) = "roArray"
+        if res.data.Count() > 0 then m.extra[n + "Root"] = safeStr(res.data[0].path)
+    end if
+    if isServices() then render()
+end sub
+
+sub onSeerrMe(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        perms = safeInt(res.data.permissions)
+        m.extra.seerrUser = safeStr(res.data.displayName)
+        ' Seerr permissions: 2 = admin, 128 = auto-approve.
+        if (perms and 2) <> 0 or (perms and 128) <> 0
+            m.extra.seerrAuto = "Yes"
+        else
+            m.extra.seerrAuto = "Needs approval"
+        end if
+        if isServices() then render()
+    end if
+end sub
+
+sub onServerInfo(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        m.extra.serverName = safeStr(res.data.ServerName)
+        m.extra.serverVersion = safeStr(res.data.Version)
+        if not isServices() and m.sections[m.section].key = "about" then render()
+    end if
+end sub
+
+function isServices() as boolean
+    return m.top.setup or m.sections[m.section].key = "services"
+end function
+
+function bitrateLabel(b as integer) as string
+    if b <= 0 then return "Auto"
+    return (b \ 1000000).ToStr() + " Mbps"
+end function
+
+' The four tiles for a service: { label, value, kind: "cycle" | "info" | "entry", key }
+function serviceTiles(name as string) as object
+    p = m.global.prefs
+    if name = "jellyfin"
+        away = readSetting("serverAway", "")
+        if away = "" then away = "Not set"
+        dp = "Prefer"
+        if p.directPlay = "off" then dp = "Always transcode"
+        views = m.global.views
+        nViews = 0
+        if views <> invalid then nViews = views.Count()
+        return [
+            { label: "Remote address", value: away, kind: "entry", key: "serverAway" },
+            { label: "Max streaming bitrate", value: bitrateLabel(safeInt(p.maxBitrate)), kind: "cycle", key: "maxBitrate" },
+            { label: "Libraries shown", value: nViews.ToStr() + " movie and show libraries", kind: "info", key: "" },
+            { label: "Direct play", value: dp, kind: "cycle", key: "directPlay" }
+        ]
+    else if name = "seerr"
+        auto = m.extra.seerrAuto
+        if auto = invalid then auto = "Sign in to see"
+        fourK = "Off"
+        if readSetting("seerr4k", "false") = "true" then fourK = "On"
+        return [
+            { label: "Sign in with", value: "Jellyfin account", kind: "info", key: "" },
+            { label: "Default request quality", value: readSetting("seerrQuality", "1080p"), kind: "cycle", key: "seerrQuality" },
+            { label: "Show 4K requests", value: fourK, kind: "cycle", key: "seerr4k" },
+            { label: "Auto-approve", value: auto, kind: "info", key: "" }
+        ]
+    end if
+    profile = m.extra[name + "Profile"]
+    if profile = invalid then profile = Chr(8212)
+    root = m.extra[name + "Root"]
+    if root = invalid then root = Chr(8212)
+    showQ = "Off"
+    if readSetting(name + "ShowQueue", "false") = "true" then showQ = "On"
+    return [
+        { label: "Quality profile", value: profile, kind: "info", key: "" },
+        { label: "Root folder", value: root, kind: "info", key: "" },
+        { label: "Show queue on Home", value: showQ, kind: "cycle", key: name + "ShowQueue" },
+        { label: "Refresh every", value: readSetting("arrRefresh", "30") + " s", kind: "cycle", key: "arrRefresh" }
+    ]
+end function
+
+sub renderServices()
+    t = th()
+    c = m.content
+    names = serviceNames()
+    listX = 500
+    detailX = 1080
+    if m.top.setup
+        listX = 500
+        detailX = 1080
+    end if
+    h = makeLabel(c, "Connected services", 28, "semibold", t.text)
+    h.translation = [listX, 150]
+    h.height = 66
+    h.vertAlign = "center"
+    m.svcRings = []
+    y = 224
+    for i = 0 to names.Count() - 1
+        n = names[i]
+        info = serviceInfo(n)
+        g = c.CreateChild("Group")
+        g.translation = [listX, y]
+        bgColor = t.panel
+        if i = m.svcIndex then bgColor = t.raised
+        makeBox(g, 520, 100, 16, bgColor)
+        m.svcRings.Push(makeFocusRing(g, 520, 100, 16))
+        makeBox(g, 56, 56, 14, t.raised).translation = [24, 22]
+        if i = m.svcIndex then makeBox(g, 56, 56, 14, t.bg).translation = [24, 22]
+        mono = makeLabel(g, info.mono, 24, "display", info.tint)
+        mono.translation = [24, 22]
+        mono.width = 56
+        mono.height = 56
+        mono.horizAlign = "center"
+        mono.vertAlign = "center"
+        makeLabel(g, info.name, 24, "semibold", t.text).translation = [100, 22]
+        makeLabel(g, info.role, 17, "regular", t.muted).translation = [100, 56]
+        st = m.status[n]
+        if st <> invalid
+            sw = makeStatus(g, st.text, st.color, 17)
+            sw.group.translation = [520 - 24 - sw.w, 38]
+        end if
+        y = y + 114
+    end for
+    ' "Add another server": connect to a different Jellyfin server.
+    add = c.CreateChild("Group")
+    add.translation = [listX, y]
+    makeOutline(add, 520, 72, 16, "0x3A4150FF")
+    m.addRing = makeFocusRing(add, 520, 72, 16)
+    makeIcon(add, "plus", 24, t.meta).translation = [150, 24]
+    al = makeLabel(add, "Add another server", 20, "semibold", t.meta)
+    al.translation = [186, 0]
+    al.height = 72
+    al.vertAlign = "center"
+
+    ' Detail panel: on "Add another server" it keeps showing the service above.
+    if m.svcIndex < names.Count() then m.detailSvc = m.svcIndex
+    n = names[m.detailSvc]
+    info = serviceInfo(n)
+    m.detailItems = []
+    d = c.CreateChild("Group")
+    d.translation = [detailX, 150]
+    makePanel(d, 760, 870, 24)
+    makeTitle(d, info.name, 34).translation = [48, 44]
+    admin = m.global.isAdmin = true
+    if n <> "jellyfin"
+        el = makeLabel(d, "Enabled", 20, "regular", t.meta)
+        el.translation = [760 - 48 - 56 - 16 - measureText("Enabled", 20, "regular"), 52]
+        tg = makeToggle(d)
+        tg.group.translation = [760 - 48 - 56, 48]
+        setToggle(tg, m.draft[n].enabled)
+        tgRing = makeFocusRing(tg.group, 56, 32, 16)
+        m.detailItems.Push({ kind: "toggle", ring: tgRing, key: "enabled" })
+    end if
+
+    addressText = ""
+    keyLabel = "API key"
+    keyText = ""
+    keyHint = ""
+    keySecure = true
+    if n = "jellyfin"
+        addressText = m.global.serverUrl
+        keyLabel = "Signed in as"
+        keyText = m.global.userName
+        if admin then keyText = keyText + " (Administrator)"
+        keyHint = "Press OK on the address to connect to a different server."
+        keySecure = false
+    else if n = "seerr"
+        addressText = m.draft.seerr.url
+        keyLabel = "Signed in as"
+        keySecure = false
+        st = m.global.seerrState
+        if st = "ready"
+            who = m.extra.seerrUser
+            if who = invalid or who = "" then who = m.global.userName
+            keyText = who + " with Jellyfin"
+            keyHint = "Requests are sent as you. Press OK to sign out of Seerr."
+        else
+            keyText = "Not signed in"
+            keyHint = "Press OK to sign in with your Jellyfin account."
+        end if
+    else
+        addressText = m.draft[n].url
+        keyText = m.draft[n].key
+        keyHint = "Find it in " + info.name + " under Settings " + Chr(8250) + " General " + Chr(8250) + " Security."
+    end if
+    makeLabel(d, "Server address", 18, "regular", t.muted).translation = [48, 118]
+    f1 = makeField(d, 664, 68, { text: addressText, placeholder: "http://" })
+    f1.group.translation = [48, 150]
+    m.detailItems.Push({ kind: "field", field: f1, key: "url" })
+    makeLabel(d, keyLabel, 18, "regular", t.muted).translation = [48, 240]
+    f2 = makeField(d, 664, 68, { text: keyText, secure: keySecure, placeholder: "Not set" })
+    f2.group.translation = [48, 272]
+    m.detailItems.Push({ kind: "field", field: f2, key: "key" })
+    hint = makeLabel(d, keyHint, 16, "regular", "0x8D96A6FF")
+    hint.translation = [48, 350]
+    hint.width = 664
+
+    tiles = serviceTiles(n)
+    m.tiles = tiles
+    for i = 0 to tiles.Count() - 1
+        tl = tiles[i]
+        g = d.CreateChild("Group")
+        g.translation = [48 + (i mod 2) * 340, 396 + (i \ 2) * 104]
+        makeBox(g, 324, 88, 12, t.raised)
+        ring = makeFocusRing(g, 324, 88, 12)
+        makeLabel(g, tl.label, 16, "regular", t.muted).translation = [20, 16]
+        v = makeLabel(g, tl.value, 20, "semibold", t.text)
+        v.translation = [20, 44]
+        v.width = 290
+        m.detailItems.Push({ kind: "tile", ring: ring, tile: tl, col: i mod 2 })
+    end for
+
+    test = makeBtn(d, { kind: "primary", text: "Test connection", h: 68, size: 22, padX: 32 })
+    save = makeBtn(d, { kind: "secondary", text: "Save", h: 68, size: 22, padX: 28 })
+    endX = rowBtns([test, save], 48, 754, 20)
+    m.detailItems.Push({ kind: "buttons", buttons: [test, save], col: 0 })
+    m.msgLabel = makeLabel(d, m.message, 20, "regular", t.muted)
+    if m.messageColor <> "" then m.msgLabel.color = m.messageColor
+    m.msgLabel.translation = [endX + 20, 754]
+    m.msgLabel.width = 760 - endX - 64
+    m.msgLabel.height = 68
+    m.msgLabel.wrap = true
+    m.msgLabel.vertAlign = "center"
+    if not admin
+        ro = makeLabel(d, "Only an Administrator can change these.", 16, "regular", t.faint)
+        ro.translation = [48, 834]
+    end if
+    if m.detailIndex >= m.detailItems.Count() then m.detailIndex = 0
+    paintServices()
+end sub
+
+sub paintServices()
+    for i = 0 to m.svcRings.Count() - 1
+        m.svcRings[i].visible = (m.zone = "list" and i = m.svcIndex)
+    end for
+    m.addRing.visible = (m.zone = "list" and m.svcIndex = 4)
+    for i = 0 to m.detailItems.Count() - 1
+        it = m.detailItems[i]
+        focused = (m.zone = "detail" and i = m.detailIndex)
+        if it.kind = "field"
+            paintField(it.field, focused)
+        else if it.kind = "buttons"
+            fi = -1
+            if focused then fi = it.col
+            paintBtns(it.buttons, fi)
+        else
+            it.ring.visible = focused
+        end if
+    end for
+end sub
+
+sub setMessage(text as string, color as string)
+    m.message = text
+    m.messageColor = color
+    if m.msgLabel <> invalid
+        m.msgLabel.text = text
+        m.msgLabel.color = color
+    end if
+end sub
+
+function currentService() as string
+    return serviceNames()[m.detailSvc]
+end function
+
+sub detailOk()
+    t = th()
+    n = currentService()
+    it = m.detailItems[m.detailIndex]
+    admin = m.global.isAdmin = true
+    if it.kind = "buttons"
+        if it.col = 0
+            testService(n)
+        else
+            saveService(n)
+        end if
+        return
+    end if
+    if it.kind = "field" and it.key = "key" and n = "seerr"
+        if m.global.seerrState = "ready"
+            m.top.navigate = { action: "seerrSignedOut" }
+            m.status.seerr = { text: "Not signed in", color: t.warn }
+            render()
+        else if m.global.seerrState = "signedOut"
+            m.top.navigate = { action: "seerrSignIn" }
+        else
+            setMessage("Save a working Seerr address first.", t.warn)
+        end if
+        return
+    end if
+    if it.kind = "tile"
+        tl = it.tile
+        if tl.kind = "info" then return
+        if tl.key = "maxBitrate"
+            steps = [0, 40000000, 20000000, 10000000, 6000000, 3000000]
+            cur = safeInt(m.global.prefs.maxBitrate)
+            setPref("maxBitrate", steps[(indexOf(steps, cur) + 1) mod steps.Count()])
+        else if tl.key = "directPlay"
+            if m.global.prefs.directPlay = "off"
+                setPref("directPlay", "prefer")
+            else
+                setPref("directPlay", "off")
+            end if
+        else if not admin
+            setMessage("Only an Administrator can change this.", t.warn)
+            return
+        else if tl.key = "serverAway"
+            openEntry("serverAway", "Remote address", "The address that works outside your home, for example https://jellyfin.example.com", readSetting("serverAway", "https://"), false)
+            return
+        else if tl.key = "seerrQuality"
+            if readSetting("seerrQuality", "1080p") = "1080p"
+                writeSetting("seerrQuality", "4K")
+            else
+                writeSetting("seerrQuality", "1080p")
+            end if
+        else if tl.key = "arrRefresh"
+            opts = ["15", "30", "60"]
+            cur = readSetting("arrRefresh", "30")
+            writeSetting("arrRefresh", opts[(indexOf(opts, cur) + 1) mod 3])
+        else
+            ' On/off settings: seerr4k, radarrShowQueue, sonarrShowQueue
+            if readSetting(tl.key, "false") = "true"
+                writeSetting(tl.key, "false")
+            else
+                writeSetting(tl.key, "true")
+            end if
+            m.global.servicesVersion = m.global.servicesVersion + 1
+        end if
         render()
         return
     end if
-    if r.choices = invalid
-        runAction(r)
+    if not admin
+        setMessage("Only an Administrator can change these.", t.warn)
         return
     end if
-    m.optionsOpen = true
-    m.optIndexRow = m.index
-    m.optIndex = choiceIndex(r)
-    m.savedPrefs = m.global.prefs
-    render()
-end sub
-
-' Show the option under the highlight without saving it yet.
-sub previewOption()
-    r = m.rows[m.optIndexRow]
-    if m.view = "appearance"
-        prefs = m.global.prefs
-        prefs[r.key] = r.choices[m.optIndex].v
-        applyPrefs(prefs)
-    end if
-    render()
-end sub
-
-sub keepOption()
-    r = m.rows[m.optIndexRow]
-    choice = r.choices[m.optIndex]
-    m.optionsOpen = false
-    if m.view = "appearance"
-        prefs = m.global.prefs
-        prefs[r.key] = choice.v
-        savePrefs(prefs)
-        applyPrefs(prefs)
-        rebuildMenu()
-    else if r.key = "alwaysAsk"
-        reg = CreateObject("roRegistrySection", "Marquee")
-        reg.Write("alwaysAsk", choice.v)
-        reg.Flush()
-    end if
-    render()
-end sub
-
-sub cancelOptions()
-    m.optionsOpen = false
-    if m.view = "appearance" and m.savedPrefs <> invalid then applyPrefs(m.savedPrefs)
-    render()
-end sub
-
-sub runAction(r as object)
-    if r.key = "server"
-        m.top.navigate = { action: "changeServer" }
-    else if r.key = "seerr"
-        state = m.global.seerrState
-        if state = "signedOut"
-            m.top.navigate = { action: "seerrSignIn" }
-        else if m.global.isAdmin
-            openSeerrPanel()
-        else if state = "ready"
-            m.toastText = "You're signed in to Seerr."
-            render()
+    if it.kind = "toggle"
+        m.draft[n].enabled = not m.draft[n].enabled
+        setMessage("Press Save to keep this.", t.muted)
+        render()
+    else if it.kind = "field"
+        if n = "jellyfin"
+            m.top.navigate = { action: "changeServer" }
+        else if it.key = "url"
+            cur = m.draft[n].url
+            if cur = "" then cur = "http://"
+            openEntry("url", serviceInfo(n).name + " address", "Include the port, for example http://192.168.1.20:7878", cur, false)
         else
-            m.toastText = "Seerr wasn't found. An administrator can set its address here."
-            render()
+            openEntry("key", serviceInfo(n).name + " API key", "Find it in " + serviceInfo(n).name + " under Settings " + Chr(8250) + " General.", m.draft[n].key, false)
         end if
-    else if r.key = "signout"
-        m.top.navigate = { action: "signout" }
     end if
 end sub
 
-sub openSeerrPanel()
+function indexOf(list as object, value as dynamic) as integer
+    for i = 0 to list.Count() - 1
+        if list[i] = value then return i
+    end for
+    return -1
+end function
+
+sub testService(n as string)
+    t = th()
+    setMessage("Testing...", t.muted)
+    if n = "jellyfin"
+        apiRequest("/System/Info/Public", {}, "onTested", "GET", invalid, "jellyfin")
+    else if n = "seerr"
+        startRequest(normalizeUrl(m.draft.seerr.url) + "/api/v1", "/status", {}, "onTested", "GET", invalid, "seerr", "", {})
+    else
+        d = m.draft[n]
+        if d.url = "" or d.key = ""
+            setMessage("Enter the address and API key first.", t.warn)
+            return
+        end if
+        startRequest(normalizeUrl(d.url) + "/api/v3", "/system/status", {}, "onTested", "GET", invalid, n, "", { "X-Api-Key": d.key })
+    end if
+end sub
+
+sub onTested(event as object)
+    t = th()
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        v = safeStr(res.data.version)
+        if v = "" then v = safeStr(res.data.Version)
+        what = "version"
+        if safeStr(res.tag) = "radarr" or safeStr(res.tag) = "sonarr" then what = "version and API key"
+        setMessage("Connected " + Chr(183) + " " + what + " OK (" + v + ")", t.ok)
+    else if res.code = 401
+        setMessage("The API key was refused " + Chr(8212) + " check it", t.error)
+    else
+        setMessage("Couldn" + Chr(8217) + "t reach the server " + Chr(8212) + " check the address", t.error)
+    end if
+end sub
+
+sub saveService(n as string)
+    t = th()
+    if m.global.isAdmin <> true
+        setMessage("Only an Administrator can change these.", t.warn)
+        return
+    end if
+    if n = "jellyfin"
+        setMessage("Saved.", t.ok)
+        return
+    end if
+    d = m.draft[n]
+    enabled = "false"
+    if d.enabled then enabled = "true"
+    if n = "seerr"
+        writeSetting("seerrUrl", normalizeUrl(d.url))
+        writeSetting("seerrEnabled", enabled)
+        m.top.navigate = { action: "seerrChanged" }
+    else
+        writeSetting(n + "Url", normalizeUrl(d.url))
+        writeSetting(n + "Key", d.key)
+        writeSetting(n + "Enabled", enabled)
+        m.global.servicesVersion = m.global.servicesVersion + 1
+    end if
+    setMessage("Saved.", t.ok)
+    loadDrafts()
+    startChecks()
+    render()
+end sub
+
+' ---------- Typing ----------
+
+sub openEntry(key as string, title as string, hint as string, text as string, secure as boolean)
     p = CreateObject("roSGNode", "TextEntryPanel")
-    p.title = "Seerr address"
-    p.hint = "Include the port. Seerr usually runs on port 5055, for example http://192.168.1.50:5055"
-    p.buttonText = "Save"
-    current = m.global.seerrUrl
-    if current = "" then current = "http://"
-    p.text = current
-    p.observeField("submitted", "onSeerrAddress")
-    p.observeField("cancelled", "closePanel")
+    p.title = title
+    p.hint = hint
+    p.text = text
+    p.secure = secure
+    p.buttonText = "Done"
+    m.entryKey = key
+    p.observeField("submitted", "onEntry")
+    p.observeField("cancelled", "closeEntry")
     m.top.appendChild(p)
     m.panel = p
     p.setFocus(true)
 end sub
 
-sub onSeerrAddress()
-    url = normalizeUrl(m.panel.submitted)
-    closePanel()
-    if url = "" or url = "http:" then return
-    reg = CreateObject("roRegistrySection", "Marquee")
-    reg.Write("seerrUrl", url)
-    reg.Flush()
-    m.toastText = "Checking Seerr..."
+sub onEntry()
+    text = m.panel.submitted.Trim()
+    closeEntry()
+    n = currentService()
+    if m.entryKey = "serverAway"
+        writeSetting("serverAway", normalizeUrl(text))
+    else if m.entryKey = "url"
+        m.draft[n].url = text
+        setMessage("Press Save to keep this.", th().muted)
+    else if m.entryKey = "key"
+        m.draft[n].key = text
+        setMessage("Press Save to keep this.", th().muted)
+    end if
     render()
-    m.top.navigate = { action: "seerrChanged" }
 end sub
 
-sub closePanel()
+sub closeEntry()
     if m.panel = invalid then return
     m.top.removeChild(m.panel)
     m.panel = invalid
     m.top.setFocus(true)
+end sub
+
+' ---------- Other sections: a list of rows ----------
+
+function languageChoices() as object
+    return [["", "Any"], ["eng", "English"], ["spa", "Spanish"], ["fre", "French"], ["ger", "German"], ["ita", "Italian"], ["por", "Portuguese"], ["dut", "Dutch"], ["jpn", "Japanese"], ["kor", "Korean"], ["chi", "Chinese"]]
+end function
+
+function sectionRows(key as string) as object
+    p = m.global.prefs
+    if key = "playback"
+        dp = "Prefer"
+        if p.directPlay = "off" then dp = "Always transcode"
+        return [
+            { label: "Max streaming bitrate", value: bitrateLabel(safeInt(p.maxBitrate)), kind: "cycle", key: "maxBitrate" },
+            { label: "Direct play", value: dp, kind: "cycle", key: "directPlay" },
+            { label: "Trailer previews on Home", value: "", kind: "toggle", key: "trailers", on: p.trailers <> false },
+            { label: "Play the next episode automatically", value: "", kind: "toggle", key: "autoplayNext", on: p.autoplayNext <> false }
+        ]
+    else if key = "subtitles"
+        mode = "Server default"
+        if p.subtitles = "on" then mode = "On"
+        if p.subtitles = "off" then mode = "Off"
+        lang = "Any"
+        for each l in languageChoices()
+            if l[0] = safeStr(p.subtitleLang) then lang = l[1]
+        end for
+        return [
+            { label: "Subtitles", value: mode, kind: "cycle", key: "subtitles" },
+            { label: "Preferred language", value: lang, kind: "cycle", key: "subtitleLang" },
+            { label: "Size and style", value: "Roku settings " + Chr(8250) + " Accessibility " + Chr(8250) + " Captions style", kind: "info", key: "" }
+        ]
+    else if key = "users"
+        return [
+            { label: "Switch user", value: "Who" + Chr(8217) + "s watching", kind: "action", key: "switchUser" },
+            { label: "Manage profiles", value: "Forget saved sign-ins", kind: "action", key: "switchUser" },
+            { label: "Sign out of " + m.global.userName, value: "", kind: "action", key: "signout" }
+        ]
+    end if
+    ' About this device
+    di = CreateObject("roDeviceInfo")
+    app = CreateObject("roAppInfo")
+    ip = ""
+    addrs = di.GetIPAddrs()
+    for each k in addrs
+        if ip = "" then ip = addrs[k]
+    end for
+    server = m.extra.serverName
+    if server = invalid then server = ""
+    ver = m.extra.serverVersion
+    if ver <> invalid then server = server + " " + Chr(183) + " Jellyfin " + ver
+    who = m.global.userName
+    if m.global.isAdmin = true then who = who + " (Administrator)"
+    return [
+        { label: "Matinee", value: "Version " + app.GetVersion(), kind: "info", key: "" },
+        { label: "Roku", value: di.GetModelDisplayName() + " (" + di.GetModel() + ")", kind: "info", key: "" },
+        { label: "Roku OS", value: di.GetOSVersion().major + "." + di.GetOSVersion().minor, kind: "info", key: "" },
+        { label: "Network address", value: ip, kind: "info", key: "" },
+        { label: "Jellyfin server", value: server, kind: "info", key: "" },
+        { label: "Signed in as", value: who, kind: "info", key: "" }
+    ]
+end function
+
+sub renderRows()
+    t = th()
+    c = m.content
+    key = m.sections[m.section].key
+    h = makeLabel(c, m.sections[m.section].label, 28, "semibold", t.text)
+    h.translation = [500, 150]
+    h.height = 66
+    h.vertAlign = "center"
+    m.rows = sectionRows(key)
+    m.rowNodes = []
+    y = 236
+    for i = 0 to m.rows.Count() - 1
+        r = m.rows[i]
+        g = c.CreateChild("Group")
+        g.translation = [500, y]
+        makeBox(g, 1340, 76, 14, t.panel)
+        ring = makeFocusRing(g, 1340, 76, 14)
+        l = makeLabel(g, r.label, 22, "regular", t.text)
+        l.translation = [28, 0]
+        l.height = 76
+        l.vertAlign = "center"
+        if r.kind = "toggle"
+            tg = makeToggle(g)
+            tg.group.translation = [1340 - 28 - 56, 22]
+            setToggle(tg, r.on)
+        else
+            v = makeLabel(g, r.value, 20, "semibold", t.meta)
+            v.translation = [500, 0]
+            v.width = 812
+            v.height = 76
+            v.horizAlign = "right"
+            v.vertAlign = "center"
+            if r.kind = "info" then v.font = makeFont(20, "regular")
+        end if
+        m.rowNodes.Push(ring)
+        y = y + 88
+    end for
+    if key = "subtitles"
+        note = makeLabel(c, "Subtitles you pick while watching are remembered for the rest of that session.", 18, "regular", t.muted)
+        note.translation = [500, y + 12]
+    end if
+    if m.rowIndex >= m.rows.Count() then m.rowIndex = 0
+    paintRows()
+end sub
+
+sub paintRows()
+    for i = 0 to m.rowNodes.Count() - 1
+        m.rowNodes[i].visible = (m.zone = "rows" and i = m.rowIndex)
+    end for
+end sub
+
+sub rowOk()
+    r = m.rows[m.rowIndex]
+    p = m.global.prefs
+    if r.kind = "info" then return
+    if r.kind = "action"
+        m.top.navigate = { action: r.key }
+        return
+    end if
+    if r.kind = "toggle"
+        setPref(r.key, not r.on)
+    else if r.key = "maxBitrate"
+        steps = [0, 40000000, 20000000, 10000000, 6000000, 3000000]
+        setPref("maxBitrate", steps[(indexOf(steps, safeInt(p.maxBitrate)) + 1) mod steps.Count()])
+    else if r.key = "directPlay"
+        if p.directPlay = "off"
+            setPref("directPlay", "prefer")
+        else
+            setPref("directPlay", "off")
+        end if
+    else if r.key = "subtitles"
+        modes = ["auto", "on", "off"]
+        setPref("subtitles", modes[(indexOf(modes, safeStr(p.subtitles)) + 1) mod 3])
+    else if r.key = "subtitleLang"
+        langs = languageChoices()
+        codes = []
+        for each l in langs
+            codes.Push(l[0])
+        end for
+        setPref("subtitleLang", codes[(indexOf(codes, safeStr(p.subtitleLang)) + 1) mod codes.Count()])
+    end if
+    m.seenPrefs = m.global.prefsVersion
     render()
 end sub
 
 ' ---------- Focus & keys ----------
 
-sub restoreContentFocus()
-    m.top.setFocus(true)
+sub onRefresh()
+    ' Back from Themes or a sign-in: redraw with the current look and state.
+    if m.global.prefsVersion <> m.seenPrefs
+        m.seenPrefs = m.global.prefsVersion
+        build()
+        return
+    end if
+    loadDrafts()
+    startChecks()
     render()
 end sub
 
@@ -543,69 +811,187 @@ sub onFocusChanged()
     if m.top.hasFocus() and m.panel <> invalid then m.panel.setFocus(true)
 end sub
 
-sub onRefresh()
+sub openSection(i as integer)
+    if m.sections[i].key = "themes"
+        m.top.navigate = { action: "themes" }
+        return
+    end if
+    m.section = i
+    m.rowIndex = 0
+    m.detailIndex = 0
+    m.message = ""
+    m.messageColor = ""
     render()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    if not press or m.panel <> invalid or menuIsOpen() then return false
-
-    if m.view = "home"
-        if key = "right"
-            if m.homeIndex < 1 then m.homeIndex = m.homeIndex + 1
-        else if key = "left"
-            if m.homeIndex > 0
-                m.homeIndex = m.homeIndex - 1
-            else if th().navStyle = "rail"
-                openMenu()
+    if not press or m.panel <> invalid then return false
+    if m.zone = "back"
+        if key = "OK"
+            m.top.navigate = { action: "back" }
+        else if key = "down"
+            m.zone = "nav"
+            paintFrame()
+        end if
+        return key <> "back"
+    else if m.zone = "finish"
+        if key = "OK"
+            m.top.navigate = { action: "back" }
+        else if key = "right"
+            m.zone = "list"
+            render()
+        end if
+        return key <> "back"
+    else if m.zone = "nav"
+        if key = "up"
+            if m.navIndex = 0
+                m.zone = "back"
+            else
+                m.navIndex = m.navIndex - 1
             end if
-        else if key = "up" and th().navStyle = "top"
-            openMenu()
-        else if key = "OK"
-            m.view = "appearance"
-            if m.homeIndex = 1 then m.view = "connections"
-            m.index = 0
-            m.toastText = ""
+            paintFrame()
+        else if key = "down"
+            if m.navIndex < m.sections.Count() - 1 then m.navIndex = m.navIndex + 1
+            paintFrame()
+        else if key = "OK" or key = "right"
+            if m.sections[m.navIndex].key = "themes"
+                if key = "OK" then openSection(m.navIndex)
+                return true
+            end if
+            if m.navIndex <> m.section then openSection(m.navIndex)
+            if key = "right" or isServices() or m.sections[m.section].key <> "themes"
+                if isServices()
+                    m.zone = "list"
+                else
+                    m.zone = "rows"
+                end if
+                render()
+            end if
         else
             return false
         end if
-        render()
         return true
-    end if
-
-    if m.optionsOpen
-        r = m.rows[m.optIndexRow]
+    else if m.zone = "rows"
         if key = "up"
-            if m.optIndex > 0
-                m.optIndex = m.optIndex - 1
-                previewOption()
-            end if
+            if m.rowIndex > 0 then m.rowIndex = m.rowIndex - 1
+            paintRows()
         else if key = "down"
-            if m.optIndex < r.choices.Count() - 1
-                m.optIndex = m.optIndex + 1
-                previewOption()
+            if m.rowIndex < m.rows.Count() - 1 then m.rowIndex = m.rowIndex + 1
+            paintRows()
+        else if key = "OK"
+            rowOk()
+        else if key = "left" or key = "back"
+            m.zone = "nav"
+            render()
+        else
+            return false
+        end if
+        return true
+    else if m.zone = "list"
+        if key = "up"
+            if m.svcIndex > 0 then m.svcIndex = m.svcIndex - 1
+            refreshDetail()
+        else if key = "down"
+            if m.svcIndex < 4 then m.svcIndex = m.svcIndex + 1
+            refreshDetail()
+        else if key = "OK" or key = "right"
+            if m.svcIndex = 4
+                if key = "OK" then m.top.navigate = { action: "changeServer" }
+            else
+                m.zone = "detail"
+                m.detailIndex = 0
+                paintServices()
+            end if
+        else if key = "left" or key = "back"
+            if m.top.setup
+                m.zone = "finish"
+            else
+                m.zone = "nav"
+            end if
+            render()
+            if key = "back" and m.top.setup then return false
+        else
+            return false
+        end if
+        return true
+    else if m.zone = "detail"
+        it = m.detailItems[m.detailIndex]
+        if key = "up" or key = "down"
+            moveDetail(key)
+        else if key = "left"
+            if (it.kind = "buttons" or it.kind = "tile") and it.col > 0
+                if it.kind = "buttons"
+                    it.col = it.col - 1
+                else
+                    m.detailIndex = m.detailIndex - 1
+                end if
+                paintServices()
+            else
+                m.zone = "list"
+                paintServices()
+            end if
+        else if key = "right"
+            if it.kind = "buttons" and it.col < 1
+                it.col = it.col + 1
+                paintServices()
+            else if it.kind = "tile" and it.col = 0
+                m.detailIndex = m.detailIndex + 1
+                paintServices()
             end if
         else if key = "OK"
-            keepOption()
-        else if key = "back" or key = "left"
-            cancelOptions()
+            detailOk()
+        else if key = "back"
+            m.zone = "list"
+            paintServices()
         end if
         return true
     end if
-
-    if key = "up"
-        if m.index > 0 then m.index = m.index - 1
-    else if key = "down"
-        if m.index < m.rows.Count() - 1 then m.index = m.index + 1
-    else if key = "OK" or key = "right"
-        openOptions()
-        return true
-    else if key = "back" or key = "left"
-        m.view = "home"
-        m.toastText = ""
-    else
-        return false
-    end if
-    render()
-    return true
+    return false
 end function
+
+' Up and Down move by row; the four tiles are two rows of two.
+sub moveDetail(key as string)
+    items = m.detailItems
+    i = m.detailIndex
+    firstTile = -1
+    for k = 0 to items.Count() - 1
+        if items[k].kind = "tile" and firstTile = -1 then firstTile = k
+    end for
+    cur = items[i]
+    if key = "down"
+        if cur.kind = "tile"
+            slot = i - firstTile
+            if slot < 2
+                i = i + 2
+            else
+                i = items.Count() - 1
+            end if
+        else
+            i = i + 1
+        end if
+    else
+        if cur.kind = "buttons"
+            i = firstTile + 2
+        else if cur.kind = "tile"
+            slot = i - firstTile
+            if slot >= 2
+                i = i - 2
+            else
+                i = firstTile - 1
+            end if
+        else
+            i = i - 1
+        end if
+    end if
+    if i < 0 then i = 0
+    if i > items.Count() - 1 then i = items.Count() - 1
+    m.detailIndex = i
+    paintServices()
+end sub
+
+sub refreshDetail()
+    m.message = ""
+    m.messageColor = ""
+    m.detailIndex = 0
+    render()
+end sub

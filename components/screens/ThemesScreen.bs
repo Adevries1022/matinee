@@ -1,0 +1,301 @@
+' Themes (the Themes board). Picking a Theme, Accent or toggle saves it for
+' the signed-in User and redraws this screen in the new look straight away.
+' Zones: back, themes (3 x 2), accents (6), toggles (2).
+
+sub init()
+    m.bgRect = m.top.findNode("bg")
+    m.layer = m.top.findNode("layer")
+    m.zone = "themes"
+    m.themeIndex = indexOfStr(themeNames(), th().name)
+    m.accentIndex = indexOfStr(accentNames(), th().accentName)
+    m.toggleIndex = 0
+    m.accentFocus = m.accentIndex
+    build()
+end sub
+
+function indexOfStr(list as object, value as string) as integer
+    for i = 0 to list.Count() - 1
+        if list[i] = value then return i
+    end for
+    return 0
+end function
+
+sub build()
+    t = th()
+    m.bgRect.color = t.bg
+    m.layer.removeChildrenIndex(m.layer.getChildCount(), 0)
+    L = m.layer
+    m.back = makeBtn(L, { kind: "ghost", icon: "back", text: "Settings", h: 56, size: 20, style: "medium", padX: 20, iconSize: 26, r: 14 })
+    m.back.bg.blendColor = t.panel
+    m.back.group.translation = [80, 64]
+    makeTitle(L, "Themes", 56).translation = [80, 150]
+    sub1 = makeLabel(L, "Applies to every screen on this Roku, right away. Each user can pick their own.", 22, "regular", t.muted)
+    sub1.translation = [80, 222]
+
+    ' Theme cards: 3 x 2
+    m.themeCards = []
+    names = themeNames()
+    cardW = 273
+    for i = 0 to names.Count() - 1
+        pal = themePalette(names[i])
+        g = L.CreateChild("Group")
+        g.translation = [80 + (i mod 3) * (cardW + 20), 290 + (i \ 3) * 204]
+        g.scaleRotateCenter = [cardW / 2, 92]
+        makeBox(g, cardW, 184, 18, t.card)
+        ring = makeFocusRing(g, cardW, 184, 18)
+        makeBox(g, cardW - 32, 110, 12, pal.bg).translation = [16, 16]
+        makeBox(g, 64, 36, 6, pal.card).translation = [30, 76]
+        makeBox(g, 64, 36, 6, pal.card).translation = [102, 76]
+        makeShape(g, "pkg:/images/circle.png", 28, 28, pal.accent).translation = [cardW - 16 - 14 - 28, 30]
+        makeLabel(g, pal.label, 22, "semibold", t.text).translation = [16, 140]
+        if i = m.themeIndex then makeIcon(g, "check", 24, t.accent).translation = [cardW - 16 - 24, 142]
+        m.themeCards.Push({ group: g, ring: ring })
+    end for
+
+    ' Accent swatches
+    makeLabel(L, "Accent", 20, "semibold", t.text).translation = [80, 708]
+    m.swatches = []
+    accents = accentNames()
+    colors = accentColors()
+    basePal = themePalette(t.name)
+    for i = 0 to accents.Count() - 1
+        c = basePal.accent
+        if accents[i] <> "" then c = colors[accents[i]]
+        g = L.CreateChild("Group")
+        g.translation = [80 + i * 76, 744]
+        g.scaleRotateCenter = [30, 30]
+        sel = makeShape(g, "pkg:/images/circle_ring.png", 80, 80, t.text)
+        sel.translation = [-10, -10]
+        sel.visible = (i = m.accentIndex)
+        makeShape(g, "pkg:/images/circle.png", 60, 60, c)
+        m.swatches.Push({ group: g })
+    end for
+    m.accentName = makeLabel(L, accentLabel(accents[m.accentIndex]), 18, "regular", t.muted)
+    m.accentName.translation = [80 + 6 * 76 + 12, 762]
+
+    ' Toggles
+    m.toggles = []
+    labels = ["Larger text", "Portrait posters"]
+    values = [t.largerText, t.portraitPosters]
+    for i = 0 to 1
+        r = makeToggleRow(L, labels[i], 422)
+        r.bg.blendColor = t.card
+        r.group.translation = [80 + i * 438, 840]
+        setToggle(r.toggle, values[i])
+        m.toggles.Push(r)
+    end for
+
+    buildPreview(t)
+    paint()
+end sub
+
+sub buildPreview(t as object)
+    L = m.layer
+    makeLabel(L, "PREVIEW", 18, "semibold", t.muted).translation = [1020, 160]
+    pv = L.CreateChild("Group")
+    pv.translation = [1020, 196]
+    makeBox(pv, 820, 560, 20, t.bg)
+    makeOutline(pv, 820, 560, 20, t.card)
+    items = m.global.previewItems
+    if items = invalid then items = []
+    if items.Count() > 0
+        art = pv.CreateChild("Poster")
+        art.translation = [2, 2]
+        art.width = 816
+        art.height = 300
+        art.loadWidth = 816
+        art.loadHeight = 300
+        art.loadDisplayMode = "scaleToZoom"
+        art.uri = items[0].backdrop.Replace("fillWidth=1920", "fillWidth=820")
+        f = makeFade(pv, "hero", 816, 300)
+        f.translation = [2, 2]
+        fu = makeFadeUp(pv, 816, 120, t.bg)
+        fu.translation = [2, 182]
+    end if
+    big = t.largerText
+    eyebrow = 13
+    titleSize = 44
+    body = 17
+    if big
+        eyebrow = 15
+        titleSize = 52
+        body = 20
+    end if
+    heading = "The Saltmarsh"
+    meta = "2026 " + Chr(183) + " TV-MA " + Chr(183) + " Drama"
+    if items.Count() > 0
+        heading = items[0].heading
+        meta = items[0].meta
+    end if
+    makeLabel(pv, "CONTINUE WATCHING", eyebrow, "semibold", t.accent).translation = [40, 56]
+    tl = makeLabel(pv, heading, titleSize, "display", t.text)
+    tl.translation = [40, 80]
+    tl.width = 480
+    ml = makeLabel(pv, meta, body, "regular", t.muted)
+    ml.translation = [40, 90 + titleSize]
+    ml.width = 480
+    play = makeBox(pv, 100, 40, 10, t.text)
+    play.translation = [40, 130 + titleSize]
+    pl = makeLabel(pv, "Play", body, "semibold", t.bg)
+    pl.translation = [40, 130 + titleSize]
+    pl.width = 100
+    pl.height = 40
+    pl.horizAlign = "center"
+    pl.vertAlign = "center"
+    makeLabel(pv, "Continue watching", body, "semibold", t.text).translation = [40, 330]
+    tw = 174
+    tileH = 98
+    if t.portraitPosters
+        tw = 116
+        tileH = 174
+    end if
+    for i = 0 to 3
+        g = pv.CreateChild("Group")
+        g.translation = [40 + i * (tw + 14), 366]
+        makeBox(g, tw, tileH, 10, t.raised)
+        if i < items.Count()
+            img = g.CreateChild("Poster")
+            img.width = tw
+            img.height = tileH
+            img.loadWidth = tw
+            img.loadHeight = tileH
+            img.loadDisplayMode = "scaleToZoom"
+            img.uri = items[i].image
+            corners = makeShape(g, "pkg:/images/corners_r10.9.png", tw, tileH, t.bg)
+            corners.loadDisplayMode = "scaleToFill"
+        end if
+        track = g.CreateChild("Rectangle")
+        track.translation = [10, tileH - 12]
+        track.width = tw - 20
+        track.height = 4
+        track.color = "0xFFFFFF4D"
+        fill = g.CreateChild("Rectangle")
+        fill.translation = [10, tileH - 12]
+        pcts = [0.62, 0.2, 0.82, 0.45]
+        fill.width = Int((tw - 20) * pcts[i])
+        fill.height = 4
+        fill.color = t.accent
+        if i = 0 then makeRing(g, tw, tileH, 10, t.accent)
+    end for
+    foot = makeLabel(L, "Highlight rings follow the Roku remote" + Chr(8217) + "s focus. Changes save instantly.", 18, "regular", t.muted)
+    foot.translation = [1020, 772]
+end sub
+
+sub paint()
+    t = th()
+    for i = 0 to m.themeCards.Count() - 1
+        c = m.themeCards[i]
+        focused = (m.zone = "themes" and i = m.themeIndex)
+        c.ring.visible = focused
+        if focused
+            c.group.scale = [t.focusScale, t.focusScale]
+        else
+            c.group.scale = [1.0, 1.0]
+        end if
+    end for
+    for i = 0 to m.swatches.Count() - 1
+        s = m.swatches[i]
+        if m.zone = "accents" and i = m.accentFocus
+            s.group.scale = [1.15, 1.15]
+        else
+            s.group.scale = [1.0, 1.0]
+        end if
+    end for
+    for i = 0 to m.toggles.Count() - 1
+        m.toggles[i].ring.visible = (m.zone = "toggles" and i = m.toggleIndex)
+    end for
+    paintBtn(m.back, m.zone = "back")
+    m.back.bg.blendColor = t.panel
+    m.back.bg.opacity = 1.0
+    if m.zone = "back"
+        m.back.bg.blendColor = t.solid
+    end if
+end sub
+
+' Apply one change and redraw in the new look.
+sub change(key as string, value as dynamic)
+    setPref(key, value)
+    build()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "back" then return false
+    if m.zone = "back"
+        if key = "OK"
+            m.top.navigate = { action: "back" }
+        else if key = "down"
+            m.zone = "themes"
+            paint()
+        end if
+        return true
+    else if m.zone = "themes"
+        col = m.themeIndex mod 3
+        row = m.themeIndex \ 3
+        if key = "left" and col > 0
+            m.themeIndex = m.themeIndex - 1
+        else if key = "right" and col < 2
+            m.themeIndex = m.themeIndex + 1
+        else if key = "up"
+            if row = 0
+                m.zone = "back"
+            else
+                m.themeIndex = m.themeIndex - 3
+            end if
+        else if key = "down"
+            if row = 0
+                m.themeIndex = m.themeIndex + 3
+            else
+                m.zone = "accents"
+                m.accentFocus = m.accentIndex
+            end if
+        else if key = "OK"
+            ' A new Theme starts with its own Accent.
+            m.accentIndex = 0
+            p = m.global.prefs
+            p.accent = ""
+            p.theme = themeNames()[m.themeIndex]
+            savePrefs(p)
+            applyPrefs(p)
+            build()
+            return true
+        end if
+        paint()
+        return true
+    else if m.zone = "accents"
+        if key = "left" and m.accentFocus > 0
+            m.accentFocus = m.accentFocus - 1
+        else if key = "right" and m.accentFocus < 5
+            m.accentFocus = m.accentFocus + 1
+        else if key = "up"
+            m.zone = "themes"
+        else if key = "down"
+            m.zone = "toggles"
+        else if key = "OK"
+            m.accentIndex = m.accentFocus
+            change("accent", accentNames()[m.accentIndex])
+            return true
+        end if
+        paint()
+        return true
+    else if m.zone = "toggles"
+        if key = "left"
+            m.toggleIndex = 0
+        else if key = "right"
+            m.toggleIndex = 1
+        else if key = "up"
+            m.zone = "accents"
+            m.accentFocus = m.accentIndex
+        else if key = "OK"
+            if m.toggleIndex = 0
+                change("largerText", not th().largerText)
+            else
+                change("portraitPosters", not th().portraitPosters)
+            end if
+            return true
+        end if
+        paint()
+        return true
+    end if
+    return false
+end function

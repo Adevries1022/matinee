@@ -520,3 +520,30 @@ sub paintTopBadges(b as object, focusIndex as integer)
     b.pillRing.visible = (focusIndex = 0)
     b.avatarRing.visible = (focusIndex = 1)
 end sub
+
+' ================= Checkboxes =================
+
+' A 28 px checkbox with a label, as on the Connect board.
+function makeCheck(parent as object, text as string) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    fill = makeBox(g, 28, 28, 6, t.accent)
+    border = makeOutline(g, 28, 28, 6, t.dashed)
+    tick = makeIcon(g, "check", 22, t.bg)
+    tick.translation = [3, 3]
+    ring = makeFocusRing(g, 28, 28, 6)
+    l = makeLabel(g, text, 22, "regular", t.text)
+    l.translation = [44, -6]
+    l.height = 40
+    l.vertAlign = "center"
+    c = { group: g, fill: fill, border: border, tick: tick, ring: ring, label: l, on: false }
+    setCheck(c, false)
+    return c
+end function
+
+sub setCheck(c as object, isOn as boolean)
+    c.on = isOn
+    c.fill.visible = isOn
+    c.tick.visible = isOn
+    c.border.visible = not isOn
+end sub

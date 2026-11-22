@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Themes: six Theme cards, Accent swatches, Larger text and Portrait
+     posters, and a live preview. Changes apply right away. -->
+<component name="ThemesScreen" extends="Group">
+  <interface>
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="ThemesScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <children>
+    <Rectangle id="bg" width="1920" height="1080" />
+    <Group id="layer" />
+  </children>
+</component>

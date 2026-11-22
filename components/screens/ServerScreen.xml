@@ -1,22 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Pick a Jellyfin server: found automatically, or typed in. -->
+<!-- Connect a server (step 1 of setup): found on the network, an address,
+     or Quick Connect from another device. -->
 <component name="ServerScreen" extends="Group">
   <interface>
     <field id="message" type="string" onChange="onMessage" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
+    <field id="closed" type="boolean" onChange="onClosed" />
   </interface>
   <script type="text/brightscript" uri="ServerScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <children>
-    <Label id="brand" text="MATINEE" translation="[96,60]">
-      <Font role="font" uri="font:BoldSystemFontFile" size="30" />
-    </Label>
-    <Label id="heading" translation="[96,165]" width="1700" text="Choose your server">
-      <Font role="font" uri="font:BoldSystemFontFile" size="56" />
-    </Label>
-    <Label id="status" translation="[96,250]" width="1700" wrap="true">
-      <Font role="font" uri="font:SystemFontFile" size="30" />
-    </Label>
-    <Group id="list" translation="[96,340]" />
+    <Group id="layer" />
+    <Group id="panelLayer" />
+    <Timer id="poll" duration="3" repeat="true" />
+    <Timer id="clock" duration="1" repeat="true" />
   </children>
 </component>

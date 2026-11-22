@@ -1,17 +1,42 @@
+' Sign in (step 2 of setup), laid out like the Connect board: the person
+' on the left, a Quick Connect code on the right, and a password button.
 sub init()
     t = th()
-    m.top.findNode("brand").color = t.accent
-    m.top.findNode("btnBg").blendColor = t.focusBg
-    m.top.findNode("btnLabel").color = t.onFocus
-    m.avatar = m.top.findNode("avatar")
-    m.nameLabel = m.top.findNode("nameLabel")
-    m.nameLabel.color = t.text
-    m.code = m.top.findNode("code")
-    m.code.color = t.accent
-    m.instr = m.top.findNode("instr")
-    m.instr.color = t.textDim
-    m.status = m.top.findNode("status")
-    m.status.color = t.textDim
+    m.layer = m.top.findNode("layer")
+    m.codeHost = m.top.findNode("codeHost")
+    makeWordmark(m.layer).translation = [160, 64]
+    m.steps = makeSteps(m.layer, 2, 1760, 70)
+    m.avatar = m.layer.CreateChild("Group")
+    m.avatar.translation = [160, 200]
+    m.nameLabel = makeTitle(m.layer, "", 56)
+    m.nameLabel.translation = [160, 392]
+    m.nameLabel.width = 600
+    m.nameLabel.wrap = true
+    m.instr = makeLabel(m.layer, "", 24, "regular", t.meta)
+    m.instr.translation = [160, 540]
+    m.instr.width = 600
+    m.instr.wrap = true
+    m.instr.lineSpacing = 10
+
+    makePanel(m.layer, 880, 760, 24).translation = [880, 200]
+    makeLabel(m.layer, "Quick Connect", 30, "semibold", t.text).translation = [936, 256]
+    m.qcIntro = makeLabel(m.layer, "On your phone or computer, open Jellyfin, go to Quick Connect in your user menu and enter:", 22, "regular", t.meta)
+    m.qcIntro.translation = [936, 312]
+    m.qcIntro.width = 768
+    m.qcIntro.wrap = true
+    m.qcIntro.lineSpacing = 10
+    m.codeHost.translation = [936, 420]
+    sg = m.layer.CreateChild("Group")
+    sg.translation = [936, 576]
+    makeShape(sg, "pkg:/images/circle.png", 10, 10, t.accent).translation = [0, 11]
+    m.status = makeLabel(sg, "", 20, "regular", t.muted)
+    m.status.translation = [22, 0]
+    m.status.width = 740
+    m.status.wrap = true
+    m.pwBtn = makeBtn(m.layer, { kind: "primary", icon: "user", text: "Use password instead", size: 22, padX: 32 })
+    m.pwBtn.group.translation = [936, 680]
+    paintBtn(m.pwBtn, true)
+
     m.poll = m.top.findNode("poll")
     m.poll.observeField("fire", "onPoll")
     m.top.observeField("focusedChild", "onFocusChanged")
@@ -20,18 +45,37 @@ sub init()
     m.triedGet = false
     m.done = false
     m.isSeerr = false
+    showCode("")
+end sub
+
+sub showCode(code as string)
+    t = th()
+    m.codeHost.removeChildrenIndex(m.codeHost.getChildCount(), 0)
+    for i = 0 to 5
+        g = m.codeHost.CreateChild("Group")
+        g.translation = [i * 110, 0]
+        makeBox(g, 96, 120, 16, t.bg)
+        makeOutline(g, 96, 120, 16, t.line)
+        d = makeLabel(g, Mid(code, i + 1, 1), 64, "display", t.text)
+        d.width = 96
+        d.height = 120
+        d.horizAlign = "center"
+        d.vertAlign = "center"
+    end for
 end sub
 
 sub start()
     u = m.top.user
     m.avatar.removeChildrenIndex(m.avatar.getChildCount(), 0)
-    m.avatar.appendChild(makeAvatar(safeStr(u.id), safeStr(u.name), safeStr(u.imageTag), 180))
-    m.nameLabel.text = safeStr(u.name)
-    m.code.text = ""
-    m.instr.text = ""
+    m.avatar.appendChild(makeAvatar(safeStr(u.id), safeStr(u.name), safeStr(u.imageTag), 160))
+    m.nameLabel.text = "Sign in as " + safeStr(u.name)
+    m.instr.text = "Approve this TV from your phone with Quick Connect, or use your password."
+    showCode("")
     m.isSeerr = (m.top.mode = "seerr")
     if m.isSeerr
-        m.nameLabel.text = "Sign in to Seerr as " + safeStr(u.name)
+        m.steps.visible = false
+        m.nameLabel.text = "Sign in to Seerr"
+        m.instr.text = "Seerr uses your Jellyfin account (" + safeStr(u.name) + "), so your requests are yours."
         m.status.text = "Starting Quick Connect..."
         initiate()
         return
@@ -56,8 +100,7 @@ sub onQcEnabled(event as object)
     if enabled
         initiate()
     else
-        m.instr.text = "Quick Connect is turned off on this server, so sign in with your password. An administrator can turn it on in the Jellyfin dashboard under General."
-        m.status.text = ""
+        m.status.text = "Quick Connect is turned off on this server, so sign in with your password. An Administrator can turn it on in the Jellyfin dashboard."
         openPassword()
     end if
 end sub
@@ -81,26 +124,15 @@ sub onInitiate(event as object)
     if res.ok and isValid(res.data)
         if isValid(res.data.Code) and isValid(res.data.Secret)
             m.secret = safeStr(res.data.Secret)
-            m.code.text = spacedCode(safeStr(res.data.Code))
-            m.instr.text = "On your phone or computer, open Jellyfin, go to your profile, choose Quick Connect, and enter this code."
-            m.status.text = "Waiting for approval..."
+            showCode(safeStr(res.data.Code))
+            m.status.text = "Waiting for approval"
             m.poll.control = "start"
             return
         end if
     end if
-    m.instr.text = "Couldn't start Quick Connect. Sign in with your password instead."
-    m.status.text = ""
+    m.status.text = "Couldn" + Chr(8217) + "t start Quick Connect. Sign in with your password instead."
     openPassword()
 end sub
-
-function spacedCode(c as string) as string
-    out = ""
-    for i = 1 to Len(c)
-        if i > 1 then out = out + " "
-        out = out + Mid(c, i, 1)
-    end for
-    return out
-end function
 
 sub onPoll()
     if m.secret = "" or m.done then return

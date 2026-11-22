@@ -27,9 +27,14 @@ sub execute()
     if LCase(Left(url, 5)) = "https"
         xfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
         xfer.InitClientCertificates()
-        ' Home servers often use self-signed certificates.
-        xfer.EnablePeerVerification(false)
-        xfer.EnableHostVerification(false)
+        ' Home servers often use self-signed certificates, so they're allowed
+        ' unless "Allow self-signed certificates" is turned off.
+        verify = req.verify
+        if type(verify) <> "Boolean" and type(verify) <> "roBoolean" then verify = false
+        if not verify
+            xfer.EnablePeerVerification(false)
+            xfer.EnableHostVerification(false)
+        end if
     end if
     xfer.AddHeader("Accept", "application/json")
     xfer.AddHeader("Content-Type", "application/json")

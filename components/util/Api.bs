@@ -39,7 +39,8 @@ sub startRequest(base as string, path as string, query as object, callback as st
         tag: tag,
         server: base,
         auth: auth,
-        headers: headers
+        headers: headers,
+        verify: readSetting("allowSelfSigned", "true") <> "true"
     }
     task.observeField("response", callback)
     task.control = "RUN"
@@ -519,7 +520,7 @@ function episodeLabel(item as object) as string
 end function
 
 function dot() as string
-    return "   " + Chr(8226) + "   "
+    return "  " + Chr(183) + "  "
 end function
 
 function ratingText(r as dynamic) as string
@@ -784,11 +785,29 @@ function hostBase(url as string) as string
     return Left(url, sep + 2) + Left(rest, cut - 1)
 end function
 
-' Saved sign-ins for the current server: { userId: { token, name, imageTag } }
+' Saved sign-ins are kept per server, so connecting to another server
+' doesn't sign everyone out of this one: { userId: { token, name, imageTag } }
+function sessionsKey() as string
+    server = readSetting("server", "")
+    key = ""
+    for i = 1 to Len(server)
+        ch = Mid(server, i, 1)
+        if Instr(1, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", ch) > 0 then key = key + ch
+    end for
+    return "sessions_" + key
+end function
+
 function readSessions() as object
     reg = CreateObject("roRegistrySection", "Marquee")
-    if reg.Exists("sessions")
-        s = ParseJson(reg.Read("sessions"))
+    key = sessionsKey()
+    ' Versions before 3.0 kept one list for the only server.
+    if not reg.Exists(key) and reg.Exists("sessions")
+        reg.Write(key, reg.Read("sessions"))
+        reg.Delete("sessions")
+        reg.Flush()
+    end if
+    if reg.Exists(key)
+        s = ParseJson(reg.Read(key))
         if s <> invalid then return s
     end if
     return {}
@@ -796,7 +815,7 @@ end function
 
 sub writeSessions(sessions as object)
     reg = CreateObject("roRegistrySection", "Marquee")
-    reg.Write("sessions", FormatJson(sessions))
+    reg.Write(sessionsKey(), FormatJson(sessions))
     reg.Flush()
 end sub
 
