@@ -1,10 +1,13 @@
 ' Trailer Preview: after a title has been Focused for a few seconds, its
-' trailer fades in, muted, behind the Hero text. Only trailer files stored
-' on the server are used (for example ones downloaded by Trailarr).
-' Play toggles the sound. Moving focus or leaving the screen stops it, and
-' Trailer previews in Playback & quality turns it off.
+' trailer fades in behind the Hero text, with sound unless Trailer sound
+' in Playback & quality is off, and the screen's header fades out. Only
+' trailer files stored on the server are used (for example ones downloaded
+' by Trailarr). Play toggles the sound. Moving focus or leaving the screen
+' stops it, and Trailer previews in Playback & quality turns it off.
 
-sub setupTrailer(layer as object, insertIndex as integer, hintY as integer)
+' chrome: the header (wordmark, server pill, avatar) to fade out while a
+' trailer plays. It needs an id.
+sub setupTrailer(layer as object, insertIndex as integer, hintY as integer, chrome as object)
     v = CreateObject("roSGNode", "Video")
     v.id = "trailerVideo"
     v.width = 1920
@@ -31,6 +34,15 @@ sub setupTrailer(layer as object, insertIndex as integer, hintY as integer)
     interp.key = [0.0, 1.0]
     interp.keyValue = [0.0, 1.0]
     interp.fieldToInterp = "trailerVideo.opacity"
+
+    m.trailerChrome = chrome
+    m.chromeFade = m.top.CreateChild("Animation")
+    m.chromeFade.duration = 0.8
+    m.chromeFade.easeFunction = "outQuad"
+    ci = m.chromeFade.CreateChild("FloatFieldInterpolator")
+    ci.key = [0.0, 1.0]
+    ci.keyValue = [1.0, 0.0]
+    ci.fieldToInterp = chrome.id + ".opacity"
 
     m.trailerTimer = layer.CreateChild("Timer")
     m.trailerTimer.duration = 3
@@ -120,8 +132,8 @@ sub playTrailer(how as string)
     logUrl = content.url
     if token <> "" then logUrl = logUrl.Replace(token, "***")
     print "[Matinee] trailer: playing ("; how; ") "; logUrl
-    m.trailerVideo.mute = true
-    m.trailerHint.text = "Press Play for sound"
+    m.trailerVideo.mute = not trailerSoundOn()
+    paintTrailerHint()
     m.trailerVideo.content = content
     m.trailerVideo.control = "play"
 end sub
@@ -134,6 +146,7 @@ sub onTrailerState()
             m.trailerVideo.visible = true
             m.trailerHint.visible = true
             m.trailerFade.control = "start"
+            trailerHideChrome()
         end if
     else if st = "error"
         print "[Matinee] trailer: playback error: "; m.trailerVideo.errorMsg
@@ -160,6 +173,35 @@ sub trailerStop()
     m.trailerVideo.opacity = 0
     m.trailerVideo.visible = false
     m.trailerHint.visible = false
+    trailerShowChrome()
+end sub
+
+' Fade the header out so it doesn't sit on the trailer.
+sub trailerHideChrome()
+    if m.trailerChrome = invalid or not m.trailerPlaying then return
+    if m.zone = "badges" then return
+    m.chromeFade.control = "start"
+end sub
+
+' Bring the header back: the trailer stopped, or focus moved up to it.
+sub trailerShowChrome()
+    if m.trailerChrome = invalid then return
+    m.chromeFade.control = "stop"
+    m.trailerChrome.opacity = 1
+end sub
+
+function trailerSoundOn() as boolean
+    p = m.global.prefs
+    if p = invalid then return true
+    return p.trailerSound <> false
+end function
+
+sub paintTrailerHint()
+    if m.trailerVideo.mute
+        m.trailerHint.text = "Press Play for sound"
+    else
+        m.trailerHint.text = "Press Play to mute"
+    end if
 end sub
 
 ' Play toggles the trailer's sound. Returns true if a trailer was playing.
@@ -167,11 +209,7 @@ function toggleTrailerSound() as boolean
     if m.trailerVideo = invalid then return false
     if not m.trailerPlaying then return false
     m.trailerVideo.mute = not m.trailerVideo.mute
-    if m.trailerVideo.mute
-        m.trailerHint.text = "Press Play for sound"
-    else
-        m.trailerHint.text = "Press Play to mute"
-    end if
+    paintTrailerHint()
     return true
 end function
 

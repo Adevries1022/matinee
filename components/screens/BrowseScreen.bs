@@ -49,7 +49,7 @@ sub buildHero()
     m.heroArt.loadDisplayMode = "scaleToZoom"
     m.heroArt.opacity = 0
     m.heroArt.observeField("loadStatus", "onHeroArtStatus")
-    setupTrailer(layer, 1, 600)
+    setupTrailer(layer, 1, 600, m.chrome)
     makeFade(layer, "hero", 1920, 780)
     ' Solid by 684, the top of a Focused Card in the first Row: the Cards'
     ' rounded corners are painted in the background color.
@@ -513,7 +513,12 @@ sub setZone(zone as string)
     if zone = "buttons" then focusIndex = m.btnIndex
     paintBtns(m.buttons, focusIndex)
     badgeFocus = -1
-    if zone = "badges" then badgeFocus = m.badgeIndex
+    if zone = "badges"
+        badgeFocus = m.badgeIndex
+        trailerShowChrome()
+    else if m.trailerChrome.opacity = 1
+        trailerHideChrome()
+    end if
     paintTopBadges(m.badges, badgeFocus)
     if zone = "rows"
         restoreRows()

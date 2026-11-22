@@ -24,7 +24,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 - **My List:** your Jellyfin Favorites (movies and shows), so it's the same on every device. Filter by All, In progress or Not started.
 - **Search:** finds titles by name as you type. If you're signed in to Seerr, titles you could request follow the matches from your library.
 - **Player:** Matinee's own controls, with seeking, subtitle and audio choice, the next episode, and a countdown near the end of an episode. Picture-based subtitles (like PGS) are burned in by the server.
-- **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays behind the Hero, muted.
+- **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays behind the Hero, with sound (turn Trailer sound off in Playback & quality to start them muted). The header fades out while it plays.
 
 ### Requests and downloads
 - **Requests** appears in the Rail when Matinee finds Seerr. It looks on port 5055 of the Jellyfin machine unless an Administrator enters an address. Each person signs in to Seerr with their Jellyfin account, so requests are in their name. Its tabs are Discover, My requests and Ready to watch.
@@ -38,7 +38,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 | Themes | Six Themes, five Accents or the Theme's default, Larger text, Portrait posters | Each person, for themselves |
 | Users | Switch user, Manage profiles, Sign out | Anyone |
 | Users | Always show Who's watching | Administrators |
-| Playback & quality | Bitrate, Direct play, Trailer previews, playing the next episode automatically | Each person, for themselves |
+| Playback & quality | Bitrate, Direct play, Trailer previews, Trailer sound, playing the next episode automatically | Each person, for themselves |
 | Subtitles | On, off or the server's default, and a preferred language | Each person, for themselves |
 | About this device | Matinee, Roku and server details | View only |
 

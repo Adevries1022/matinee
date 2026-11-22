@@ -60,7 +60,7 @@ The main screen with every movie from all of the server's movie libraries.
 _Avoid_: Film library
 
 **Trailer Preview**:
-A title's trailer, stored on the server, playing muted in the Hero after its Card has been Focused for a few seconds.
+A title's trailer, stored on the server, playing in the Hero after its Card has been Focused for a few seconds. It has sound unless Trailer sound is off, and the header fades out while it plays.
 _Avoid_: Autoplay, preview video
 
 **Continue Watching**:
