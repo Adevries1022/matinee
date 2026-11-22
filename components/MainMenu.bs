@@ -1,150 +1,42 @@
+' The Rail: an always-visible 112 px column of icons down the left edge.
+' The current screen's icon sits on a soft square in the Accent; while the
+' Rail has focus, the Focused icon turns solid with its name beside it.
 sub init()
     m.layer = m.top.findNode("layer")
     m.index = 0
     m.nodes = []
-    m.isRail = (th().navStyle = "rail")
-    m.blur = invalid
-    m.top.observeField("focusedChild", "onFocusChanged")
 end sub
 
 sub build()
     t = th()
-    m.isRail = (t.navStyle = "rail")
     m.layer.removeChildrenIndex(m.layer.getChildCount(), 0)
     m.nodes = []
-    if m.isRail
-        buildRail(t)
-    else
-        buildTop(t)
-    end if
-    buildBadges(t)
-    paint()
-end sub
-
-' ---------- Side Rail ----------
-
-sub buildRail(t as object)
-    ' Always-visible strip behind the icons.
-    strip = m.layer.CreateChild("Poster")
-    strip.uri = "pkg:/images/grad_left.png"
-    strip.width = 260
-    strip.height = 1080
-    strip.loadDisplayMode = "scaleToFill"
-    strip.blendColor = t.bg
-    strip.opacity = 0.9
-
-    ' Expanded panel, shown when the menu is open.
-    m.panel = m.layer.CreateChild("Group")
-    veil = m.panel.CreateChild("Rectangle")
-    veil.width = 1920
-    veil.height = 1080
-    veil.color = t.bg
-    veil.opacity = 0.55
-    clip = m.panel.CreateChild("Group")
-    clip.clippingRect = [0, 0, 420, 1080]
-    if t.frosted
-        m.blur = clip.CreateChild("Poster")
-        m.blur.width = 1920
-        m.blur.height = 1080
-        m.blur.loadWidth = 480
-        m.blur.loadHeight = 270
-        m.blur.loadDisplayMode = "scaleToZoom"
-        m.blur.uri = blurredUrl(m.top.backdropUri)
-    end if
-    tint = clip.CreateChild("Rectangle")
-    tint.width = 420
-    tint.height = 1080
-    tint.color = t.panel
-    tint.opacity = 0.78
-    if not t.frosted then tint.opacity = 0.97
-
-    ' The current screen's icon sits on a soft square; the Focused item,
-    ' while the menu is open, on a solid light bar.
-    m.current = makeShape(m.layer, t.fillUri, 64, 64, t.surface, t.surfaceOpacity * 1.25)
-    m.highlight = makeShape(m.panel, t.fillUri, 372, 64, t.focusBg, 1.0)
-
     items = m.top.items
     if items = invalid then items = []
     y = 240
     for i = 0 to items.Count() - 1
         it = items[i]
-        ' Settings and Switch User sit apart from the places to browse.
-        if it.key = "settings" then y = y + 48
-        icon = m.layer.CreateChild("Poster")
-        icon.uri = "pkg:/images/icon_" + it.icon + ".png"
-        icon.width = 36
-        icon.height = 36
-        icon.translation = [38, y + 14]
-        lbl = makeLabel(m.panel, it.label, 28, true, t.text)
-        lbl.translation = [100, y]
-        lbl.height = 64
-        lbl.width = 280
-        lbl.vertAlign = "center"
-        m.nodes.Push({ icon: icon, label: lbl, y: y })
+        ' Settings sits apart from the places to browse.
+        if it.key = "settings" then y = y + 80
+        g = m.layer.CreateChild("Group")
+        g.translation = [24, y]
+        sq = makeBox(g, 64, 64, 16, t.white, 0.10)
+        ic = makeIcon(g, it.icon, 30, t.idle)
+        ic.translation = [17, 17]
+        tip = g.CreateChild("Group")
+        tip.translation = [84, 10]
+        tipW = measureText(it.label, 20, "semibold") + 40
+        makeBox(tip, tipW, 44, 22, t.raised)
+        tl = makeLabel(tip, it.label, 20, "semibold", t.text)
+        tl.translation = [20, 0]
+        tl.height = 44
+        tl.vertAlign = "center"
+        tip.visible = false
+        m.nodes.Push({ square: sq, icon: ic, tip: tip })
         y = y + 76
     end for
-    m.panel.visible = false
+    paint()
 end sub
-
-' The wordmark at the top left, and who is signed in to which server at
-' the top right. Shown with either Navigation Style.
-sub buildBadges(t as object)
-    ' The wordmark only on screens with a Hero; elsewhere the heading sits there.
-    k = m.top.currentKey
-    if m.isRail and (k = "home" or k = "discover" or Left(k, 4) = "lib:")
-        brand = makeLabel(m.layer, "MATINEE", 30, true, t.accent)
-        brand.translation = [t.leftPad, 60]
-    end if
-
-    reg = CreateObject("roRegistrySection", "Marquee")
-    serverName = "Jellyfin"
-    if reg.Exists("serverName")
-        n = reg.Read("serverName")
-        if n <> "" then serverName = n
-    end if
-    text = serverName + "  " + Chr(183) + "  Jellyfin"
-    if serverName = "Jellyfin" then text = "Jellyfin"
-    textW = measureText(text, 22, false)
-    pillW = textW + 64
-    avatarSize = 56
-    right = 1920 - 80
-    g = m.layer.CreateChild("Group")
-    g.translation = [right - avatarSize - 20 - pillW, 56]
-    makeShape(g, t.pillUri, pillW, 48, t.scrim, 0.45)
-    dotShape = makeShape(g, t.fillUri, 12, 12, t.online, 1.0)
-    dotShape.translation = [22, 18]
-    l = makeLabel(g, text, 22, false, t.textDim)
-    l.translation = [44, 0]
-    l.height = 48
-    l.vertAlign = "center"
-
-    avatarTag = ""
-    sessions = readSessions()
-    s = sessions[m.global.userId]
-    if s <> invalid then avatarTag = safeStr(s.imageTag)
-    av = makeAvatar(m.global.userId, m.global.userName, avatarTag, avatarSize)
-    av.translation = [right - avatarSize, 52]
-    m.layer.appendChild(av)
-end sub
-
-' ---------- Top Bar ----------
-
-sub buildTop(t as object)
-    row = m.layer.CreateChild("LayoutGroup")
-    row.translation = [96, 60]
-    row.layoutDirection = "horiz"
-    row.itemSpacings = [52]
-    row.vertAlignment = "center"
-    makeLabel(row, "MATINEE", 38, true, t.accent)
-    items = m.top.items
-    if items = invalid then items = []
-    for each it in items
-        lbl = makeLabel(row, it.label, 32, true, t.textFaint)
-        m.nodes.Push({ icon: invalid, label: lbl, y: 0 })
-    end for
-end sub
-
-' ---------- State ----------
 
 function keyIndex(key as string) as integer
     items = m.top.items
@@ -157,79 +49,52 @@ end function
 
 sub onOpen()
     if m.top.open then m.index = keyIndex(m.top.currentKey)
-    if m.isRail and m.panel <> invalid then m.panel.visible = m.top.open
     paint()
-end sub
-
-sub onBackdrop()
-    if m.blur <> invalid then m.blur.uri = blurredUrl(m.top.backdropUri)
 end sub
 
 sub paint()
     t = th()
     items = m.top.items
     if items = invalid then return
-    cur = keyIndex(m.top.currentKey)
+    cur = -1
+    for i = 0 to items.Count() - 1
+        if items[i].key = m.top.currentKey then cur = i
+    end for
     isOpen = m.top.open
     for i = 0 to m.nodes.Count() - 1
         n = m.nodes[i]
         focused = isOpen and i = m.index
-        if m.isRail
-            if focused
-                n.icon.blendColor = t.onFocus
-                n.label.color = t.onFocus
-            else if i = cur
-                n.icon.blendColor = t.accent
-                n.label.color = t.accent
-            else
-                n.icon.blendColor = t.textDim
-                n.label.color = t.text
-            end if
+        n.tip.visible = focused
+        if focused
+            n.square.visible = true
+            n.square.blendColor = t.solid
+            n.square.opacity = 1.0
+            n.icon.blendColor = t.onSolid
+        else if i = cur
+            n.square.visible = true
+            n.square.blendColor = t.white
+            n.square.opacity = 0.10
+            n.icon.blendColor = t.accent
         else
-            if focused
-                n.label.color = t.accent
-            else if i = cur
-                n.label.color = t.text
-            else
-                n.label.color = t.textFaint
-            end if
+            n.square.visible = false
+            n.icon.blendColor = t.idle
         end if
     end for
-    if m.isRail and m.highlight <> invalid and m.nodes.Count() > 0
-        m.highlight.translation = [24, m.nodes[m.index].y]
-        m.current.translation = [24, m.nodes[cur].y]
-        m.current.visible = not isOpen or cur <> m.index
-    end if
-end sub
-
-sub onFocusChanged()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press or not m.top.open then return false
     count = m.nodes.Count()
-    prevKey = "up"
-    nextKey = "down"
-    closeKey = "right"
-    if not m.isRail
-        prevKey = "left"
-        nextKey = "right"
-        closeKey = "down"
-    end if
-    if key = prevKey
+    if key = "up"
         if m.index > 0 then m.index = m.index - 1
         paint()
-        return true
-    else if key = nextKey
+    else if key = "down"
         if m.index < count - 1 then m.index = m.index + 1
         paint()
-        return true
     else if key = "OK"
         if count > 0 then m.top.chosen = m.top.items[m.index].key
-        return true
-    else if key = closeKey or key = "back"
+    else if key = "right" or key = "back"
         m.top.closeRequested = true
-        return true
     end if
     return true
 end function

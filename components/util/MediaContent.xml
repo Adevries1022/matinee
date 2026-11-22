@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- One title (movie, show or episode) as shown on a card. -->
+<!-- One title (movie, show or episode) as shown on a Card. -->
 <component name="MediaContent" extends="ContentNode">
   <interface>
     <field id="itemId" type="string" />
@@ -9,12 +9,19 @@
     <field id="heading" type="string" />
     <field id="subtitle" type="string" />
     <field id="meta" type="string" />
+    <field id="year" type="string" />
+    <field id="rating" type="string" />
+    <field id="length" type="string" />
+    <field id="genre" type="string" />
+    <field id="epCode" type="string" />
+    <field id="rowTitle" type="string" />
     <field id="backdropUrl" type="string" />
     <field id="progress" type="float" />
     <field id="resumeSeconds" type="integer" />
     <field id="cardW" type="integer" />
     <field id="cardH" type="integer" />
     <field id="played" type="boolean" />
+    <field id="favorite" type="boolean" />
     <field id="badge" type="string" />
     <field id="requestStatus" type="integer" />
   </interface>

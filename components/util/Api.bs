@@ -94,6 +94,16 @@ function accentColors() as object
     }
 end function
 
+function accentNames() as object
+    return ["", "amber", "sky", "coral", "lime", "violet"]
+end function
+
+function accentLabel(name as string) as string
+    labels = { amber: "Amber", sky: "Sky", coral: "Coral", lime: "Lime", violet: "Violet" }
+    if labels.DoesExist(name) then return labels[name]
+    return "Theme default"
+end function
+
 ' Accents and Themes saved by earlier versions, mapped to today's names.
 function legacyAccent(name as string) as string
     if name = "red" then return "coral"
@@ -108,20 +118,22 @@ function legacyTheme(name as string) as string
     return name
 end function
 
-' The six Themes: background, panel and raised surfaces, text and Accent.
+' The six Themes, from the Lumen boards: background, panel and raised
+' surfaces, the lighter card color used in Theme previews, text, muted
+' text and the default Accent.
 function themePalette(name as string) as object
     if name = "oled"
-        return { name: "oled", label: "OLED Black", bg: "0x000000FF", panel: "0x161616FF", raised: "0x222222FF", text: "0xFFFFFFFF", textDim: "0xA3A3A3FF", textFaint: "0x7A7A7AFF", accent: "0x5CC8FFFF", frosted: false, blurb: "Pure black, so the screen goes dark around the artwork. Best on OLED TVs." }
+        return { name: "oled", label: "OLED Black", bg: "0x000000FF", panel: "0x121212FF", raised: "0x1C1C1CFF", card: "0x161616FF", text: "0xFFFFFFFF", muted: "0xA3A3A3FF", accent: "0x5CC8FFFF" }
     else if name = "slate"
-        return { name: "slate", label: "Slate", bg: "0x18202CFF", panel: "0x253043FF", raised: "0x2C384BFF", text: "0xEEF1F6FF", textDim: "0xAAB4C3FF", textFaint: "0x7F8A9BFF", accent: "0x7DD3FCFF", frosted: true, blurb: "A cool blue-grey that's easy on the eyes in a bright room." }
+        return { name: "slate", label: "Slate", bg: "0x18202CFF", panel: "0x222C3CFF", raised: "0x2C384BFF", card: "0x253043FF", text: "0xEEF1F6FF", muted: "0xAAB4C3FF", accent: "0x7DD3FCFF" }
     else if name = "forest"
-        return { name: "forest", label: "Forest", bg: "0x0E1A14FF", panel: "0x1A2C22FF", raised: "0x1F3328FF", text: "0xECF3EEFF", textDim: "0xA3B8AAFF", textFaint: "0x76897CFF", accent: "0xB9F27CFF", frosted: true, blurb: "Deep green with a lime Accent." }
+        return { name: "forest", label: "Forest", bg: "0x0E1A14FF", panel: "0x16261DFF", raised: "0x1F3328FF", card: "0x1A2C22FF", text: "0xECF3EEFF", muted: "0xA3B8AAFF", accent: "0xB9F27CFF" }
     else if name = "ember"
-        return { name: "ember", label: "Ember", bg: "0x170E0AFF", panel: "0x2A1A13FF", raised: "0x311F17FF", text: "0xF7EEE9FF", textDim: "0xC2AFA5FF", textFaint: "0x93807AFF", accent: "0xFF7A59FF", frosted: true, blurb: "Warm brown-black with a coral Accent." }
+        return { name: "ember", label: "Ember", bg: "0x170E0AFF", panel: "0x241610FF", raised: "0x311F17FF", card: "0x2A1A13FF", text: "0xF7EEE9FF", muted: "0xC2AFA5FF", accent: "0xFF7A59FF" }
     else if name = "dusk"
-        return { name: "dusk", label: "Dusk", bg: "0x14111CFF", panel: "0x221C30FF", raised: "0x2A2339FF", text: "0xF3F0FAFF", textDim: "0xB3AAC6FF", textFaint: "0x857C98FF", accent: "0xC4A7FFFF", frosted: true, blurb: "Twilight purple with a lavender Accent." }
+        return { name: "dusk", label: "Dusk", bg: "0x14111CFF", panel: "0x1F1A2BFF", raised: "0x2A2339FF", card: "0x221C30FF", text: "0xF3F0FAFF", muted: "0xB3AAC6FF", accent: "0xC4A7FFFF" }
     end if
-    return { name: "midnight", label: "Midnight", bg: "0x0B0D12FF", panel: "0x1A1F29FF", raised: "0x1E2430FF", text: "0xF2F3F5FF", textDim: "0xA8B0BDFF", textFaint: "0x7D8592FF", accent: "0xFFB547FF", frosted: true, blurb: "Near-black blue with an amber Accent. The default." }
+    return { name: "midnight", label: "Midnight", bg: "0x0B0D12FF", panel: "0x151922FF", raised: "0x1E2430FF", card: "0x1A1F29FF", text: "0xF2F3F5FF", muted: "0xA8B0BDFF", accent: "0xFFB547FF" }
 end function
 
 function themeNames() as object
@@ -132,84 +144,97 @@ function defaultPrefs() as object
     return {
         theme: "midnight",
         accent: "",
-        bigHero: false,
-        miniCards: false,
-        navStyle: "rail",
-        reduceMotion: false
+        largerText: false,
+        portraitPosters: false,
+        trailers: true,
+        autoplayNext: true,
+        maxBitrate: 0,
+        directPlay: "prefer",
+        subtitles: "auto",
+        subtitleLang: ""
     }
 end function
 
 ' Every color, shape and size the screens use comes from here.
 function themeTokens(prefs as object) as object
     t = themePalette(legacyTheme(safeStr(prefs.theme)))
-    ' Translucent white layers over artwork: idle buttons, chips, placeholders.
-    t.surface = "0xFFFFFFFF"
-    t.surfaceOpacity = 0.08
-    t.surfaceHiOpacity = 0.14
-    t.cardFocusScale = 1.04
-
     accent = legacyAccent(safeStr(prefs.accent))
     colors = accentColors()
     if accent <> "" and colors.DoesExist(accent) then t.accent = colors[accent]
+    t.accentName = accent
     t.onAccent = t.bg
 
-    ' Focused buttons, rows and chips turn solid light with dark text;
-    ' focused Cards get a ring in the Accent.
-    t.focusColor = t.accent
-    t.focusBg = t.text
-    t.onFocus = t.bg
+    ' Fixed text shades from the boards, over any Theme.
+    t.soft = "0xD5D9E0FF"      ' blurbs and pill text
+    t.meta = "0xC4CAD4FF"      ' meta lines and secondary nav
+    t.heading = "0xE3E6EBFF"   ' Row titles
+    t.idle = "0x9AA3B2FF"      ' rail icons and idle labels
+    t.faint = "0x7D8696FF"     ' placeholders
+    t.line = "0x2E3542FF"      ' input borders
+    t.dashed = "0x5A6272FF"    ' dashed and off states
+    t.barBg = "0x2A3140FF"     ' progress tracks on panels
+    t.rule = "0x262C38FF"      ' list separators
+    t.white = "0xFFFFFFFF"
+    t.black = "0x000000FF"
+    t.ok = "0x4ADE80FF"
+    t.warn = "0xFBBF24FF"
+    t.error = "0xFF8A70FF"
+    t.info = "0x60A5FAFF"
+    t.ratingBorder = "0x8D96A6FF"
+
+    ' Focus: an Accent ring and a small zoom. Primary and selected
+    ' controls are solid light with dark text.
+    t.focusScale = 1.04
+    t.solid = t.text
+    t.onSolid = t.bg
+
+    t.largerText = isTrue(prefs.largerText)
+    t.portraitPosters = isTrue(prefs.portraitPosters)
+    t.textScale = 1.0
+    if t.largerText then t.textScale = 1.15
+
+    ' Layout
+    t.leftPad = 160
+    t.railW = 112
+    t.rowsTop = 640
+    t.landW = 352
+    t.landH = 198
+    t.posterW = 220
+    t.posterH = 330
+    t.epW = 400
+    t.epH = 225
+    t.cardRadius = 14
+    t.cellPadX = 12
+    t.cellPadY = 16
+
+    ' Kept until every screen moves to the Lumen kit.
+    t.textDim = t.muted
+    t.textFaint = t.faint
+    t.surface = t.white
+    t.surfaceOpacity = 0.10
+    t.surfaceHiOpacity = 0.14
+    t.focusBg = t.solid
+    t.onFocus = t.onSolid
     t.onFocusDim = "0x4A505CFF"
+    t.focusColor = t.accent
+    t.scrim = t.black
     t.trackBg = "0xFFFFFF40"
-    t.online = "0x4ADE80FF"
-    t.scrim = "0x000000FF"
-
-    t.fillUri = "pkg:/images/fill_round.9.png"
-    t.pillUri = "pkg:/images/pill.9.png"
-    t.ringUri = "pkg:/images/ring_round.9.png"
-    t.cornerUri = "pkg:/images/corners_round.9.png"
-    t.ringInset = 2   ' transparent margin around the stroke in ring_round.9.png
-    ' The focus ring: its stroke width in the ring images, and the gap between it and the Card.
-    t.ringStroke = 4
-    t.ringGap = 3
-
-    ' Layout Add-ons, Navigation Style and Reduce Motion
-    t.reduceMotion = isTrue(prefs.reduceMotion)
-    t.bigHero = isTrue(prefs.bigHero)
-    t.miniCards = isTrue(prefs.miniCards)
+    t.online = t.ok
+    t.frosted = false
+    t.reduceMotion = false
+    t.bigHero = false
+    t.miniCards = false
     t.navStyle = "rail"
-    if safeStr(prefs.navStyle) = "top" then t.navStyle = "top"
-    if t.reduceMotion then t.cardFocusScale = 1.0
-
-    if t.navStyle = "rail"
-        t.leftPad = 160
-        t.heroTop = 120
-    else
-        t.leftPad = 96
-        t.heroTop = 150
-    end if
+    t.heroTop = 120
     t.contentWidth = 1920 - t.leftPad
-    ' Each Card sits in a padded cell so it can grow from its centre
-    ' without being clipped. Cells touch, so the visible gap is 2 x pad.
-    t.cellPadX = 20
-    t.cellPadY = 20
-
-    if t.miniCards
-        t.posterW = 160
-        t.posterH = 240
-        t.landW = 288
-        t.landH = 162
-    else
-        t.posterW = 220
-        t.posterH = 330
-        t.landW = 352
-        t.landH = 198
-    end if
-
-    if t.bigHero
-        t.rowsTop = 700
-    else
-        t.rowsTop = 560
-    end if
+    t.cardFocusScale = t.focusScale
+    t.fillUri = "pkg:/images/fill_r14.9.png"
+    t.pillUri = "pkg:/images/fill_r28.9.png"
+    t.ringUri = "pkg:/images/ring_r18_w4.9.png"
+    t.cornerUri = "pkg:/images/corners_r14.9.png"
+    t.ringInset = 0
+    t.ringStroke = 4
+    t.ringGap = 0
     return t
 end function
 
@@ -239,22 +264,74 @@ sub savePrefs(prefs as object)
     reg.Flush()
 end sub
 
+' Change one preference for the signed-in User, save it and apply it.
+sub setPref(key as string, value as dynamic)
+    p = m.global.prefs
+    p[key] = value
+    savePrefs(p)
+    applyPrefs(p)
+end sub
+
+' ================= Device settings =================
+' Settings for the whole TV (not per User), in the "Marquee" section.
+
+function readSetting(key as string, fallback = "" as string) as string
+    reg = CreateObject("roRegistrySection", "Marquee")
+    if reg.Exists(key) then return reg.Read(key)
+    return fallback
+end function
+
+sub writeSetting(key as string, value as string)
+    reg = CreateObject("roRegistrySection", "Marquee")
+    if value = ""
+        reg.Delete(key)
+    else
+        reg.Write(key, value)
+    end if
+    reg.Flush()
+end sub
+
 ' ================= Drawing =================
 
-function makeFont(size as integer, bold = false as boolean) as object
-    f = CreateObject("roSGNode", "Font")
-    if bold
-        f.uri = "font:BoldSystemFontFile"
-    else
-        f.uri = "font:SystemFontFile"
+' Inter for text, Space Grotesk for titles. style: "regular", "medium",
+' "semibold", "display" (Space Grotesk Bold) or "displayMedium".
+' Earlier code passes true for bold, which means semibold.
+function makeFont(size as integer, style = "regular" as dynamic) as object
+    name = "regular"
+    st = type(style)
+    if st = "Boolean" or st = "roBoolean"
+        if style then name = "semibold"
+    else if st = "String" or st = "roString"
+        name = style
     end if
-    f.size = size
+    scale = 1.0
+    t = m.global.theme
+    if t <> invalid
+        if t.textScale <> invalid then scale = t.textScale
+    end if
+    px = Int(size * scale + 0.5)
+    if m.fontCache = invalid then m.fontCache = {}
+    key = name + px.ToStr()
+    if m.fontCache.DoesExist(key) then return m.fontCache[key]
+    files = {
+        regular: "Inter-Regular.ttf",
+        medium: "Inter-Medium.ttf",
+        semibold: "Inter-SemiBold.ttf",
+        display: "SpaceGrotesk-Bold.ttf",
+        displayMedium: "SpaceGrotesk-Medium.ttf"
+    }
+    file = files[name]
+    if file = invalid then file = files.regular
+    f = CreateObject("roSGNode", "Font")
+    f.uri = "pkg:/fonts/" + file
+    f.size = px
+    m.fontCache[key] = f
     return f
 end function
 
-function makeLabel(parent as object, text as string, size as integer, bold as boolean, color as string) as object
+function makeLabel(parent as object, text as string, size as integer, style as dynamic, color as string) as object
     l = parent.CreateChild("Label")
-    l.font = makeFont(size, bold)
+    l.font = makeFont(size, style)
     l.text = text
     l.color = color
     return l
@@ -271,15 +348,52 @@ function makeShape(parent as object, uri as string, w as float, h as float, colo
     return p
 end function
 
-' A themed button: { group, bg, label, width }
+' The nearest radius the 9-patch images come in.
+function snapRadius(r as integer) as integer
+    radii = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 48]
+    best = 4
+    for each x in radii
+        if Abs(x - r) < Abs(best - r) then best = x
+    end for
+    return best
+end function
+
+' A rounded rectangle (a pill when r is half the height).
+function makeBox(parent as object, w as float, h as float, r as integer, color as string, opacity = 1.0 as float) as object
+    return makeShape(parent, "pkg:/images/fill_r" + snapRadius(r).ToStr() + ".9.png", w, h, color, opacity)
+end function
+
+' A 2 px outline with the same rounding as makeBox.
+function makeOutline(parent as object, w as float, h as float, r as integer, color as string) as object
+    return makeShape(parent, "pkg:/images/ring_r" + snapRadius(r).ToStr() + "_w2.9.png", w, h, color)
+end function
+
+' A 4 px focus ring that sits just outside a box of radius r.
+function makeRing(parent as object, w as float, h as float, r as integer, color as string) as object
+    p = makeShape(parent, "pkg:/images/ring_r" + (snapRadius(r) + 4).ToStr() + "_w4.9.png", w + 8, h + 8, color)
+    p.translation = [-4, -4]
+    return p
+end function
+
+function makeIcon(parent as object, name as string, size as integer, color as string) as object
+    p = parent.CreateChild("Poster")
+    p.uri = "pkg:/images/icon_" + name + ".png"
+    p.width = size
+    p.height = size
+    p.loadDisplayMode = "scaleToFit"
+    p.blendColor = color
+    return p
+end function
+
+' A legacy themed button, kept for screens not yet on the Lumen kit.
 function makeButton(parent as object, text as string, minWidth = 0 as integer) as object
     t = th()
     g = parent.CreateChild("Group")
-    w = measureText(text, 30, true) + 96
+    w = measureText(text, 24, "semibold") + 80
     if w < minWidth then w = minWidth
-    bg = makeShape(g, t.fillUri, w, 72, t.surface, t.surfaceHiOpacity)
+    bg = makeBox(g, w, 72, 14, t.white, 0.14)
     l = g.CreateChild("Label")
-    l.font = makeFont(30, true)
+    l.font = makeFont(24, "semibold")
     l.text = text
     l.width = w
     l.height = 72
@@ -292,44 +406,51 @@ end function
 sub paintButton(b as object, focused as boolean)
     t = th()
     if focused
-        b.bg.blendColor = t.focusBg
+        b.bg.blendColor = t.solid
         b.bg.opacity = 1.0
-        b.label.color = t.onFocus
+        b.label.color = t.onSolid
     else
-        b.bg.blendColor = t.surface
-        b.bg.opacity = t.surfaceHiOpacity
+        b.bg.blendColor = t.white
+        b.bg.opacity = 0.14
         b.label.color = t.text
     end if
 end sub
 
-' Hero/backdrop shading tinted to the Theme background: dark on the
-' left for text, solid below "solidFrom" so Cards sit on a clean base.
+' A horizontal fade from the Theme background on the left, as on the
+' Home Hero ("hero") or the Detail screen ("detail").
+function makeFade(parent as object, kind as string, w as integer, h as integer) as object
+    p = parent.CreateChild("Poster")
+    p.uri = "pkg:/images/grad_" + kind + ".png"
+    p.width = w
+    p.height = h
+    p.loadDisplayMode = "scaleToFill"
+    p.blendColor = th().bg
+    return p
+end function
+
+' Clear at the top to the given color at the bottom.
+function makeFadeUp(parent as object, w as integer, h as integer, color as string, opacity = 1.0 as float) as object
+    p = parent.CreateChild("Poster")
+    p.uri = "pkg:/images/grad_v.png"
+    p.width = w
+    p.height = h
+    p.loadDisplayMode = "scaleToFill"
+    p.blendColor = color
+    p.opacity = opacity
+    return p
+end function
+
+' Legacy Hero shading, kept for screens not yet on the Lumen kit.
 sub addBackdropShade(parent as object, solidFrom as integer)
     t = th()
-    leftShade = parent.CreateChild("Poster")
-    leftShade.uri = "pkg:/images/grad_left.png"
-    leftShade.width = 1300
-    leftShade.height = 1080
-    leftShade.loadDisplayMode = "scaleToFill"
-    leftShade.blendColor = t.bg
-    leftShade.opacity = 0.96
-    fade = parent.CreateChild("Poster")
-    fade.uri = "pkg:/images/grad_up.png"
+    makeFade(parent, "hero", 1920, 1080)
+    fade = makeFadeUp(parent, 1920, 300, t.bg)
     fade.translation = [0, solidFrom - 300]
-    fade.width = 1920
-    fade.height = 300
-    fade.loadDisplayMode = "scaleToFill"
-    fade.blendColor = t.bg
     solid = parent.CreateChild("Rectangle")
     solid.translation = [0, solidFrom]
     solid.width = 1920
     solid.height = 1080 - solidFrom
     solid.color = t.bg
-    veil = parent.CreateChild("Rectangle")
-    veil.width = 1920
-    veil.height = solidFrom
-    veil.color = t.bg
-    veil.opacity = 0.2
 end sub
 
 ' ================= Jellyfin data =================
@@ -386,14 +507,14 @@ end function
 
 function epCode(item as object) as string
     if isValid(item.ParentIndexNumber) and isValid(item.IndexNumber)
-        return "S" + item.ParentIndexNumber.ToStr() + ":E" + item.IndexNumber.ToStr()
+        return "S" + item.ParentIndexNumber.ToStr() + " " + Chr(183) + " E" + item.IndexNumber.ToStr()
     end if
     return ""
 end function
 
 function episodeLabel(item as object) as string
     code = epCode(item)
-    if code <> "" then return code + "  " + safeStr(item.Name)
+    if code <> "" then return code + " " + Chr(183) + " " + safeStr(item.Name)
     return safeStr(item.Name)
 end function
 
@@ -443,23 +564,67 @@ sub setCardSize(c as object, landscape as boolean)
     end if
 end sub
 
-' Convert a Jellyfin item into a Card.
-function itemToContent(item as object, landscape as boolean) as object
+' How much is left, e.g. "18 min left" or "1 h 5 min left".
+function timeLeft(item as object) as string
+    ud = item.UserData
+    if not isValid(ud) or not isValid(item.RunTimeTicks) then return ""
+    secs = ticksToSeconds(item.RunTimeTicks) - ticksToSeconds(ud.PlaybackPositionTicks)
+    mins = (secs + 59) \ 60
+    if mins <= 0 then return ""
+    if mins < 60 then return mins.ToStr() + " min left"
+    return (mins \ 60).ToStr() + " h " + (mins mod 60).ToStr() + " min left"
+end function
+
+' "2 seasons", "1h 52m" or "6 episodes": the length part of the meta line.
+function lengthText(item as object) as string
+    kind = safeStr(item.Type)
+    if kind = "Series"
+        n = safeInt(item.ChildCount)
+        if n = 1 then return "1 season"
+        if n > 1 then return n.ToStr() + " seasons"
+        return ""
+    end if
+    return formatRuntime(item.RunTimeTicks)
+end function
+
+function firstGenre(item as object) as string
+    if isValid(item.Genres)
+        if item.Genres.Count() > 0 then return safeStr(item.Genres[0])
+    end if
+    return ""
+end function
+
+' Convert a Jellyfin item into a Card. rowKind "resume" puts the time
+' left on the Card ("S2 · E4 · 18 min left").
+function itemToContent(item as object, landscape as boolean, rowKind = "" as string) as object
     c = newContent()
     id = safeStr(item.Id)
     c.itemId = id
     c.itemType = safeStr(item.Type)
     c.seriesId = safeStr(item.SeriesId)
     c.seasonId = safeStr(item.SeasonId)
+    code = epCode(item)
     if c.itemType = "Episode"
         c.heading = safeStr(item.SeriesName)
         c.subtitle = episodeLabel(item)
     else
         c.heading = safeStr(item.Name)
     end if
+    if rowKind = "resume"
+        parts = []
+        if code <> "" then parts.Push(code)
+        left = timeLeft(item)
+        if left <> "" then parts.Push(left)
+        c.subtitle = parts.Join(" " + Chr(183) + " ")
+    end if
     c.title = c.heading
     c.description = safeStr(item.Overview)
     c.meta = metaLine(item)
+    if isValid(item.ProductionYear) then c.year = item.ProductionYear.ToStr()
+    c.rating = safeStr(item.OfficialRating)
+    c.length = lengthText(item)
+    c.genre = firstGenre(item)
+    c.epCode = code
 
     if hasBackdrop(item)
         c.backdropUrl = imageUrl(id, "Backdrop", 1920)
@@ -472,24 +637,25 @@ function itemToContent(item as object, landscape as boolean) as object
     setCardSize(c, landscape)
     img = ""
     if landscape
+        ' Plain artwork, since the Card draws the title over it.
         if c.itemType = "Episode" and imageTag(item, "Primary") <> ""
-            img = imageUrl(id, "Primary", 480)
-        else if imageTag(item, "Thumb") <> ""
-            img = imageUrl(id, "Thumb", 480)
-        else if isValid(item.ParentThumbItemId)
-            img = imageUrl(safeStr(item.ParentThumbItemId), "Thumb", 480)
+            img = imageUrl(id, "Primary", 400)
         else if hasBackdrop(item)
-            img = imageUrl(id, "Backdrop", 480)
+            img = imageUrl(id, "Backdrop", 400)
         else if c.backdropUrl <> ""
-            img = c.backdropUrl.Replace("fillWidth=1920", "fillWidth=480")
+            img = c.backdropUrl.Replace("fillWidth=1920", "fillWidth=400")
+        else if imageTag(item, "Thumb") <> ""
+            img = imageUrl(id, "Thumb", 400)
+        else if isValid(item.ParentThumbItemId)
+            img = imageUrl(safeStr(item.ParentThumbItemId), "Thumb", 400)
         else
-            img = imageUrl(id, "Primary", 480)
+            img = imageUrl(id, "Primary", 400)
         end if
     else
         if c.itemType = "Episode" and c.seriesId <> ""
-            img = imageUrl(c.seriesId, "Primary", 300)
+            img = imageUrl(c.seriesId, "Primary", 240)
         else
-            img = imageUrl(id, "Primary", 300)
+            img = imageUrl(id, "Primary", 240)
         end if
     end if
     c.HDPosterUrl = img
@@ -499,9 +665,45 @@ function itemToContent(item as object, landscape as boolean) as object
         if isValid(ud.PlayedPercentage) then c.progress = ud.PlayedPercentage / 100.0
         c.resumeSeconds = ticksToSeconds(ud.PlaybackPositionTicks)
         c.played = isTrue(ud.Played)
+        c.favorite = isTrue(ud.IsFavorite)
     end if
     return c
 end function
+
+' ================= My List (Jellyfin Favorites) =================
+
+sub setFavorite(itemId as string, isOn as boolean, callback = "onIgnore" as string)
+    method = "DELETE"
+    if isOn then method = "POST"
+    apiRequest("/UserFavoriteItems/" + itemId, { "userId": m.global.userId }, callback, method, invalid, itemId)
+end sub
+
+' ================= Radarr and Sonarr =================
+' Set up per TV in Settings > Servers & services: "<name>Url", "<name>Key"
+' and "<name>Enabled" in the registry, where name is "radarr" or "sonarr".
+
+function arrService(name as string) as object
+    return {
+        name: name,
+        url: readSetting(name + "Url"),
+        key: readSetting(name + "Key"),
+        enabled: readSetting(name + "Enabled", "true") = "true"
+    }
+end function
+
+function arrReady(name as string) as boolean
+    s = arrService(name)
+    return s.enabled and s.url <> "" and s.key <> ""
+end function
+
+function arrConfigured() as boolean
+    return arrReady("radarr") or arrReady("sonarr")
+end function
+
+sub arrRequest(name as string, path as string, query as object, callback as string, method = "GET" as string, body = invalid as dynamic, tag = invalid as dynamic)
+    s = arrService(name)
+    startRequest(s.url + "/api/v3", path, query, callback, method, body, tag, "", { "X-Api-Key": s.key })
+end sub
 
 ' ================= Seerr data =================
 
@@ -644,14 +846,14 @@ function makeAvatar(userId as string, name as string, avatarTag as string, size 
     mask.width = size
     mask.height = size
     mask.loadDisplayMode = "scaleToFill"
-    mask.uri = "pkg:/images/avatar_mask.png"
+    mask.uri = "pkg:/images/circle_mask.png"
     mask.blendColor = th().bg
     return g
 end function
 
-function measureText(text as string, size as integer, bold as boolean) as integer
+function measureText(text as string, size as integer, style = "regular" as dynamic) as integer
     l = CreateObject("roSGNode", "Label")
-    l.font = makeFont(size, bold)
+    l.font = makeFont(size, style)
     l.text = text
     w = l.boundingRect().width
     if w <= 0 then w = Len(text) * size * 0.55

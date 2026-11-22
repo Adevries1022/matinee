@@ -18,32 +18,32 @@ sub init()
 
     t = th()
     ' Read once: these are used on every focus step.
-    m.focusScale = t.cardFocusScale
-    m.reduceMotion = t.reduceMotion
+    m.focusScale = t.focusScale
     m.padX = t.cellPadX
     m.padY = t.cellPadY
-    m.ringOut = t.ringInset + t.ringStroke + t.ringGap
     m.w = 0
     m.h = 0
-    m.placeholder.uri = t.fillUri
-    m.placeholder.blendColor = t.surface
-    m.placeholder.opacity = t.surfaceOpacity * 1.6
-    m.fallback.color = t.textFaint
+    m.placeholder.uri = "pkg:/images/fill_r14.9.png"
+    m.placeholder.blendColor = t.raised
+    m.fallback.font = makeFont(22, "display")
+    m.fallback.color = t.muted
+    m.caption.font = makeFont(24, "display")
     m.caption.color = t.text
-    m.captionSub.color = t.textDim
-    m.shade.blendColor = t.scrim
-    m.trackBg.color = t.trackBg
+    m.captionSub.font = makeFont(16)
+    m.captionSub.color = t.meta
+    m.shade.blendColor = t.black
+    m.trackBg.color = "0xFFFFFF40"
     m.track.color = t.accent
-    m.ring.uri = t.ringUri
-    m.ring.blendColor = t.focusColor
-    if t.cornerUri <> ""
-        m.corners.uri = t.cornerUri
-        m.corners.blendColor = t.bg
-        m.corners.visible = true
-    end if
-    m.badgeBg.uri = t.fillUri
-    m.badgeBg.blendColor = t.accent
-    m.badgeText.color = t.onAccent
+    m.ring.uri = "pkg:/images/ring_r18_w4.9.png"
+    m.ring.blendColor = t.accent
+    ' Covers the artwork's square corners in the background color.
+    m.corners.uri = "pkg:/images/corners_r14.9.png"
+    m.corners.blendColor = t.bg
+    m.badgeBg.uri = "pkg:/images/fill_r8.9.png"
+    m.badgeBg.blendColor = t.black
+    m.badgeBg.opacity = 0.6
+    m.badgeText.font = makeFont(16, "semibold")
+    m.badgeText.color = t.text
 end sub
 
 sub showContent()
@@ -75,13 +75,7 @@ sub showContent()
 end sub
 
 sub onPosterStatus()
-    if m.poster.loadStatus = "ready"
-        if m.reduceMotion
-            m.poster.opacity = 1
-        else
-            m.fadeIn.control = "start"
-        end if
-    end if
+    if m.poster.loadStatus = "ready" then m.fadeIn.control = "start"
 end sub
 
 sub layout()
@@ -101,65 +95,57 @@ sub layout()
     m.poster.loadHeight = h
     m.corners.width = w
     m.corners.height = h
-    m.fallback.translation = [12, 0]
-    m.fallback.width = w - 24
+    m.fallback.translation = [16, 0]
+    m.fallback.width = w - 32
     m.fallback.height = h
 
     landscape = w > h
-    showCap = false
-    if c <> invalid
-        showCap = landscape and c.heading <> ""
-    end if
-    showTrack = false
-    if c <> invalid
-        showTrack = c.progress > 0.01 and c.progress < 0.97
-    end if
+    showCap = landscape and c.heading <> ""
+    showTrack = c.progress > 0.01 and c.progress < 0.97
     showSub = showCap and c.subtitle <> ""
 
-    ' Caption at the bottom left: the title, then the episode, then the
-    ' progress bar, each stacked above the next.
-    bottom = h - 14
-    if showTrack then bottom = bottom - 17
+    ' The title at the bottom left with the episode or time left under it,
+    ' and the progress bar below both.
+    bottom = h - 18
+    if showTrack then bottom = h - 34
     if showSub
-        m.captionSub.translation = [18, bottom - 24]
-        m.captionSub.width = w - 36
-        m.captionSub.height = 24
-        bottom = bottom - 26
+        m.captionSub.translation = [20, bottom - 20]
+        m.captionSub.width = w - 40
+        m.captionSub.height = 20
+        bottom = bottom - 24
     end if
-    m.caption.translation = [18, bottom - 32]
-    m.caption.width = w - 36
-    m.caption.height = 32
-    m.shade.visible = showCap
+    m.caption.translation = [20, bottom - 30]
+    m.caption.width = w - 40
+    m.caption.height = 30
+    m.shade.visible = showCap or showTrack
     m.caption.visible = showCap
     m.captionSub.visible = showSub
-    shadeH = h - bottom + 60
-    if shadeH > h then shadeH = h
+    shadeH = 100
+    if showSub then shadeH = 110
     m.shade.translation = [0, h - shadeH]
     m.shade.width = w
     m.shade.height = shadeH
-    m.shade.opacity = 0.85
+    m.shade.opacity = 0.78
 
-    ' A slim progress bar inset from the Card's edges.
     m.trackBg.visible = showTrack
     m.track.visible = showTrack
-    m.trackBg.translation = [16, h - 19]
-    m.trackBg.width = w - 32
+    m.trackBg.translation = [20, h - 23]
+    m.trackBg.width = w - 40
     m.trackBg.height = 5
-    m.track.translation = [16, h - 19]
+    m.track.translation = [20, h - 23]
     m.track.height = 5
-    if showTrack then m.track.width = (w - 32) * c.progress
+    if showTrack then m.track.width = (w - 40) * c.progress
 
-    hasBadge = false
-    if c <> invalid then hasBadge = (c.badge <> "")
+    hasBadge = (c.badge <> "")
     m.badge.visible = hasBadge
     if hasBadge
-        bw = Len(c.badge) * 11 + 28
-        if bw > w - 16 then bw = w - 16
-        m.badge.translation = [10, 10]
+        bw = measureText(c.badge, 16, "semibold") + 20
+        if bw > w - 32 then bw = w - 32
+        m.badge.translation = [16, 14]
         m.badgeBg.width = bw
-        m.badgeBg.height = 34
+        m.badgeBg.height = 30
         m.badgeText.width = bw
-        m.badgeText.height = 34
+        m.badgeText.height = 30
     end if
 
     m.card.scaleRotateCenter = [w / 2, h / 2]
@@ -178,9 +164,9 @@ sub updateFocus()
     gx = Int((m.focusScale - 1) * m.w / 2 * pct + 0.5)
     gy = Int((m.focusScale - 1) * m.h / 2 * pct + 0.5)
     m.card.scale = [(m.w + gx * 2) / m.w, (m.h + gy * 2) / m.h]
-    ' The focus ring sits just outside the grown Card with a small, even gap.
-    ox = gx + m.ringOut
-    oy = gy + m.ringOut
+    ' The 4 px ring hugs the grown Card.
+    ox = gx + 4
+    oy = gy + 4
     m.ring.translation = [m.padX - ox, m.padY - oy]
     m.ring.width = m.w + ox * 2
     m.ring.height = m.h + oy * 2

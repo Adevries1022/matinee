@@ -1,0 +1,522 @@
+' The Lumen component kit: buttons, pills, tags, toggles, fields, panels,
+' the wordmark, setup steps and the meta line. Every color and size comes
+' from th(). Focus is always an Accent ring plus a slight zoom; primary and
+' selected controls are solid light with dark text.
+' Needs Api.bs in the same component.
+
+' ================= Buttons =================
+
+' opts: text, icon, kind ("primary" | "secondary" | "ghost" | "square" |
+' "round" | "pill" | "nav"), h, size, style, iconSize, padX, w, r,
+' iconAfter, align ("center" | "left"), selected.
+function makeBtn(parent as object, opts as object) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    b = {
+        group: g,
+        kind: optStr(opts, "kind", "secondary"),
+        text: optStr(opts, "text", ""),
+        iconName: optStr(opts, "icon", ""),
+        h: optInt(opts, "h", 72),
+        size: optInt(opts, "size", 24),
+        style: optStr(opts, "style", "semibold"),
+        iconSize: optInt(opts, "iconSize", 26),
+        padX: optInt(opts, "padX", 36),
+        minW: optInt(opts, "w", 0),
+        iconAfter: isTrue(opts.iconAfter),
+        align: optStr(opts, "align", "center"),
+        selected: isTrue(opts.selected),
+        focused: false,
+        enabled: true
+    }
+    r = 14
+    if b.kind = "round" or b.kind = "pill" then r = b.h \ 2
+    if opts.r <> invalid then r = opts.r
+    b.r = r
+    b.bg = makeBox(g, 10, b.h, r, t.white, 0.14)
+    b.ring = makeRing(g, 10, b.h, r, t.accent)
+    b.ring.visible = false
+    b.icon = invalid
+    if b.iconName <> "" then b.icon = makeIcon(g, b.iconName, b.iconSize, t.text)
+    b.label = invalid
+    if b.text <> ""
+        b.label = g.CreateChild("Label")
+        b.label.font = makeFont(b.size, b.style)
+        b.label.vertAlign = "center"
+        b.label.height = b.h
+    end if
+    layoutBtn(b)
+    paintBtn(b, false)
+    return b
+end function
+
+function optStr(opts as object, key as string, fallback as string) as string
+    v = opts[key]
+    if v = invalid then return fallback
+    return v
+end function
+
+function optInt(opts as object, key as string, fallback as integer) as integer
+    v = opts[key]
+    if v = invalid then return fallback
+    return v
+end function
+
+sub layoutBtn(b as object)
+    gap = 14
+    textW = 0
+    if b.label <> invalid
+        b.label.text = b.text
+        textW = measureText(b.text, b.size, b.style)
+    end if
+    iconW = 0
+    if b.icon <> invalid then iconW = b.iconSize
+    inner = textW + iconW
+    if textW > 0 and iconW > 0 then inner = inner + gap
+    w = inner + b.padX * 2
+    if b.kind = "square" or b.kind = "round" then w = b.h
+    if w < b.minW then w = b.minW
+    b.w = w
+    b.bg.width = w
+    b.ring.width = w + 8
+    x = (w - inner) \ 2
+    if b.align = "left" then x = b.padX
+    if b.kind = "square" or b.kind = "round" then x = (w - iconW) \ 2
+    if b.icon <> invalid and not b.iconAfter
+        b.icon.translation = [x, (b.h - b.iconSize) \ 2]
+        x = x + iconW + gap
+    end if
+    if b.label <> invalid
+        b.label.translation = [x, 0]
+        b.label.width = textW + 4
+        x = x + textW + gap
+    end if
+    if b.icon <> invalid and b.iconAfter
+        b.icon.translation = [x, (b.h - b.iconSize) \ 2]
+    end if
+    b.group.scaleRotateCenter = [w / 2, b.h / 2]
+end sub
+
+sub setBtnText(b as object, text as string)
+    b.text = text
+    layoutBtn(b)
+    paintBtn(b, b.focused)
+end sub
+
+sub setBtnIcon(b as object, name as string)
+    if b.icon = invalid then return
+    b.iconName = name
+    b.icon.uri = "pkg:/images/icon_" + name + ".png"
+end sub
+
+sub paintBtn(b as object, focused as boolean)
+    t = th()
+    b.focused = focused
+    solid = (b.kind = "primary") or b.selected
+    if solid
+        b.bg.blendColor = t.solid
+        b.bg.opacity = 1.0
+        fg = t.onSolid
+    else
+        b.bg.blendColor = t.white
+        if b.kind = "ghost" or b.kind = "nav"
+            b.bg.opacity = 0.10
+        else if b.kind = "pill" or b.kind = "round"
+            b.bg.opacity = 0.12
+        else
+            b.bg.opacity = 0.14
+        end if
+        if b.kind = "nav" then b.bg.opacity = 0
+        fg = t.text
+        if b.kind = "nav" then fg = t.meta
+    end if
+    if not b.enabled
+        fg = t.faint
+    end if
+    if b.label <> invalid then b.label.color = fg
+    if b.icon <> invalid then b.icon.blendColor = fg
+    b.ring.visible = focused
+    if focused and b.kind <> "nav"
+        b.group.scale = [t.focusScale, t.focusScale]
+    else
+        b.group.scale = [1.0, 1.0]
+    end if
+end sub
+
+' Paint a list of buttons with one of them focused (-1 for none).
+sub paintBtns(list as object, focusIndex as integer)
+    for i = 0 to list.Count() - 1
+        paintBtn(list[i], i = focusIndex)
+    end for
+end sub
+
+' Lay buttons out left to right from x, with a gap; returns the end x.
+function rowBtns(list as object, x as integer, y as integer, gap as integer) as integer
+    for each b in list
+        if b.group.visible
+            b.group.translation = [x, y]
+            x = x + b.w + gap
+        end if
+    end for
+    return x - gap
+end function
+
+' A rounded "‹ Home" pill at the top left of screens without the rail.
+function makeBackPill(parent as object, text as string) as object
+    b = makeBtn(parent, { kind: "ghost", icon: "back", text: text, h: 56, size: 20, style: "medium", padX: 20, iconSize: 26, r: 14 })
+    b.group.translation = [80, 64]
+    return b
+end function
+
+' Pill tabs (Seasons, filters): the selected one is solid light.
+function makePills(parent as object, labels as object, selected as integer, h = 52 as integer, size = 20 as integer) as object
+    list = []
+    for i = 0 to labels.Count() - 1
+        list.Push(makeBtn(parent, { kind: "pill", text: labels[i], h: h, size: size, padX: 26, selected: (i = selected) }))
+    end for
+    rowBtns(list, 0, 0, 12)
+    return list
+end function
+
+sub selectPill(list as object, index as integer, focusIndex = -1 as integer)
+    for i = 0 to list.Count() - 1
+        list[i].selected = (i = index)
+        paintBtn(list[i], i = focusIndex)
+    end for
+end sub
+
+' ================= Tags and status =================
+
+' A small rounded label on a colored background (kind and status chips).
+' opts: bg, bgOpacity, fg, size, h, r, padX, style, dot (color)
+function makeTag(parent as object, text as string, opts = {} as object) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    size = optInt(opts, "size", 15)
+    h = optInt(opts, "h", 28)
+    r = optInt(opts, "r", 8)
+    padX = optInt(opts, "padX", 10)
+    style = optStr(opts, "style", "semibold")
+    fg = optStr(opts, "fg", t.meta)
+    bgColor = optStr(opts, "bg", t.raised)
+    op = 1.0
+    if opts.bgOpacity <> invalid then op = opts.bgOpacity
+    textW = measureText(text, size, style)
+    dotW = 0
+    if opts.dot <> invalid then dotW = 18
+    w = textW + padX * 2 + dotW
+    bg = makeBox(g, w, h, r, bgColor, op)
+    dotNode = invalid
+    if opts.dot <> invalid
+        dotNode = makeBox(g, 10, 10, 4, opts.dot)
+        dotNode.translation = [padX, (h - 10) \ 2]
+    end if
+    l = makeLabel(g, text, size, style, fg)
+    l.translation = [padX + dotW, 0]
+    l.height = h
+    l.width = textW + 4
+    l.vertAlign = "center"
+    return { group: g, bg: bg, label: l, dot: dotNode, w: w, h: h }
+end function
+
+' A colored dot and text, e.g. "● Connected".
+function makeStatus(parent as object, text as string, color as string, size = 17 as integer) as object
+    g = parent.CreateChild("Group")
+    h = Int(size * 1.4)
+    d = makeBox(g, 10, 10, 4, color)
+    d.translation = [0, (h - 10) \ 2]
+    l = makeLabel(g, text, size, "regular", color)
+    l.translation = [18, 0]
+    l.height = h
+    l.vertAlign = "center"
+    w = 18 + measureText(text, size, "regular")
+    return { group: g, dot: d, label: l, w: w }
+end function
+
+sub setStatus(s as object, text as string, color as string)
+    s.label.text = text
+    s.label.color = color
+    s.dot.blendColor = color
+    s.w = 18 + measureText(text, s.label.font.size, "regular")
+end sub
+
+' ================= Toggles =================
+
+function makeToggle(parent as object) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    track = makeBox(g, 56, 32, 16, t.dashed)
+    knob = makeBox(g, 24, 24, 12, t.white)
+    knob.translation = [4, 4]
+    return { group: g, track: track, knob: knob, on: false }
+end function
+
+sub setToggle(tg as object, isOn as boolean)
+    t = th()
+    tg.on = isOn
+    if isOn
+        tg.track.blendColor = t.accent
+        tg.knob.translation = [28, 4]
+    else
+        tg.track.blendColor = t.dashed
+        tg.knob.translation = [4, 4]
+    end if
+end sub
+
+' A full-width toggle row: label on the left, switch on the right.
+function makeToggleRow(parent as object, text as string, w as integer, h = 72 as integer) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    bg = makeBox(g, w, h, 14, t.panel)
+    ring = makeRing(g, w, h, 14, t.accent)
+    ring.visible = false
+    l = makeLabel(g, text, 20, "regular", t.text)
+    l.translation = [24, 0]
+    l.height = h
+    l.vertAlign = "center"
+    tg = makeToggle(g)
+    tg.group.translation = [w - 24 - 56, (h - 32) \ 2]
+    return { group: g, bg: bg, ring: ring, label: l, toggle: tg, w: w, h: h }
+end function
+
+' ================= Fields =================
+
+' A text field drawn like an input. OK opens the on-screen keyboard.
+function makeField(parent as object, w as integer, h as integer, opts = {} as object) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    r = optInt(opts, "r", 12)
+    size = optInt(opts, "size", 22)
+    bg = makeBox(g, w, h, r, t.bg)
+    border = makeOutline(g, w, h, r, t.line)
+    ring = makeRing(g, w, h, r, t.accent)
+    ring.visible = false
+    l = makeLabel(g, "", size, "regular", t.text)
+    l.translation = [20, 0]
+    l.width = w - 40
+    l.height = h
+    l.vertAlign = "center"
+    f = { group: g, bg: bg, border: border, ring: ring, label: l, w: w, h: h, text: "", secure: isTrue(opts.secure), placeholder: optStr(opts, "placeholder", "") }
+    setFieldText(f, optStr(opts, "text", ""))
+    return f
+end function
+
+sub setFieldText(f as object, text as string)
+    t = th()
+    f.text = text
+    if text = ""
+        f.label.text = f.placeholder
+        f.label.color = t.faint
+    else if f.secure
+        f.label.text = String(Len(text), Chr(8226))
+        f.label.color = t.text
+    else
+        f.label.text = text
+        f.label.color = t.text
+    end if
+end sub
+
+sub paintField(f as object, focused as boolean)
+    t = th()
+    if focused
+        f.border.blendColor = t.accent
+    else
+        f.border.blendColor = t.line
+    end if
+    f.ring.visible = false
+end sub
+
+' ================= Panels and headings =================
+
+function makePanel(parent as object, w as integer, h as integer, r = 24 as integer) as object
+    return makeBox(parent, w, h, r, th().panel)
+end function
+
+' A focus ring around any rectangle, drawn behind nothing (add it last).
+function makeFocusRing(parent as object, w as integer, h as integer, r as integer) as object
+    ring = makeRing(parent, w, h, r, th().accent)
+    ring.visible = false
+    return ring
+end function
+
+function makeTitle(parent as object, text as string, size as integer, color = "" as string) as object
+    if color = "" then color = th().text
+    return makeLabel(parent, text, size, "display", color)
+end function
+
+' The play-circle mark in the Accent and the MATINEE wordmark.
+function makeWordmark(parent as object) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    makeIcon(g, "logo", 34, t.accent)
+    l = makeLabel(g, "MATINEE", 30, "display", t.text)
+    l.translation = [46, 0]
+    l.height = 34
+    l.vertAlign = "center"
+    return g
+end function
+
+' The three setup steps, right-aligned to rightX. Done steps show a check.
+function makeSteps(parent as object, active as integer, rightX as integer, y as integer) as object
+    t = th()
+    names = ["Server", "Sign in", "Add services (optional)"]
+    widths = []
+    total = 0
+    for each n in names
+        w = 42 + measureText(n, 20, "semibold")
+        widths.Push(w)
+        total = total + w
+    end for
+    total = total + 32 * (names.Count() - 1)
+    g = parent.CreateChild("Group")
+    g.translation = [rightX - total, y]
+    x = 0
+    for i = 0 to names.Count() - 1
+        stepNo = i + 1
+        if stepNo <= active
+            makeBox(g, 32, 32, 16, t.accent).translation = [x, 0]
+            if stepNo < active
+                ic = makeIcon(g, "check", 20, t.bg)
+                ic.translation = [x + 6, 6]
+            else
+                n = makeLabel(g, stepNo.ToStr(), 16, "semibold", t.bg)
+                n.translation = [x, 0]
+                n.width = 32
+                n.height = 32
+                n.horizAlign = "center"
+                n.vertAlign = "center"
+            end if
+        else
+            makeOutline(g, 32, 32, 16, t.dashed).translation = [x, 0]
+            n = makeLabel(g, stepNo.ToStr(), 16, "regular", t.idle)
+            n.translation = [x, 0]
+            n.width = 32
+            n.height = 32
+            n.horizAlign = "center"
+            n.vertAlign = "center"
+        end if
+        color = t.idle
+        style = "regular"
+        if stepNo = active
+            color = t.text
+            style = "semibold"
+        end if
+        l = makeLabel(g, names[i], 20, style, color)
+        l.translation = [x + 42, 0]
+        l.height = 32
+        l.vertAlign = "center"
+        x = x + widths[i] + 32
+    end for
+    return g
+end function
+
+' "2026 · [TV-MA] · 2 seasons · Drama": parts are strings, or
+' { text, boxed: true } for the outlined rating. Returns the group.
+function makeMeta(parent as object, parts as object, size = 22 as integer) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    x = 0
+    h = Int(size * 1.4)
+    first = true
+    for each p in parts
+        text = ""
+        boxed = false
+        if type(p) = "roAssociativeArray"
+            text = safeStr(p.text)
+            boxed = isTrue(p.boxed)
+        else
+            text = safeStr(p)
+        end if
+        if text <> ""
+            if not first
+                d = makeLabel(g, Chr(183), size, "regular", t.meta)
+                d.translation = [x + 16, 0]
+                d.height = h
+                d.vertAlign = "center"
+                x = x + 16 + measureText(Chr(183), size, "regular") + 16
+            end if
+            first = false
+            if boxed
+                bsize = size - 4
+                bw = measureText(text, bsize, "regular") + 20
+                bh = h - 4
+                o = makeOutline(g, bw, bh, 6, t.ratingBorder)
+                o.translation = [x, 2]
+                l = makeLabel(g, text, bsize, "regular", t.meta)
+                l.translation = [x, 2]
+                l.width = bw
+                l.height = bh
+                l.horizAlign = "center"
+                l.vertAlign = "center"
+                x = x + bw
+            else
+                l = makeLabel(g, text, size, "regular", t.meta)
+                l.translation = [x, 0]
+                l.height = h
+                l.vertAlign = "center"
+                x = x + measureText(text, size, "regular")
+            end if
+        end if
+    end for
+    return g
+end function
+
+' ================= Modal =================
+
+' A dimmed full-screen layer with a centered panel. Returns { group, panel, x, y }.
+function makeModal(parent as object, w as integer, h as integer) as object
+    g = parent.CreateChild("Group")
+    scrim = g.CreateChild("Rectangle")
+    scrim.width = 1920
+    scrim.height = 1080
+    scrim.color = "0x050609C7"
+    x = (1920 - w) \ 2
+    y = (1080 - h) \ 2
+    p = makePanel(g, w, h, 24)
+    p.translation = [x, y]
+    body = g.CreateChild("Group")
+    body.translation = [x, y]
+    return { group: g, panel: p, body: body, x: x, y: y, w: w, h: h }
+end function
+
+' ================= Top-right badges =================
+
+' The server pill and the signed-in User's avatar, at the top right of Home.
+function makeTopBadges(parent as object) as object
+    t = th()
+    g = parent.CreateChild("Group")
+    serverName = readSetting("serverName", "")
+    text = "Jellyfin"
+    if serverName <> "" and LCase(serverName) <> "jellyfin" then text = serverName + " " + Chr(183) + " Jellyfin"
+    textW = measureText(text, 18, "regular")
+    pillW = 18 + 10 + 10 + textW + 18
+    avatarSize = 56
+    right = 1920 - 80
+    pill = g.CreateChild("Group")
+    pill.translation = [right - avatarSize - 20 - pillW, 62]
+    makeBox(pill, pillW, 44, 22, t.black, 0.45)
+    pillRing = makeFocusRing(pill, pillW, 44, 22)
+    dotShape = makeBox(pill, 10, 10, 4, t.ok)
+    dotShape.translation = [18, 17]
+    l = makeLabel(pill, text, 18, "regular", t.soft)
+    l.translation = [38, 0]
+    l.height = 44
+    l.vertAlign = "center"
+
+    avatarTag = ""
+    sessions = readSessions()
+    s = sessions[m.global.userId]
+    if s <> invalid then avatarTag = safeStr(s.imageTag)
+    av = g.CreateChild("Group")
+    av.translation = [right - avatarSize, 56]
+    av.appendChild(makeAvatar(m.global.userId, m.global.userName, avatarTag, avatarSize))
+    border = makeOutline(av, avatarSize, avatarSize, 28, t.white)
+    border.opacity = 0.25
+    avRing = makeFocusRing(av, avatarSize, avatarSize, 28)
+    return { group: g, pillRing: pillRing, avatarRing: avRing }
+end function
+
+sub paintTopBadges(b as object, focusIndex as integer)
+    b.pillRing.visible = (focusIndex = 0)
+    b.avatarRing.visible = (focusIndex = 1)
+end sub

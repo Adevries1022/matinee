@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- A poster or landscape Card used in Rows and grids. Styled by the Theme.
-     The Card sits inside a padded cell so it can grow from its centre, with
-     a focus ring just outside its edge, without anything being cut off. -->
+<!-- A Card in Rows and grids: rounded artwork, the title over a dark fade,
+     an optional chip and progress bar. The Card sits inside a padded cell
+     so it can grow from its centre, with the Accent ring just outside it. -->
 <component name="CardItem" extends="Group">
   <interface>
     <field id="itemContent" type="node" onChange="showContent" />
@@ -17,32 +17,21 @@
   <children>
     <Group id="card">
       <Poster id="placeholder" />
-      <Label id="fallback" horizAlign="center" vertAlign="center" wrap="true" maxLines="3">
-        <Font role="font" uri="font:BoldSystemFontFile" size="24" />
-      </Label>
+      <Label id="fallback" horizAlign="center" vertAlign="center" wrap="true" maxLines="3" />
       <Poster id="poster" loadDisplayMode="scaleToZoom" opacity="0" />
-      <Poster id="shade" uri="pkg:/images/grad_up.png" loadDisplayMode="scaleToFill" visible="false" />
-      <Label id="caption" vertAlign="center" visible="false">
-        <Font role="font" uri="font:BoldSystemFontFile" size="24" />
-      </Label>
-      <Label id="captionSub" vertAlign="center" visible="false">
-        <Font role="font" uri="font:SystemFontFile" size="18" />
-      </Label>
+      <Poster id="shade" uri="pkg:/images/grad_v.png" loadDisplayMode="scaleToFill" visible="false" />
+      <Label id="caption" vertAlign="center" visible="false" />
+      <Label id="captionSub" vertAlign="center" visible="false" />
       <Rectangle id="trackBg" visible="false" />
       <Rectangle id="track" visible="false" />
-      <Poster id="corners" visible="false" />
       <Group id="badge" visible="false">
         <Poster id="badgeBg" />
-        <Label id="badgeText" vertAlign="center" horizAlign="center">
-          <Font role="font" uri="font:BoldSystemFontFile" size="20" />
-        </Label>
+        <Label id="badgeText" vertAlign="center" horizAlign="center" />
       </Group>
+      <Poster id="corners" />
     </Group>
-    <!-- The ring sits outside the scaled Card so it stays crisp and lands on whole pixels.
-         It is drawn above the Card: its curved corners pass over the square tips of the
-         Card's corner covers, which would otherwise show as square corners. -->
     <Poster id="ring" opacity="0" />
-    <Animation id="fadeIn" duration="0.25" easeFunction="linear">
+    <Animation id="fadeIn" duration="0.2" easeFunction="linear">
       <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="poster.opacity" />
     </Animation>
   </children>

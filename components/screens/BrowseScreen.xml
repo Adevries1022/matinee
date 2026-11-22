@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Home screen, and each library (Movies, Shows) when "library" is set. -->
+<!-- Home, and the Series and Movies screens when "library" is set:
+     the Rail, a Hero for the focused title, and Rows of Cards. -->
 <component name="BrowseScreen" extends="Group">
   <interface>
+    <!-- library: { kind: "series" | "movies" } -->
     <field id="library" type="assocarray" />
     <field id="begin" type="boolean" onChange="load" />
     <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
@@ -9,23 +11,21 @@
   </interface>
   <script type="text/brightscript" uri="BrowseScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/TrailerHost.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
-  <script type="text/brightscript" uri="pkg:/components/util/HeroHost.bs" />
   <children>
     <Group id="heroLayer" />
-    <Label id="status" wrap="true" text="Loading...">
-      <Font role="font" uri="font:SystemFontFile" size="34" />
-    </Label>
+    <Label id="status" wrap="true" />
     <RowList
       id="rows"
       itemComponentName="CardItem"
-      numRows="4"
+      numRows="3"
       drawFocusFeedback="false"
       vertFocusAnimationStyle="fixedFocus"
       rowFocusAnimationStyle="floatingFocus"
       showRowLabel="[true]"
-      rowLabelOffset="[[0,14]]"
       visible="false" />
+    <Group id="chrome" />
   </children>
 </component>

@@ -1,8 +1,8 @@
 ' Trailer Preview: after a title has been Focused for a few seconds, its
 ' trailer fades in, muted, behind the Hero text. Only trailer files stored
 ' on the server are used (for example ones downloaded by Trailarr).
-' Play toggles the sound. Moving focus, leaving the screen, or turning on
-' Reduce Motion stops it.
+' Play toggles the sound. Moving focus or leaving the screen stops it, and
+' Trailer previews in Playback & quality turns it off.
 
 sub setupTrailer(layer as object, insertIndex as integer, hintY as integer)
     v = CreateObject("roSGNode", "Video")
@@ -47,7 +47,7 @@ end sub
 ' Start the countdown for a Card. Episodes use their show's trailer.
 sub trailerSchedule(c as object)
     trailerStop()
-    if c = invalid or th().reduceMotion then return
+    if c = invalid then return
     if Left(c.itemType, 6) = "seerr-" then return
     id = c.itemId
     if c.itemType = "Episode" and c.seriesId <> "" then id = c.seriesId
@@ -56,7 +56,7 @@ end sub
 
 sub trailerScheduleId(id as string)
     trailerStop()
-    if id = "" or th().reduceMotion then return
+    if id = "" then return
     m.trailerFor = id
     m.trailerTimer.control = "start"
 end sub

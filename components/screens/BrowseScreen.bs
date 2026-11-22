@@ -1,35 +1,211 @@
-' Hero + Rows of Cards, with the main menu.
+' Home, Series and Movies: the Rail, the Hero for the Focused title with
+' Play / Details / My List, and Rows of Cards from y = 640.
+' Focus moves between three zones: the Rows, the Hero buttons (Up from the
+' first Row) and the server pill and avatar at the top right (Up again).
+
 sub init()
     t = th()
+    m.heroLayer = m.top.findNode("heroLayer")
+    m.chrome = m.top.findNode("chrome")
     m.status = m.top.findNode("status")
     m.rows = m.top.findNode("rows")
-    m.status.color = t.textDim
-    m.status.translation = [t.leftPad, t.rowsTop + 60]
-    m.status.width = 1700
-    setupHero()
-    styleRows(m.rows, t.rowsTop)
+    m.status.font = makeFont(26)
+    m.status.color = t.muted
+    m.status.translation = [t.leftPad, t.rowsTop + 20]
+    m.status.width = 1600
+    m.status.text = "Loading..."
+
+    buildHero()
+    styleRows()
+    wm = makeWordmark(m.chrome)
+    wm.translation = [t.leftPad, 64]
+    m.badges = makeTopBadges(m.chrome)
 
     m.rows.observeField("rowItemFocused", "onItemFocused")
     m.rows.observeField("rowItemSelected", "onItemSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
 
+    m.zone = "rows"
+    m.btnIndex = 0
+    m.badgeIndex = 1
     m.gen = 0
-    m.views = []
-    m.isLibrary = false
+    m.kind = ""
     m.seenVersion = m.global.watchVersion
     m.seenPrefs = m.global.prefsVersion
 end sub
 
+' ---------- Hero ----------
+
+sub buildHero()
+    t = th()
+    layer = m.heroLayer
+    m.heroArt = layer.CreateChild("Poster")
+    m.heroArt.id = "heroArt"
+    m.heroArt.width = 1920
+    m.heroArt.height = 780
+    m.heroArt.loadWidth = 1920
+    m.heroArt.loadHeight = 780
+    m.heroArt.loadDisplayMode = "scaleToZoom"
+    m.heroArt.opacity = 0
+    m.heroArt.observeField("loadStatus", "onHeroArtStatus")
+    setupTrailer(layer, 1, 600)
+    makeFade(layer, "hero", 1920, 780)
+    fade = makeFadeUp(layer, 1920, 300, t.bg)
+    fade.translation = [0, 480]
+    below = layer.CreateChild("Rectangle")
+    below.translation = [0, 780]
+    below.width = 1920
+    below.height = 300
+    below.color = t.bg
+
+    m.heroFade = layer.CreateChild("Animation")
+    m.heroFade.duration = 0.35
+    m.heroFade.easeFunction = "outQuad"
+    interp = m.heroFade.CreateChild("FloatFieldInterpolator")
+    interp.key = [0.0, 1.0]
+    interp.keyValue = [0.0, 1.0]
+    interp.fieldToInterp = "heroArt.opacity"
+
+    x = t.leftPad
+    m.heroEyebrow = makeLabel(layer, "", 18, "semibold", t.accent)
+    m.heroEyebrow.translation = [x, 196]
+    m.heroEyebrow.height = 22
+    m.heroEyebrow.vertAlign = "center"
+    m.heroTitle = makeLabel(layer, "", 104, "display", t.text)
+    m.heroTitle.translation = [x, 228]
+    m.heroTitle.width = 1200
+    m.heroTitle.height = 116
+    m.heroTitle.vertAlign = "center"
+    m.heroMetaHost = layer.CreateChild("Group")
+    m.heroMetaHost.translation = [x, 360]
+    m.heroBlurb = makeLabel(layer, "", 26, "regular", t.soft)
+    m.heroBlurb.translation = [x, 410]
+    m.heroBlurb.width = 720
+    m.heroBlurb.wrap = true
+    m.heroBlurb.maxLines = 2
+    m.heroBlurb.lineSpacing = 8
+
+    m.btnPlay = makeBtn(layer, { kind: "primary", icon: "play", text: "Play", padX: 40 })
+    m.btnDetails = makeBtn(layer, { kind: "secondary", icon: "info", text: "Details" })
+    m.btnList = makeBtn(layer, { kind: "square", icon: "plus", iconSize: 28 })
+    m.buttons = [m.btnPlay, m.btnDetails, m.btnList]
+    rowBtns(m.buttons, x, 516, 20)
+
+    m.heroTimer = layer.CreateChild("Timer")
+    m.heroTimer.duration = 0.3
+    m.heroTimer.repeat = false
+    m.heroTimer.observeField("fire", "applyHero")
+    m.heroItem = invalid
+    m.heroFavorite = false
+end sub
+
+' Show a Card in the Hero after a short pause, so scrolling stays smooth.
+sub heroShow(c as object, immediate = false as boolean)
+    trailerStop()
+    m.heroItem = c
+    if immediate
+        applyHero()
+    else
+        m.heroTimer.control = "stop"
+        m.heroTimer.control = "start"
+    end if
+end sub
+
+sub applyHero()
+    c = m.heroItem
+    if c = invalid then return
+    t = th()
+    m.heroEyebrow.text = UCase(c.rowTitle)
+    title = c.heading
+    size = 104
+    if measureText(title, 104, "display") > 1200 then size = 80
+    if size = 80 and measureText(title, 80, "display") > 1200 then size = 64
+    m.heroTitle.font = makeFont(size, "display")
+    m.heroTitle.text = title
+
+    m.heroMetaHost.removeChildrenIndex(m.heroMetaHost.getChildCount(), 0)
+    parts = []
+    if c.itemType = "Episode"
+        parts.Push(c.subtitle)
+    else
+        parts.Push(c.year)
+        if c.rating <> "" then parts.Push({ text: c.rating, boxed: true })
+        parts.Push(c.length)
+        parts.Push(c.genre)
+    end if
+    makeMeta(m.heroMetaHost, parts, 22)
+    m.heroBlurb.text = c.description
+
+    if c.resumeSeconds > 0
+        setBtnText(m.btnPlay, "Resume")
+    else
+        setBtnText(m.btnPlay, "Play")
+    end if
+    rowBtns(m.buttons, t.leftPad, 516, 20)
+    m.heroFavorite = c.favorite
+    if c.itemType = "Episode" and c.seriesId <> ""
+        ' My List holds the show, so ask whether the show is saved.
+        m.heroFavorite = false
+        apiRequest("/Items/" + c.seriesId, { "userId": m.global.userId }, "onSeriesUserData", "GET", invalid, c.seriesId)
+    end if
+    paintListButton()
+
+    if trailersOn() then trailerSchedule(c)
+    if c.backdropUrl <> m.heroArt.uri
+        m.heroArt.opacity = 0
+        m.heroArt.uri = c.backdropUrl
+    end if
+end sub
+
+sub onSeriesUserData(event as object)
+    res = event.getData()
+    if m.heroItem = invalid or safeStr(res.tag) <> m.heroItem.seriesId then return
+    if res.ok and isValid(res.data)
+        if isValid(res.data.UserData) then m.heroFavorite = isTrue(res.data.UserData.IsFavorite)
+    end if
+    paintListButton()
+end sub
+
+sub paintListButton()
+    if m.heroFavorite
+        setBtnIcon(m.btnList, "check")
+    else
+        setBtnIcon(m.btnList, "plus")
+    end if
+end sub
+
+sub onHeroArtStatus()
+    if m.heroArt.loadStatus = "ready" then m.heroFade.control = "start"
+end sub
+
+function trailersOn() as boolean
+    p = m.global.prefs
+    if p = invalid then return true
+    return p.trailers <> false
+end function
+
+' ---------- Rows ----------
+
+sub styleRows()
+    t = th()
+    m.rows.translation = [t.leftPad - t.cellPadX, t.rowsTop]
+    m.rows.itemSize = [1920 - t.leftPad + t.cellPadX, t.posterH + t.cellPadY * 2 + 56]
+    m.rows.rowItemSpacing = [[0, 0]]
+    m.rows.itemSpacing = [0, 18]
+    m.rows.rowLabelOffset = [[t.cellPadX, 2]]
+    m.rows.rowLabelColor = t.heading
+    m.rows.rowLabelFont = makeFont(26, "semibold")
+end sub
+
 sub load()
     lib = m.top.library
-    m.isLibrary = false
+    m.kind = ""
     if lib <> invalid
-        if isValid(lib.id) then m.isLibrary = true
+        if isValid(lib.kind) then m.kind = lib.kind
     end if
     key = "home"
-    if m.isLibrary then key = "lib:" + lib.id
+    if m.kind <> "" then key = m.kind
     setupMenu(key)
-    m.status.text = "Loading..."
     m.status.visible = true
     apiRequest("/UserViews", { "userId": m.global.userId }, "onViews")
 end sub
@@ -51,63 +227,57 @@ sub onViews(event as object)
         m.status.text = "Couldn't reach your Jellyfin server (error " + res.code.ToStr() + ")."
         return
     end if
-    m.views = views
-    if m.isLibrary
-        loadLibrary()
-    else
+    if m.kind = ""
         loadHome()
+    else
+        loadLibrary()
     end if
 end sub
 
-' ---------- Row definitions ----------
+function baseQuery(extra as object) as object
+    q = { "userId": m.global.userId, "Fields": "Overview,Genres,ChildCount", "EnableTotalRecordCount": "false", "Limit": "24" }
+    q.Append(extra)
+    return q
+end function
 
 sub loadHome()
-    uid = m.global.userId
-    fields = "Overview,Genres"
+    portrait = th().portraitPosters
     defs = []
-    defs.Push({ title: "Continue Watching", path: "/UserItems/Resume", landscape: true, action: "play", query: { "userId": uid, "Limit": "24", "Fields": fields, "MediaTypes": "Video", "EnableTotalRecordCount": "false" } })
-    defs.Push({ title: "Next Up", path: "/Shows/NextUp", landscape: true, action: "play", query: { "userId": uid, "Limit": "24", "Fields": fields, "EnableTotalRecordCount": "false" } })
-    for each v in m.views
-        defs.Push({ title: "New in " + v.name, path: "/Items/Latest", landscape: false, action: "details", query: { "userId": uid, "parentId": v.id, "Limit": "24", "Fields": fields } })
-    end for
-    defs.Push({ title: "Picked for You", path: "/Items", landscape: false, action: "details", query: { "userId": uid, "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "Random", "Limit": "24", "Fields": fields, "EnableTotalRecordCount": "false" } })
-    defs.Push({ title: "Highly Rated", path: "/Items", landscape: false, action: "details", query: { "userId": uid, "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "CommunityRating", "SortOrder": "Descending", "Limit": "24", "Fields": fields, "EnableTotalRecordCount": "false" } })
+    defs.Push({ title: "Continue watching", path: "/UserItems/Resume", landscape: true, kind: "resume", action: "play", query: baseQuery({ "MediaTypes": "Video" }) })
+    defs.Push({ title: "Next up", path: "/Shows/NextUp", landscape: true, kind: "", action: "play", query: baseQuery({}) })
+    defs.Push({ title: "Recently added", path: "/Items/Latest", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "IncludeItemTypes": "Movie,Series" }) })
+    defs.Push({ title: "Picked for you", path: "/Items", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "Random" }) })
+    defs.Push({ title: "Highly rated", path: "/Items", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "CommunityRating", "SortOrder": "Descending" }) })
     fetchRows(defs)
 end sub
 
 sub loadLibrary()
-    lib = m.top.library
-    m.libTypes = "Movie,Series"
-    if lib.collectionType = "movies" then m.libTypes = "Movie"
-    if lib.collectionType = "tvshows" then m.libTypes = "Series"
-    apiRequest("/Genres", { "userId": m.global.userId, "parentId": lib.id, "SortBy": "SortName", "IncludeItemTypes": m.libTypes }, "onGenres")
+    m.libTypes = "Movie"
+    if m.kind = "series" then m.libTypes = "Series"
+    apiRequest("/Genres", { "userId": m.global.userId, "Recursive": "true", "SortBy": "SortName", "IncludeItemTypes": m.libTypes }, "onGenres")
 end sub
 
 function libQuery(extra as object) as object
-    q = {
-        "userId": m.global.userId,
-        "parentId": m.top.library.id,
-        "Recursive": "true",
-        "IncludeItemTypes": m.libTypes,
-        "Limit": "30",
-        "Fields": "Overview,Genres",
-        "EnableTotalRecordCount": "false"
-    }
+    q = baseQuery({ "Recursive": "true", "IncludeItemTypes": m.libTypes, "Limit": "30" })
     q.Append(extra)
     return q
 end function
 
 sub onGenres(event as object)
     res = event.getData()
+    portrait = th().portraitPosters
+    resumeTypes = "Movie"
+    if m.kind = "series" then resumeTypes = "Episode"
     defs = []
-    defs.Push({ title: "Recently Added", path: "/Items", landscape: false, action: "details", query: libQuery({ "SortBy": "DateCreated", "SortOrder": "Descending" }) })
-    defs.Push({ title: "Haven't Watched Yet", path: "/Items", landscape: false, action: "details", query: libQuery({ "Filters": "IsUnplayed", "SortBy": "Random" }) })
+    defs.Push({ title: "Continue watching", path: "/UserItems/Resume", landscape: true, kind: "resume", action: "play", query: baseQuery({ "MediaTypes": "Video", "IncludeItemTypes": resumeTypes }) })
+    defs.Push({ title: "Recently added", path: "/Items", landscape: not portrait, kind: "", action: "details", query: libQuery({ "SortBy": "DateCreated", "SortOrder": "Descending" }) })
+    defs.Push({ title: "Not watched yet", path: "/Items", landscape: not portrait, kind: "", action: "details", query: libQuery({ "Filters": "IsUnplayed", "SortBy": "Random" }) })
     if res.ok and isValid(res.data)
         if isValid(res.data.Items)
             n = 0
             for each g in res.data.Items
-                if n < 18
-                    defs.Push({ title: safeStr(g.Name), path: "/Items", landscape: false, action: "details", query: libQuery({ "GenreIds": safeStr(g.Id), "SortBy": "Random" }) })
+                if n < 14
+                    defs.Push({ title: safeStr(g.Name), path: "/Items", landscape: not portrait, kind: "", action: "details", query: libQuery({ "GenreIds": safeStr(g.Id), "SortBy": "Random" }) })
                 end if
                 n = n + 1
             end for
@@ -115,8 +285,6 @@ sub onGenres(event as object)
     end if
     fetchRows(defs)
 end sub
-
-' ---------- Loading rows ----------
 
 sub fetchRows(defs as object)
     m.gen = m.gen + 1
@@ -163,10 +331,13 @@ sub buildRows()
                 row = root.CreateChild("ContentNode")
                 row.title = d.title
                 for each it in items
-                    row.appendChild(itemToContent(it, d.landscape))
+                    c = itemToContent(it, d.landscape, d.kind)
+                    c.rowTitle = d.title
+                    row.appendChild(c)
                 end for
-                sizes.Push(cellSize(d.landscape))
-                heights.Push(rowHeight(d.landscape))
+                cell = cellSize(d.landscape)
+                sizes.Push(cell)
+                heights.Push(cell[1] + 56)
                 m.rowActions.Push(d.action)
             end if
         end if
@@ -184,20 +355,19 @@ sub buildRows()
     m.rows.rowHeights = heights
     m.rows.content = root
     m.rows.visible = true
-    if m.top.isInFocusChain() and not menuIsOpen() then m.rows.setFocus(true)
-    first = root.getChild(0).getChild(0)
-    heroShow(first, true)
-    if not m.isLibrary then savePreview(root)
+    if m.top.isInFocusChain() and not menuIsOpen() and m.zone = "rows" then m.rows.setFocus(true)
+    heroShow(root.getChild(0).getChild(0), true)
+    if m.kind = "" then savePreview(root)
 end sub
 
-' A few Cards for the live preview in Settings.
+' A few Cards for the live preview on the Themes screen.
 sub savePreview(root as object)
     preview = []
     row = root.getChild(0)
     for i = 0 to row.getChildCount() - 1
         if preview.Count() < 6
             c = row.getChild(i)
-            preview.Push({ heading: c.heading, meta: c.meta, backdrop: c.backdropUrl, image: c.HDPosterUrl, landscape: (c.cardW > c.cardH) })
+            preview.Push({ heading: c.heading, meta: c.meta, backdrop: c.backdropUrl, image: c.HDPosterUrl, progress: c.progress })
         end if
     end for
     m.global.previewItems = preview
@@ -226,8 +396,10 @@ sub onItemSelected(event as object)
 end sub
 
 sub openItem(c as object, action as string)
-    if action = "play"
+    if action = "play" and c.itemType <> "Series"
         m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
+    else if action = "play"
+        playSeries(c.itemId)
     else
         id = c.itemId
         if c.itemType = "Episode" and c.seriesId <> "" then id = c.seriesId
@@ -235,7 +407,66 @@ sub openItem(c as object, action as string)
     end if
 end sub
 
-sub restoreContentFocus()
+' Play a show: its next episode, or the first one.
+sub playSeries(seriesId as string)
+    m.playSeriesId = seriesId
+    apiRequest("/Shows/NextUp", { "userId": m.global.userId, "seriesId": seriesId, "Limit": "1", "EnableResumable": "true" }, "onSeriesNext")
+end sub
+
+sub onSeriesNext(event as object)
+    res = event.getData()
+    ep = invalid
+    if res.ok and isValid(res.data)
+        if isValid(res.data.Items)
+            if res.data.Items.Count() > 0 then ep = res.data.Items[0]
+        end if
+    end if
+    if ep <> invalid
+        startSecs = 0
+        if isValid(ep.UserData) then startSecs = ticksToSeconds(ep.UserData.PlaybackPositionTicks)
+        m.top.navigate = { action: "play", itemId: safeStr(ep.Id), startSeconds: startSecs }
+    else
+        m.top.navigate = { action: "details", itemId: m.playSeriesId }
+    end if
+end sub
+
+sub heroButton(index as integer)
+    c = m.heroItem
+    if c = invalid then return
+    if index = 0
+        if c.itemType = "Series"
+            playSeries(c.itemId)
+        else
+            m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
+        end if
+    else if index = 1
+        openItem(c, "details")
+    else
+        target = c.itemId
+        if c.itemType = "Episode" and c.seriesId <> "" then target = c.seriesId
+        m.heroFavorite = not m.heroFavorite
+        if c.itemType <> "Episode" then c.favorite = m.heroFavorite
+        setFavorite(target, m.heroFavorite)
+        paintListButton()
+    end if
+end sub
+
+sub setZone(zone as string)
+    m.zone = zone
+    focusIndex = -1
+    if zone = "buttons" then focusIndex = m.btnIndex
+    paintBtns(m.buttons, focusIndex)
+    badgeFocus = -1
+    if zone = "badges" then badgeFocus = m.badgeIndex
+    paintTopBadges(m.badges, badgeFocus)
+    if zone = "rows"
+        restoreRows()
+    else
+        m.top.setFocus(true)
+    end if
+end sub
+
+sub restoreRows()
     if m.rows.content <> invalid and m.rows.visible
         m.rows.setFocus(true)
     else
@@ -243,14 +474,18 @@ sub restoreContentFocus()
     end if
 end sub
 
+sub restoreContentFocus()
+    setZone(m.zone)
+end sub
+
 sub onFocusChanged()
-    if m.top.hasFocus() and not menuIsOpen()
+    if m.top.hasFocus() and not menuIsOpen() and m.zone = "rows"
         if m.rows.content <> invalid and m.rows.visible then m.rows.setFocus(true)
     end if
 end sub
 
 sub onRefresh()
-    ' Appearance changed in Settings: rebuild with the new look.
+    ' The look changed on the Themes screen: rebuild with it.
     if m.global.prefsVersion <> m.seenPrefs
         m.seenPrefs = m.global.prefsVersion
         m.top.navigate = { action: "rebuildHome" }
@@ -264,23 +499,68 @@ end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press or menuIsOpen() then return false
-    if key = menuOpenKey()
-        openMenu()
+    if key = "play"
+        if toggleTrailerSound() then return true
+        heroButton(0)
         return true
-    else if key = "play"
-        return toggleTrailerSound()
-    else if key = "options"
-        if m.focused <> invalid then openItem(m.focused, "details")
-        return true
-    else if key = "back" and not m.isLibrary
-        ' Back from lower rows jumps to the top instead of exiting.
-        f = m.rows.rowItemFocused
-        if m.rows.content <> invalid and f <> invalid
-            if f[0] > 0 or f[1] > 0
-                m.rows.jumpToRowItem = [0, 0]
-                return true
+    end if
+    if m.zone = "rows"
+        if key = "left"
+            openMenu()
+            return true
+        else if key = "up"
+            setZone("buttons")
+            return true
+        else if key = "options"
+            if m.focused <> invalid then openItem(m.focused, "details")
+            return true
+        else if key = "back"
+            ' Back from lower Rows jumps to the top instead of exiting.
+            f = m.rows.rowItemFocused
+            if m.rows.content <> invalid and f <> invalid
+                if f[0] > 0 or f[1] > 0
+                    m.rows.jumpToRowItem = [0, 0]
+                    return true
+                end if
             end if
         end if
+        return false
+    else if m.zone = "buttons"
+        if key = "left"
+            if m.btnIndex = 0
+                openMenu()
+            else
+                m.btnIndex = m.btnIndex - 1
+                paintBtns(m.buttons, m.btnIndex)
+            end if
+        else if key = "right"
+            if m.btnIndex < m.buttons.Count() - 1 then m.btnIndex = m.btnIndex + 1
+            paintBtns(m.buttons, m.btnIndex)
+        else if key = "down" or key = "back"
+            setZone("rows")
+        else if key = "up"
+            setZone("badges")
+        else if key = "OK"
+            heroButton(m.btnIndex)
+        end if
+        return true
+    else if m.zone = "badges"
+        if key = "left"
+            m.badgeIndex = 0
+            paintTopBadges(m.badges, m.badgeIndex)
+        else if key = "right"
+            m.badgeIndex = 1
+            paintTopBadges(m.badges, m.badgeIndex)
+        else if key = "down" or key = "back"
+            setZone("buttons")
+        else if key = "OK"
+            if m.badgeIndex = 0
+                m.top.navigate = { action: "settings" }
+            else
+                m.top.navigate = { action: "switchUser" }
+            end if
+        end if
+        return true
     end if
     return false
 end function
