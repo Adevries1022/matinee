@@ -526,26 +526,26 @@ sub buildButtons()
         st.group.translation = [x, y + (72 - Int(24 * 1.4)) \ 2]
         x = x + st.w + 40
     end if
-    ' The "Default request quality" setting picks which one comes first.
+    ' With 4K on offer there are two buttons; the "Default request quality"
+    ' setting picks which comes first. The first says what it requests, the
+    ' second only its quality (the season pills already say which seasons).
     want4k = readSetting("seerrQuality", "1080p") = "4K"
     reqs = []
-    if hd.ok
-        lbl = hd.label
-        if show4k then lbl = lbl + " in 1080p"
-        reqs.Push({ text: lbl, icon: "plus", action: "request" })
-    end if
+    if hd.ok then reqs.Push({ label: hd.label, quality: "1080p", action: "request" })
     if uhd <> invalid
         if uhd.ok
-            r4 = { text: uhd.label + " in 4K", icon: "hd", action: "request4k" }
+            r4 = { label: uhd.label, quality: "4K", action: "request4k" }
             if want4k then reqs.Unshift(r4) else reqs.Push(r4)
         end if
     end if
     for i = 0 to reqs.Count() - 1
         r = reqs[i]
         if i = 0
-            addButton({ kind: "primary", icon: r.icon, text: r.text }, r.action)
+            lbl = r.label
+            if show4k then lbl = lbl + " in " + r.quality
+            addButton({ kind: "primary", icon: "plus", text: lbl }, r.action)
         else
-            addButton({ kind: "secondary", icon: r.icon, text: r.text, size: 22, padX: 30, iconSize: 24 }, r.action)
+            addButton({ kind: "secondary", text: "In " + r.quality, size: 22, padX: 30 }, r.action)
         end if
     end for
     if jellyfinId() <> "" then addButton({ kind: "secondary", icon: "play", text: "Watch", size: 22, padX: 30, iconSize: 24 }, "watch")
@@ -560,7 +560,10 @@ sub buildButtons()
         dest = "Radarr"
         if m.isTv then dest = "Sonarr"
         approval = "needs an admin to approve"
-        if seerrAutoApproves(m.perms, m.isTv, false) then approval = "approved automatically"
+        ' Approval can differ for 4K: go by the first button.
+        first4k = false
+        if reqs.Count() > 0 then first4k = (reqs[0].quality = "4K")
+        if seerrAutoApproves(m.perms, m.isTv, first4k) then approval = "approved automatically"
         m.note.text = "Goes to " + dest + " " + Chr(183) + " " + approval
         m.note.color = t.meta
     else
