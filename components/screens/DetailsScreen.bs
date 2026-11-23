@@ -66,6 +66,8 @@ sub init()
     m.trailerCount = 0
     m.item = invalid
     m.metaParts = []
+    m.simGen = 0
+    m.simPending = 0
     m.itemRatings = invalid
     ratingsInit()
     m.seenVersion = m.global.watchVersion
@@ -158,7 +160,7 @@ sub onItem(event as object)
         m.playTarget = { itemId: safeStr(item.Id), startSeconds: resume, code: "" }
         m.pillHost.visible = false
         m.rowLabel.visible = true
-        apiRequest("/Items/" + safeStr(item.Id) + "/Similar", { "userId": m.global.userId, "Limit": "12", "Fields": "Overview,Genres,ChildCount" }, "onSimilar")
+        loadSimilar(item)
     end if
     buildButtons()
     if m.top.isInFocusChain() then restoreFocus()
@@ -320,19 +322,76 @@ end sub
 
 ' ---------- Movies: more like this ----------
 
+' Jellyfin's similar titles from the library first, then Seerr's
+' recommendations that aren't among them, which can be requested.
+sub loadSimilar(item as object)
+    m.simGen = m.simGen + 1
+    m.simLocal = []
+    m.simSeerr = []
+    m.simPending = 1
+    apiRequest("/Items/" + safeStr(item.Id) + "/Similar", { "userId": m.global.userId, "Limit": "12", "Fields": "Overview,Genres,ChildCount" }, "onSimilar", "GET", invalid, m.simGen)
+    tmdb = ""
+    if isValid(item.ProviderIds) then tmdb = safeStr(item.ProviderIds.Tmdb)
+    if tmdb <> "" and m.global.seerrState = "ready"
+        m.simPending = 2
+        seerrRequest("/movie/" + tmdb + "/recommendations", { "page": "1" }, "onSeerrSimilar", "GET", invalid, m.simGen)
+    end if
+end sub
+
 sub onSimilar(event as object)
     res = event.getData()
-    t = th()
-    items = []
+    if res.tag <> m.simGen then return
     if res.ok and isValid(res.data)
-        if isValid(res.data.Items) then items = res.data.Items
+        if isValid(res.data.Items) then m.simLocal = res.data.Items
     end if
-    m.rowLabel.visible = items.Count() > 0
+    similarDone()
+end sub
+
+sub onSeerrSimilar(event as object)
+    res = event.getData()
+    if res.tag <> m.simGen then return
+    if res.ok and isValid(res.data)
+        if isValid(res.data.results) then m.simSeerr = res.data.results
+    else
+        print "[Matinee] more like this: Seerr recommendations failed, HTTP "; res.code
+    end if
+    similarDone()
+end sub
+
+' A Seerr title as a Card: its backdrop, with its Request Status as a badge.
+function seerrCard(r as object) as object
+    if safeStr(r.mediaType) = "" then r.mediaType = "movie"
+    c = seerrToContent(r)
+    img = tmdbImage(r.backdropPath, "w780")
+    if img = "" then img = tmdbImage(r.posterPath, "w500")
+    c.HDPosterUrl = img
+    setCardSize(c, true)
+    if c.badge = "" then c.badge = "Request"
+    return c
+end function
+
+sub similarDone()
+    m.simPending = m.simPending - 1
+    if m.simPending > 0 then return
+    t = th()
     root = CreateObject("roSGNode", "ContentNode")
     row = root.CreateChild("ContentNode")
-    for each it in items
+    seen = {}
+    for each it in m.simLocal
         row.appendChild(itemToContent(it, true))
+        seen[safeStr(it.Id)] = true
     end for
+    extra = 0
+    for each r in m.simSeerr
+        jf = ""
+        if isValid(r.mediaInfo) then jf = safeStr(r.mediaInfo.jellyfinMediaId)
+        if extra < 12 and (jf = "" or not seen.DoesExist(jf)) and jf <> safeStr(m.item.Id)
+            row.appendChild(seerrCard(r))
+            extra = extra + 1
+        end if
+    end for
+    print "[Matinee] more like this: "; m.simLocal.Count(); " from the library, "; extra; " from Seerr"
+    m.rowLabel.visible = row.getChildCount() > 0
     jump = 0
     if m.restoreCard >= 0
         jump = m.restoreCard
@@ -367,7 +426,14 @@ sub onCardSelected(event as object)
     c = row.getChild(idx[1])
     if c = invalid then return
     m.restoreCard = idx[1]
-    if m.isSeries
+    if Left(c.itemType, 6) = "seerr-"
+        ' On the server already: its Details. Otherwise the request panel.
+        if c.jellyfinId <> ""
+            m.top.navigate = { action: "details", itemId: c.jellyfinId }
+        else
+            m.top.navigate = { action: "discover", tmdbId: c.itemId, mediaType: Mid(c.itemType, 7) }
+        end if
+    else if m.isSeries
         m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
     else
         m.top.navigate = { action: "details", itemId: c.itemId }

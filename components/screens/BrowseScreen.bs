@@ -62,9 +62,8 @@ sub buildHero()
     below.width = 1920
     below.height = 396
     below.color = t.bg
-    ' The Trailer Preview: 16:9, centered in the space right of the Hero text
-    ' and above the fades, so it isn't dimmed.
-    setupTrailer(layer, layer.getChildCount(), [t.trailerX, t.trailerY, t.trailerW, t.trailerH], m.chrome)
+    ' The Trailer Preview sits just above the backdrop, under the Hero's fades.
+    setupTrailer(layer, 1, [t.trailerX, t.trailerY, t.trailerW, t.trailerH], m.heroArt, m.chrome)
 
     m.heroFade = layer.CreateChild("Animation")
     m.heroFade.duration = 0.35
@@ -81,8 +80,8 @@ sub buildHero()
     m.heroEyebrow.vertAlign = "center"
     m.heroTitle = makeLabel(layer, "", 104, "display", t.text)
     m.heroTitle.translation = [x, 228]
-    ' Stops short of the Trailer Preview frame.
-    m.heroTitle.width = t.trailerX - x - 40
+    ' Ends where the Trailer Preview's soft left edge gets solid.
+    m.heroTitle.width = t.trailerX + t.trailerFeatherX \ 2 - x
     m.heroTitle.height = 116
     m.heroTitle.vertAlign = "center"
     m.heroLogoBox = [x, 226, t.heroLogoW, t.heroLogoH]

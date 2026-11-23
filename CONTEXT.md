@@ -64,7 +64,7 @@ A title's IMDb and Rotten Tomatoes scores in its meta line, with TMDB's score wh
 _Avoid_: Reviews, stars
 
 **Trailer Preview**:
-A title's trailer, stored on the server, playing in a 16:9 frame in the Hero, beside the title and its details, after its Card has been Focused for a few seconds. It has sound unless Trailer sound is off, and the header fades out while it plays.
+A title's trailer, stored on the server, playing in the Hero beside the title and its details, centered in the space to their right with its edges fading into the screen, after its Card has been Focused for a few seconds. It has sound unless Trailer sound is off, and the header fades out while it plays.
 _Avoid_: Autoplay, preview video
 
 **Continue Watching**:

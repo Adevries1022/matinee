@@ -20,12 +20,12 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 ### Watching
 - **Home:** a Hero for the title you're on, with Play or Resume, Details and My List, above Rows for Continue watching, Next up, Recently added, Picked for you and Highly rated.
 - **Series and Movies:** every show or movie from all your libraries, with Rows for what you're watching, what's new, what you haven't watched, and up to 14 genres.
-- **Details:** seasons and episodes for shows, More like this for movies, and buttons for My List, Watched, Start over (a movie you've started) and Trailer.
+- **Details:** seasons and episodes for shows, More like this for movies (similar titles from your library, then Seerr's recommendations you can request), and buttons for My List, Watched, Start over (a movie you've started) and Trailer.
 - **Ratings:** the Hero, Details and Discover show IMDb and Rotten Tomatoes scores. Rotten Tomatoes comes from Jellyfin when its OMDb plugin has filled it in; IMDb, and Rotten Tomatoes for series, come from Seerr while you're signed in to it. When neither is known, TMDB's score shows instead.
 - **My List:** your Jellyfin Favorites (movies and shows), so it's the same on every device. Filter by All, In progress or Not started.
 - **Search:** finds titles by name as you type. If you're signed in to Seerr, titles you could request follow the matches from your library.
 - **Player:** Matinee's own controls, with seeking, subtitle and audio choice, the next episode, and a countdown near the end of an episode. Picture-based subtitles (like PGS) are burned in by the server.
-- **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays in a frame beside the title, with sound (turn Trailer sound off in Playback & quality to start them muted). The header fades out while it plays.
+- **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays beside the title, fading into the edges of the screen, with sound (turn Trailer sound off in Playback & quality to start them muted). The header fades out while it plays.
 
 ### Requests and downloads
 - **Discover** appears in the Rail when Matinee finds Seerr. Until an Administrator enters an address, it looks on port 5055 of the Jellyfin machine, then at seerr.home, seerr.lan, seerr.local and seerr, and keeps the first that answers. Each person signs in to Seerr with their Jellyfin account, so requests are in their name. It's for browsing what to request: Rows of trending, popular and coming-soon movies and series, then streaming services (Netflix, Prime Video, Disney+ and others in Seerr's region) and genres, each opening a grid with more. OK on a title opens the request panel.

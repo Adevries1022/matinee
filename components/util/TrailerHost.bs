@@ -1,41 +1,68 @@
 ' Trailer Preview: after a title has been Focused for a few seconds, its
-' trailer fades in, framed in the Hero beside the title and its details, with sound unless Trailer sound
-' in Playback & quality is off, and the screen's header fades out. Only
-' trailer files stored on the server are used (for example ones downloaded
-' by Trailarr). Play toggles the sound. Moving focus or leaving the screen
-' stops it, and Trailer previews in Playback & quality turns it off.
+' trailer fades in beside the title and its details, centered in the space
+' to their right, with its edges fading into the screen. The Hero backdrop
+' fades away while it plays. It has sound unless Trailer sound in Playback
+' & quality is off, and the screen's header fades out. Only trailer files
+' stored on the server are used (for example ones downloaded by Trailarr).
+' Play toggles the sound. Moving focus or leaving the screen stops it, and
+' Trailer previews in Playback & quality turns it off.
 
-' frame: [x, y, w, h] where the trailer plays. chrome: the header (wordmark,
-' server pill, avatar) to fade out while a trailer plays. It needs an id.
-sub setupTrailer(layer as object, insertIndex as integer, frame as object, chrome as object)
-    v = CreateObject("roSGNode", "Video")
-    v.id = "trailerVideo"
-    v.translation = [frame[0], frame[1]]
-    v.width = frame[2]
-    v.height = frame[3]
+' area: [x, y, w, h] where the trailer plays; its left, top and bottom edges
+' fade into the background. backdrop: the Hero artwork (with an id), faded
+' out while the trailer plays. chrome: the header (wordmark, server pill,
+' avatar) to fade out too. It needs an id.
+sub setupTrailer(layer as object, insertIndex as integer, area as object, backdrop as object, chrome as object)
+    t = th()
+    x = area[0]
+    y = area[1]
+    w = area[2]
+    h = area[3]
+    grp = CreateObject("roSGNode", "Group")
+    grp.id = "trailerGroup"
+    grp.opacity = 0
+    grp.visible = false
+    layer.insertChild(grp, insertIndex)
+    m.trailerGroup = grp
+    v = grp.CreateChild("Video")
+    v.translation = [x, y]
+    v.width = w
+    v.height = h
     v.enableUI = false
     v.mute = true
-    v.opacity = 0
-    v.visible = false
     v.observeField("state", "onTrailerState")
-    layer.insertChild(v, insertIndex)
     m.trailerVideo = v
+    ' Soft edges in the background color, so the picture melts into the screen.
+    edgeL = makeFade(grp, "h", t.trailerFeatherX, h)
+    edgeL.translation = [x, y]
+    edgeT = grp.CreateChild("Poster")
+    edgeT.uri = "pkg:/images/grad_vd.png"
+    edgeT.loadDisplayMode = "scaleToFill"
+    edgeT.blendColor = t.bg
+    edgeT.width = w
+    edgeT.height = t.trailerFeatherY
+    edgeT.translation = [x, y]
+    edgeB = makeFadeUp(grp, w, t.trailerFeatherY, t.bg)
+    edgeB.translation = [x, y + h - t.trailerFeatherY]
 
     ' A quiet hint so people know the sound is one press away.
-    m.trailerHint = makeLabel(layer, "Press Play for sound", 24, true, th().muted)
-    ' Just above the frame, lined up with its right edge.
-    m.trailerHint.translation = [frame[0] + frame[2] - 400, frame[1] - 40]
+    m.trailerHint = makeLabel(layer, "Press Play for sound", 24, true, t.muted)
+    m.trailerHint.translation = [x + w - 96 - 400, y + h - t.trailerFeatherY]
     m.trailerHint.width = 400
     m.trailerHint.horizAlign = "right"
     m.trailerHint.visible = false
 
+    m.trailerBackdrop = backdrop
     m.trailerFade = layer.CreateChild("Animation")
     m.trailerFade.duration = 0.8
     m.trailerFade.easeFunction = "outQuad"
     interp = m.trailerFade.CreateChild("FloatFieldInterpolator")
     interp.key = [0.0, 1.0]
     interp.keyValue = [0.0, 1.0]
-    interp.fieldToInterp = "trailerVideo.opacity"
+    interp.fieldToInterp = "trailerGroup.opacity"
+    bi = m.trailerFade.CreateChild("FloatFieldInterpolator")
+    bi.key = [0.0, 1.0]
+    bi.keyValue = [1.0, 0.0]
+    bi.fieldToInterp = backdrop.id + ".opacity"
 
     m.trailerChrome = chrome
     m.chromeFade = m.top.CreateChild("Animation")
@@ -145,7 +172,7 @@ sub onTrailerState()
     if st = "playing"
         if not m.trailerPlaying
             m.trailerPlaying = true
-            m.trailerVideo.visible = true
+            m.trailerGroup.visible = true
             m.trailerHint.visible = true
             m.trailerFade.control = "start"
             trailerHideChrome()
@@ -172,8 +199,10 @@ sub trailerStop()
     end if
     m.trailerPlaying = false
     m.trailerFade.control = "stop"
-    m.trailerVideo.opacity = 0
-    m.trailerVideo.visible = false
+    m.trailerGroup.opacity = 0
+    m.trailerGroup.visible = false
+    ' Bring the backdrop back, unless a new one is still loading (it fades in).
+    if m.trailerBackdrop.loadStatus = "ready" then m.trailerBackdrop.opacity = 1
     m.trailerHint.visible = false
     trailerShowChrome()
 end sub
