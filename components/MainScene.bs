@@ -254,8 +254,11 @@ sub onSeerrStatus(event as object)
     end if
     if not found
         m.global.seerrState = "none"
+        print "[Matinee] Seerr at "; m.global.seerrUrl; " didn't answer (HTTP "; res.code; ")"
+        seerrRetryLater()
         return
     end if
+    m.seerrRetries = 0
     reg = CreateObject("roRegistrySection", "Marquee")
     if not reg.Exists("seerrUrl")
         reg.Write("seerrUrl", m.global.seerrUrl)
@@ -266,6 +269,27 @@ sub onSeerrStatus(event as object)
     else
         seerrRequest("/auth/me", {}, "onSeerrMe")
     end if
+end sub
+
+' A saved Seerr that doesn't answer (the server is still starting, or was
+' down) is asked again every minute, up to 10 times, so Discover and My
+' requests come back without relaunching.
+sub seerrRetryLater()
+    m.seerrRetries = safeInt(m.seerrRetries) + 1
+    if m.seerrRetries > 10 then return
+    if m.seerrRetry = invalid
+        m.seerrRetry = m.top.CreateChild("Timer")
+        m.seerrRetry.duration = 60
+        m.seerrRetry.repeat = false
+        m.seerrRetry.observeField("fire", "onSeerrRetry")
+    end if
+    m.seerrRetry.control = "stop"
+    m.seerrRetry.control = "start"
+end sub
+
+sub onSeerrRetry()
+    if m.global.seerrState <> "none" or m.global.seerrUrl = "" then return
+    seerrRequest("/status", {}, "onSeerrStatus")
 end sub
 
 sub onSeerrMe(event as object)
