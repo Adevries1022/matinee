@@ -198,10 +198,52 @@ sub initSeerr()
     if reg.Exists(cookieKey) then m.global.seerrCookie = reg.Read(cookieKey)
     url = ""
     if reg.Exists("seerrUrl") then url = reg.Read("seerrUrl")
-    ' Not set up yet: try Seerr's usual port on the Jellyfin machine.
-    if url = "" then url = hostBase(m.global.serverUrl) + ":5055"
+    if url = ""
+        findSeerr()
+        return
+    end if
     m.global.seerrUrl = url
     seerrRequest("/status", {}, "onSeerrStatus")
+end sub
+
+' Not set up yet: Seerr doesn't announce itself, so try where it usually
+' is, in order: its usual port on the Jellyfin machine, then a "seerr" name
+' on the home network. Only /status is asked, with no sign-in attached. The
+' first that answers is saved; if none does, the next launch tries again.
+sub findSeerr()
+    m.seerrGen = safeInt(m.seerrGen) + 1
+    m.seerrTries = [hostBase(m.global.serverUrl) + ":5055", "http://seerr.home", "http://seerr.lan", "http://seerr.local", "http://seerr"]
+    m.seerrAnswers = []
+    for i = 0 to m.seerrTries.Count() - 1
+        m.seerrAnswers.Push("waiting")
+        startRequest(m.seerrTries[i] + "/api/v1", "/status", {}, "onSeerrProbe", "GET", invalid, { gen: m.seerrGen, index: i }, "", {})
+    end for
+end sub
+
+sub onSeerrProbe(event as object)
+    res = event.getData()
+    tag = res.tag
+    if tag = invalid or tag.gen <> m.seerrGen then return
+    found = false
+    if res.ok and isValid(res.data) then found = isValid(res.data.version)
+    if found
+        m.seerrAnswers[tag.index] = "yes"
+    else
+        m.seerrAnswers[tag.index] = "no"
+    end if
+    ' Take the first in order that answered, once those before it have failed.
+    for i = 0 to m.seerrAnswers.Count() - 1
+        a = m.seerrAnswers[i]
+        if a = "waiting" then return
+        if a = "yes"
+            m.seerrGen = m.seerrGen + 1
+            print "[Matinee] found Seerr at "; m.seerrTries[i]
+            m.global.seerrUrl = m.seerrTries[i]
+            seerrRequest("/status", {}, "onSeerrStatus")
+            return
+        end if
+    end for
+    print "[Matinee] Seerr not found on the usual addresses"
 end sub
 
 sub onSeerrStatus(event as object)

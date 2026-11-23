@@ -257,12 +257,17 @@ function serviceTiles(name as string) as object
         if auto = invalid then auto = "Sign in to see"
         fourK = "Off"
         if readSetting("seerr4k", "false") = "true" then fourK = "On"
-        return [
+        rows = [
             { label: "Sign in with", value: "Jellyfin account", kind: "info", key: "" },
             { label: "Default request quality", value: readSetting("seerrQuality", "1080p"), kind: "cycle", key: "seerrQuality" },
             { label: "Show 4K requests", value: fourK, kind: "cycle", key: "seerr4k" },
             { label: "Auto-approve", value: auto, kind: "info", key: "" }
         ]
+        ' Seerr already knows Radarr and Sonarr, so an Administrator can copy them.
+        if m.global.isAdmin = true and m.global.seerrState = "ready" and not (arrReady("radarr") and arrReady("sonarr"))
+            rows.Push({ label: "Radarr and Sonarr", value: "Set up from Seerr", kind: "action", key: "arrFromSeerr" })
+        end if
+        return rows
     end if
     profile = m.extra[name + "Profile"]
     if profile = invalid then profile = Chr(8212)
@@ -516,6 +521,9 @@ sub detailOk()
         else if not admin
             setMessage("Only an Administrator can change this.", t.warn)
             return
+        else if tl.key = "arrFromSeerr"
+            arrFromSeerr()
+            return
         else if tl.key = "serverAway"
             away = readAway(readSetting("server"))
             if away = "" then away = "https://"
@@ -628,6 +636,137 @@ sub saveService(n as string)
         m.global.servicesVersion = m.global.servicesVersion + 1
     end if
     setMessage("Saved.", t.ok)
+    loadDrafts()
+    startChecks()
+    render()
+end sub
+
+' ---------- Radarr and Sonarr from Seerr ----------
+
+' Seerr keeps each Radarr and Sonarr server's address and API key, and
+' shares them with accounts allowed to manage its settings. Copy the
+' default (non-4K) one of each, trying addresses until one answers with
+' that key. Seerr's own address for it is often one only Seerr can reach (a
+' Docker name), so its external address, a name like Seerr's own
+' (seerr.home -> radarr.home) and its port on Seerr's machine are tried too.
+sub arrFromSeerr()
+    setMessage("Asking Seerr for Radarr and Sonarr...", th().muted)
+    m.arrSetup = { pending: 2, done: [], failed: [], noAccess: false }
+    for each n in ["radarr", "sonarr"]
+        seerrRequest("/settings/" + n, {}, "onSeerrArr", "GET", invalid, n)
+    end for
+end sub
+
+sub onSeerrArr(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    if res.code = 401 or res.code = 403
+        arrSetupDone(n, "noAccess")
+        return
+    end if
+    if not res.ok or type(res.data) <> "roArray"
+        arrSetupDone(n, "")
+        return
+    end if
+    if res.data.Count() = 0
+        arrSetupDone(n, "")
+        return
+    end if
+    pick = invalid
+    for each sv in res.data
+        if pick = invalid and not isTrue(sv.is4k) and isTrue(sv.isDefault) then pick = sv
+    end for
+    for each sv in res.data
+        if pick = invalid and not isTrue(sv.is4k) then pick = sv
+    end for
+    if pick = invalid then pick = res.data[0]
+    m.arrSetup[n] = { key: safeStr(pick.apiKey), tries: arrAddresses(n, pick), index: 0 }
+    tryArrAddress(n)
+end sub
+
+function arrAddresses(n as string, sv as object) as object
+    tries = []
+    scheme = "http://"
+    if isTrue(sv.useSsl) then scheme = "https://"
+    base = safeStr(sv.baseUrl)
+    if base <> "" and Left(base, 1) <> "/" then base = "/" + base
+    port = safeInt(sv.port).ToStr()
+    ext = normalizeUrl(safeStr(sv.externalUrl))
+    if ext <> "" then tries.Push(ext)
+    host = safeStr(sv.hostname)
+    if host <> "" then tries.Push(normalizeUrl(scheme + host + ":" + port + base))
+    seerrBase = hostBase(m.global.seerrUrl)
+    sep = Instr(1, seerrBase, "://")
+    seerrHost = Mid(seerrBase, sep + 3)
+    dotAt = Instr(1, seerrHost, ".")
+    if dotAt > 0
+        label = LCase(Left(seerrHost, dotAt - 1))
+        if label = "seerr" or label = "overseerr" or label = "jellyseerr"
+            tries.Push(normalizeUrl(Left(seerrBase, sep + 2) + n + Mid(seerrHost, dotAt) + base))
+        end if
+    end if
+    tries.Push(normalizeUrl(seerrBase + ":" + port + base))
+    unique = []
+    for each u in tries
+        if indexOf(unique, u) < 0 then unique.Push(u)
+    end for
+    return unique
+end function
+
+sub tryArrAddress(n as string)
+    st = m.arrSetup[n]
+    if st.index >= st.tries.Count()
+        arrSetupDone(n, "")
+        return
+    end if
+    startRequest(st.tries[st.index] + "/api/v3", "/system/status", {}, "onArrAddress", "GET", invalid, n, "", { "X-Api-Key": st.key })
+end sub
+
+sub onArrAddress(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    st = m.arrSetup[n]
+    if st = invalid then return
+    if res.ok and isValid(res.data)
+        url = st.tries[st.index]
+        writeSetting(n + "Url", url)
+        writeSetting(n + "Key", st.key)
+        writeSetting(n + "Enabled", "true")
+        print "[Matinee] set up "; n; " from Seerr at "; url
+        arrSetupDone(n, url)
+        return
+    end if
+    st.index = st.index + 1
+    m.arrSetup[n] = st
+    tryArrAddress(n)
+end sub
+
+' url: where it was set up, "" if it couldn't be, "noAccess" if Seerr said no.
+sub arrSetupDone(n as string, url as string)
+    t = th()
+    su = m.arrSetup
+    name = serviceInfo(n).name
+    if url = "noAccess"
+        su.noAccess = true
+        su.failed.Push(name)
+    else if url = ""
+        su.failed.Push(name)
+    else
+        su.done.Push(name + " at " + Mid(url, Instr(1, url, "://") + 3))
+    end if
+    su.pending = su.pending - 1
+    m.arrSetup = su
+    if su.pending > 0 then return
+    if su.noAccess
+        setMessage("Your Seerr account needs permission to manage Seerr" + Chr(8217) + "s settings to share these.", t.warn)
+    else if su.failed.Count() = 0
+        setMessage("Set up " + su.done.Join(" and ") + ".", t.ok)
+    else if su.done.Count() > 0
+        setMessage("Set up " + su.done.Join(" and ") + ". Couldn" + Chr(8217) + "t reach " + su.failed.Join(" or ") + "; enter it by hand.", t.warn)
+    else
+        setMessage("Couldn" + Chr(8217) + "t reach Radarr or Sonarr from this TV. Enter them by hand.", t.warn)
+    end if
+    m.global.servicesVersion = m.global.servicesVersion + 1
     loadDrafts()
     startChecks()
     render()
@@ -990,20 +1129,27 @@ function onKeyEvent(key as string, press as boolean) as boolean
     return false
 end function
 
-' Up and Down move by row; the four tiles are two rows of two.
+' Up and Down move by row; the tiles are rows of two.
 sub moveDetail(key as string)
     items = m.detailItems
     i = m.detailIndex
     firstTile = -1
+    tileCount = 0
     for k = 0 to items.Count() - 1
-        if items[k].kind = "tile" and firstTile = -1 then firstTile = k
+        if items[k].kind = "tile"
+            if firstTile = -1 then firstTile = k
+            tileCount = tileCount + 1
+        end if
     end for
+    lastRow = (tileCount - 1) \ 2
     cur = items[i]
     if key = "down"
         if cur.kind = "tile"
             slot = i - firstTile
-            if slot < 2
-                i = i + 2
+            if slot \ 2 < lastRow
+                slot = slot + 2
+                if slot > tileCount - 1 then slot = tileCount - 1
+                i = firstTile + slot
             else
                 i = items.Count() - 1
             end if
@@ -1012,7 +1158,7 @@ sub moveDetail(key as string)
         end if
     else
         if cur.kind = "buttons"
-            i = firstTile + 2
+            i = firstTile + lastRow * 2
         else if cur.kind = "tile"
             slot = i - firstTile
             if slot >= 2
