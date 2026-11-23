@@ -87,7 +87,8 @@ sub buildHero()
     m.heroEyebrow.vertAlign = "center"
     m.heroTitle = makeLabel(layer, "", 88, "display", t.text)
     m.heroTitle.translation = [x, 228]
-    m.heroTitle.width = 1200
+    ' Discover has no Hero buttons, so long titles can run to the right edge.
+    m.heroTitle.width = 1600
     m.heroTitle.height = 116
     m.heroTitle.vertAlign = "center"
     m.heroMeta = makeLabel(layer, "", 22, "regular", t.meta)
@@ -112,8 +113,8 @@ end sub
 sub heroText(eyebrow as string, title as string, meta as string, blurb as string)
     size = 88
     ' measureText runs a little short of the drawn width, so step down early.
-    if measureText(title, 88, "display") > 1000 then size = 64
-    if size = 64 and measureText(title, 64, "display") > 1000 then size = 52
+    if measureText(title, 88, "display") > 1100 then size = 64
+    if size = 64 and measureText(title, 64, "display") > 1400 then size = 52
     m.heroTitle.font = makeFont(size, "display")
     m.heroEyebrow.text = UCase(eyebrow)
     m.heroTitle.text = title
