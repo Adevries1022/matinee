@@ -33,6 +33,8 @@ sub init()
     g.addField("servicesVersion", "integer", false)
     ' { text, icon } for the Toast; set it with showToast().
     g.addField("toast", "assocarray", true)
+    ' How Continue watching is fetched: see resumePath() in Api.bs.
+    g.addField("resumeVia", "string", false)
     g.deviceId = di.GetChannelClientId()
     g.watchVersion = 0
     g.prefsVersion = 0
@@ -178,6 +180,7 @@ end sub
 sub startUser(admin as boolean)
     m.global.isAdmin = admin
     m.global.trackPrefs = {}
+    m.global.resumeVia = ""
     rememberLast(m.global.userId)
     applyPrefs(readPrefs(m.global.userId))
     clearStack()

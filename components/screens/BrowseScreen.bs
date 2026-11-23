@@ -385,7 +385,9 @@ sub fetchRows(defs as object)
         if d.arr <> invalid
             arrRequest(d.arr, d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
         else
-            apiRequest(d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
+            path = d.path
+            if d.kind = "resume" then path = resumePath()
+            apiRequest(path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
         end if
     end for
 end sub
@@ -395,6 +397,17 @@ sub onRowData(event as object)
     tag = res.tag
     if tag \ 1000 <> m.gen then return
     i = tag mod 1000
+    if m.rowDefs[i].kind = "resume" and m.global.resumeVia = ""
+        if res.ok
+            m.global.resumeVia = "plugin"
+        else if res.code <> 401
+            ' No DiscontinueWatching plugin: ask for the plain list instead.
+            print "[Matinee] continue watching: no DiscontinueWatching plugin (HTTP "; res.code; ")"
+            m.global.resumeVia = "plain"
+            apiRequest(resumePath(), m.rowDefs[i].query, "onRowData", "GET", invalid, tag)
+            return
+        end if
+    end if
     items = []
     if res.ok and isValid(res.data)
         if type(res.data) = "roArray"
@@ -513,6 +526,9 @@ sub titleChanged(change as object)
         end if
     end if
     m.seenVersion = m.global.watchVersion
+    ' My List changes no Row, so keep the User's place; watched and
+    ' removed titles move between Rows, so fetch them again.
+    if change.what = "favorite" then return
     if m.rowDefs <> invalid then fetchRows(m.rowDefs)
 end sub
 

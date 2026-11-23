@@ -2,7 +2,9 @@
 ' Picker. Watched and My List changes are saved here; the screen hears
 ' about them through "changed". Playing and opening a show go back to the
 ' screen through "done", which also fires whenever the panel closes.
-' Marking a whole show or season asks first.
+' Marking a whole show or season asks first. "Remove from Continue watching"
+' hides the title through the DiscontinueWatching plugin when the server has
+' it (see resumePath() in Api.bs), else clears the resume point after asking.
 
 sub init()
     m.layer = m.top.findNode("layer")
@@ -37,6 +39,9 @@ sub buildRows()
     if c.resumeSeconds > 0 and (kind = "Movie" or kind = "Episode") and ctx <> "details"
         m.rows.Push({ id: "start", icon: "play", label: "Play from the start" })
     end if
+    if c.inResume and ctx = "row"
+        m.rows.Push({ id: "hide", icon: "hide", label: "Remove from Continue watching" })
+    end if
     if kind = "Movie" or kind = "Episode" or kind = "Series" or kind = "Season"
         noun = ""
         if kind = "Series" then noun = "show "
@@ -68,6 +73,16 @@ sub askFirst(rowId as string)
     if c.itemType = "Series" then scope = c.heading
     m.confirmText = "Mark every episode of " + scope + " " + what + "?"
     m.rows = [{ id: rowId + "!", icon: "check", label: "Yes, mark them " + what }, { id: "cancel", icon: "back", label: "Cancel" }]
+    m.confirming = true
+    m.index = 0
+    draw()
+end sub
+
+' Without the DiscontinueWatching plugin, removing a title clears where the
+' User stopped, so say so first.
+sub askHide()
+    m.confirmText = "This also forgets where you stopped. Playing it again starts from the beginning."
+    m.rows = [{ id: "hide!", icon: "hide", label: "Yes, remove it" }, { id: "cancel", icon: "back", label: "Cancel" }]
     m.confirming = true
     m.index = 0
     draw()
@@ -154,6 +169,18 @@ sub choose()
         m.pending = { itemId: id, what: "played", value: method = "POST", icon: "check" }
         apiRequest("/UserPlayedItems/" + id, { "userId": m.global.userId }, "onSaved", method)
         finish({ action: "close" })
+    else if r.id = "hide" or r.id = "hide!"
+        m.pending = { itemId: id, what: "resume", value: false, icon: "hide" }
+        if m.global.resumeVia = "plugin"
+            ' Hidden, with the place kept. Playing it again brings it back.
+            apiRequest("/DiscontinueWatching/Items/" + id, {}, "onSaved", "POST")
+        else if not m.confirming
+            askHide()
+            return
+        else
+            apiRequest("/UserPlayedItems/" + id, { "userId": m.global.userId }, "onSaved", "DELETE")
+        end if
+        finish({ action: "close" })
     else if r.id = "list" or r.id = "unlist"
         isOn = r.id = "list"
         listIcon = "mylist"
@@ -181,6 +208,7 @@ sub onSaved(event as object)
 end sub
 
 function savedText(p as object) as string
+    if p.what = "resume" then return "Removed from Continue watching"
     if p.what = "favorite"
         if p.value then return "Added to My List"
         return "Removed from My List"

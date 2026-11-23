@@ -49,11 +49,9 @@ The common pattern is **one Options menu per title**, with the same items wherev
 4. **Stop relying on \* during playback** (S, done). Fix the README, and add a one-off tip in the player the first time: "Subtitles: press Down, then choose Subtitles". Keep \* working for Roku sticks, where it does arrive.
 5. **Back on Home opens the Rail first** (S, done). The first Back opens the Rail with Home Focused, and a second Back exits. This matches Netflix and Max on Roku. It also gives a second route to Search, since the Rail's top icon is Search.
 6. **Switching user takes a deliberate OK** (S, done). OK on the avatar opens Who's Watching instead of switching. That's one screen, and the person can press Back.
-7. **Remove from Continue Watching** (S–M). Jellyfin has no native call for this yet (feature request #517 is "planned"). Two ways to do it:
-   - *No plugin:* mark the title unplayed, which clears its resume point. Simple, but it loses the place, so the panel would say "Remove (forgets where you stopped)".
-   - *With the DiscontinueWatching plugin* (installed on this server, v0.5.1): `POST /DiscontinueWatching/{itemId}` hides the title without losing the place. Matinee would filter Continue Watching with `GET /DiscontinueWatching`. The plugin documents no un-hide route.
-
-   On this server, `GET /DiscontinueWatching` returned 404 with the API key, so it needs checking with a User token first.
+7. **Remove from Continue Watching** (S–M, done). Jellyfin has no native call for this yet (feature request #517 is "planned"). Matinee does both:
+   - *With the DiscontinueWatching plugin* (installed on this server, v0.5.1): `POST /DiscontinueWatching/Items/{itemId}` hides the title for the signed-in User without losing the place, and `DELETE` on the same route un-hides it. Matinee fetches Continue Watching from `/DiscontinueWatching/Override/UserItems/Resume`, which takes the same query as `/UserItems/Resume` and leaves hidden titles out. Starting playback of a hidden title un-hides it. The plugin's README lists older routes (`/DiscontinueWatching`, `/DiscontinueWatching/{itemId}`) that 404; the routes above come from its controller source. The denylist routes need a User token (401 with an API key).
+   - *No plugin:* the Override route 404s, so Matinee falls back to `/UserItems/Resume`, and Remove asks first, then marks the title unplayed, which clears its resume point.
 
 ## Part 2: Feature ideas
 
@@ -102,7 +100,7 @@ On this server now: Intro Skipper, Open Subtitles, OMDb, TMDb, AnimeThemes, Disc
 | Plugin | What Matinee could use | Status |
 |---|---|---|
 | Intro Skipper | Intro and Outro, used by Skip Intro and the Up Next Prompt. Recap segments too, if it can detect them | Installed; used |
-| DiscontinueWatching ([repo](https://github.com/jon4hz/jellyfin-plugin-discontinue-watching)) | Remove from Continue Watching without losing the place | Installed; unused |
+| DiscontinueWatching ([repo](https://github.com/jon4hz/jellyfin-plugin-discontinue-watching)) | Remove from Continue Watching without losing the place | Installed; used by Title Options |
 | AnimeThemes | Theme songs for anime on Details | Installed; unused |
 | Trakt (official) | Syncs watched status with Trakt; nothing for Matinee to do | Optional |
 | Open Subtitles | Find subtitles | Installed; used since 2.4 |

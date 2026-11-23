@@ -631,6 +631,7 @@ function itemToContent(item as object, landscape as boolean, rowKind = "" as str
         c.heading = safeStr(item.Name)
     end if
     if rowKind = "resume"
+        c.inResume = true
         parts = []
         if code <> "" then parts.Push(code)
         remain = timeLeft(item)
@@ -712,6 +713,15 @@ end function
 sub showToast(text as string, icon = "check" as string, seconds = 0 as float)
     m.global.toast = { text: text, icon: icon, seconds: seconds }
 end sub
+
+' Continue watching. With the DiscontinueWatching plugin on the server, its
+' copy of the list leaves out titles the User removed; without it, the
+' plain list. m.global.resumeVia is "" until the first answer, then
+' "plugin" or "plain".
+function resumePath() as string
+    if m.global.resumeVia = "plain" then return "/UserItems/Resume"
+    return "/DiscontinueWatching/Override/UserItems/Resume"
+end function
 
 sub setFavorite(itemId as string, isOn as boolean, callback = "onIgnore" as string)
     method = "DELETE"

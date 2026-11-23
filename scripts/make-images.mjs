@@ -180,6 +180,7 @@ const icons = {
     more: [P.fillCircle(5.5, 12, 2), P.fillCircle(12, 12, 2), P.fillCircle(18.5, 12, 2)],
     // Go to show: an arrow pointing right.
     goto: [P.line(5, 12, 18, 12, 2), P.poly([[12.5, 6], [18.5, 12], [12.5, 18]], 2)],
+    hide: [P.arc(12, 21, 13, -136, -44, S), P.arc(12, 3, 13, 44, 136, S), P.circle(12, 12, 3, S), P.line(4, 4, 20, 20, S)],
     check: [P.poly([[5, 12.5], [10, 17], [19, 7.5]], 2)],
     back: [P.poly([[15, 5], [8, 12], [15, 19]], 2)],
     trailer: [P.rect(3, 5, 18, 14, 2, 2), P.fillPoly([[10, 9.5], [10, 14.5], [14, 12]])],
