@@ -268,7 +268,7 @@ sub onSelected(event as object)
     if i < 0 or i >= m.flat.Count() then return
     c = m.flat[i]
     if Left(c.itemType, 6) = "seerr-"
-        m.top.navigate = { action: "requests", tmdbId: c.itemId, mediaType: Mid(c.itemType, 7) }
+        m.top.navigate = { action: "discover", tmdbId: c.itemId, mediaType: Mid(c.itemType, 7) }
     else
         m.top.navigate = { action: "details", itemId: c.itemId }
     end if

@@ -463,11 +463,16 @@ sub onNavigate(event as object)
     else if a = "search"
         popTo(1)
         pushScreen(CreateObject("roSGNode", "SearchScreen"))
-    else if a = "requests"
+    else if a = "discover"
         popTo(1)
-        rq = CreateObject("roSGNode", "RequestsScreen")
-        pushScreen(rq)
-        if isValid(nav.tmdbId) then rq.open = { tmdbId: nav.tmdbId, mediaType: nav.mediaType }
+        ds = CreateObject("roSGNode", "DiscoverScreen")
+        pushScreen(ds)
+        if isValid(nav.tmdbId) then ds.open = { tmdbId: nav.tmdbId, mediaType: nav.mediaType }
+    else if a = "discoverCategory"
+        dg = CreateObject("roSGNode", "DiscoverGridScreen")
+        dg.backLabel = screenLabel(m.stack.Peek())
+        pushScreen(dg)
+        dg.category = nav.category
     else if a = "myrequests"
         popTo(1)
         pushScreen(CreateObject("roSGNode", "MyRequestsScreen"))
@@ -537,7 +542,7 @@ function screenLabel(s as object) as string
     end if
     if kind = "SearchScreen" then return "Search"
     if kind = "MyListScreen" then return "My List"
-    if kind = "RequestsScreen" then return "Requests"
+    if kind = "DiscoverScreen" then return "Discover"
     if kind = "MyRequestsScreen" then return "My requests"
     return "Back"
 end function

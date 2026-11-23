@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- A title on the Requests screen: backdrop with a kind chip and a status
+<!-- A title in a Discover category grid: backdrop with a kind chip and a status
      chip, then the title, details and a Request or Play button. -->
 <component name="RequestItem" extends="Group">
   <interface>

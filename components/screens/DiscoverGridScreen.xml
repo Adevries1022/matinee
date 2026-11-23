@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Requests (Seerr): Discover, My requests and Ready to watch, with a
-     request panel for quality and seasons. -->
-<component name="RequestsScreen" extends="Group">
+<!-- One Discover category as a grid: a genre, or a streaming service with
+     Movies and Series tabs. Uses the shared request panel. -->
+<component name="DiscoverGridScreen" extends="Group">
   <interface>
-    <!-- open: { tmdbId, mediaType } opens the request panel for that title -->
-    <field id="open" type="assocarray" onChange="onOpen" />
-    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    <!-- category: { kind: "genre" | "service", id, name, mediaType (genre), region (service) } -->
+    <field id="category" type="assocarray" onChange="onCategory" />
+    <field id="backLabel" type="string" value="Discover" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
-  <script type="text/brightscript" uri="RequestsScreen.bs" />
+  <script type="text/brightscript" uri="DiscoverGridScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
-  <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/RequestPanel.bs" />
   <children>
     <Group id="layer" />
     <MarkupGrid

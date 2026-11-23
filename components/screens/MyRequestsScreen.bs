@@ -3,7 +3,7 @@
 ' with a progress bar for each download. Progress comes from the Radarr and
 ' Sonarr status Seerr attaches to each request, so it works without Radarr
 ' or Sonarr being set up on this TV. Refreshes every 30 seconds while shown.
-' Ready titles are in Requests > Ready to watch.
+' Ready titles drop off: they're in the library.
 
 sub init()
     t = th()
@@ -162,7 +162,7 @@ sub render()
         m.items = []
         m.summary.text = ""
         msg = "Seerr isn" + Chr(8217) + "t set up. An Administrator can add it in Settings " + Chr(8250) + " Servers & services."
-        if st = "signedOut" then msg = "Sign in to Seerr in Requests to see what you" + Chr(8217) + "ve asked for."
+        if st = "signedOut" then msg = "Sign in to Seerr in Discover to see what you" + Chr(8217) + "ve asked for."
         emptyPanel(msg)
         return
     end if
@@ -172,7 +172,7 @@ sub render()
     end for
     m.summary.text = downloading.ToStr() + " downloading " + Chr(183) + " " + m.items.Count().ToStr() + " not ready yet " + Chr(183) + " from Seerr"
     if m.items.Count() = 0
-        emptyPanel("Nothing waiting. Titles you request in Requests show up here until they" + Chr(8217) + "re ready to watch.")
+        emptyPanel("Nothing waiting. Titles you request in Discover or Search show up here until they" + Chr(8217) + "re ready to watch.")
         return
     end if
     if m.index > m.items.Count() - 1 then m.index = m.items.Count() - 1

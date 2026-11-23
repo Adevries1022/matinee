@@ -107,12 +107,12 @@ _Avoid_: Jellyseerr, Overseerr
 A User asking Seerr to add a movie, or some or all seasons of a show, in their own name.
 _Avoid_: Download, add
 
-**Requests**:
-The main screen for finding titles to Request, with the tabs Discover and Ready to watch.
-_Avoid_: Discover screen, Explore
+**Discover**:
+The main screen for browsing titles to Request: a Hero and Rows of trending, popular and coming-soon titles, then streaming services and genres, each of which opens a grid of its own. Search is for a title you already know.
+_Avoid_: Requests screen, Explore
 
 **My requests**:
-The main screen listing a User's own Requests that aren't ready to watch yet, with a progress bar for each download. Its Rail icon shows how many are downloading.
+The main screen listing a User's own Requests that aren't ready to watch yet (titles that are ready drop off, since they're in the library), with a progress bar for each download. Its Rail icon shows how many are downloading.
 _Avoid_: Downloads, request queue
 
 **Request Status**:

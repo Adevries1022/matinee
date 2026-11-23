@@ -164,6 +164,8 @@ const icons = {
     mylist: [P.poly([[6, 3], [18, 3], [18, 21], [12, 17], [6, 21]], S, true)],
     mylist_on: [P.fillPoly([[6, 3], [18, 3], [18, 21], [12, 17], [6, 21]]), P.poly([[6, 3], [18, 3], [18, 21], [12, 17], [6, 21]], S, true)],
     requests: [P.poly([[12, 3], [14.6, 8.6], [20.6, 9.3], [16.1, 13.4], [17.3, 19.4], [12, 16.5], [6.7, 19.4], [7.9, 13.4], [3.4, 9.3], [9.4, 8.6]], S, true)],
+    // Discover: a compass, its needle pointing to the top right.
+    discover: [P.circle(12, 12, 9, S), P.poly([[15.5, 8.5], [13.4, 13.4], [8.5, 15.5], [10.6, 10.6]], S, true)],
     activity: [P.line(12, 4, 12, 15, S), P.poly([[7, 10.5], [12, 15.5], [17, 10.5]], S), P.line(5, 20, 19, 20, S)],
     settings: [P.poly(gearPoints(12, 12, 9.5, 7, 8), S, true), P.circle(12, 12, 3, S)],
     // My requests: a download arrow inside a circle (Activity's arrow sits on a line).

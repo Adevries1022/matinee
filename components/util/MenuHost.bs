@@ -1,5 +1,5 @@
 ' Shared Rail handling for the browse screens (Home, Series, Movies,
-' Search, My List, Requests, My requests, Activity). A screen calls setupMenu(key) in
+' Search, My List, Discover, My requests, Activity). A screen calls setupMenu(key) in
 ' init and defines restoreContentFocus() to put focus back on its content.
 ' Left opens the Rail.
 
@@ -31,7 +31,7 @@ function menuItems() as object
     if hasMovies then items.Push({ key: "movies", label: "Movies", icon: "movies" })
     items.Push({ key: "mylist", label: "My List", icon: "mylist" })
     if m.global.seerrState <> "none" and m.global.seerrState <> ""
-        items.Push({ key: "requests", label: "Requests", icon: "requests" })
+        items.Push({ key: "discover", label: "Discover", icon: "discover" })
         items.Push({ key: "myrequests", label: "My requests", icon: "downloads" })
     end if
     if arrConfigured() then items.Push({ key: "activity", label: "Activity", icon: "activity" })
