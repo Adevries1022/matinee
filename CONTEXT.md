@@ -97,6 +97,10 @@ _Avoid_: Trickplay bar, HUD, player UI
 The button that shows while playback is inside a title's Intro, as marked by the server's media segments (the Intro Skipper plugin). It is Focused while the Player OSD is hidden, so OK jumps past the Intro.
 _Avoid_: Skip opening, skip credits
 
+**Scrubbing**:
+Moving through a title fast in the Player OSD: Fast-forward or Rewind starts it and pressing again goes faster (three speeds); holding Left or Right does it until let go. OK or Play jumps to the spot; Back cancels.
+_Avoid_: Trickplay, seeking (one 10-second jump)
+
 **Track Picker**:
 The panel during playback for choosing subtitles or the audio track.
 _Avoid_: Language menu, options menu
@@ -106,7 +110,7 @@ The part of the Player OSD that names the following episode. It shows only while
 _Avoid_: Next Up
 
 **Up Next Prompt**:
-The countdown that offers to play the following episode, when its end credits (the Outro segment) start, or 25 seconds before the end when the server doesn't know where they are.
+A small card at the bottom right that offers to play the following episode: its picture with the countdown as a bar filling along the bottom, then its name. It comes up when the end credits (the Outro segment) start, or 25 seconds before the end when the server doesn't know where they are.
 _Avoid_: Autoplay screen, Up Next Card
 
 ### Requests and downloads

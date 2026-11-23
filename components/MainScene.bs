@@ -21,6 +21,9 @@ sub init()
     g.addField("previewItems", "array", false)
     g.addField("trackPrefs", "assocarray", false)
     g.addField("seerrUrl", "string", false)
+    ' Set when the TV can't look up Seerr's name: Seerr's address with the
+    ' Jellyfin machine's IP in place of the name. Never saved.
+    g.addField("seerrVia", "string", false)
     g.addField("seerrCookie", "string", false)
     g.addField("seerrState", "string", false)
     ' The signed-in User's Seerr account id, and how many of their requests
@@ -255,6 +258,18 @@ sub onSeerrStatus(event as object)
     if not found
         m.global.seerrState = "none"
         print "[Matinee] Seerr at "; m.global.seerrUrl; " didn't answer (HTTP "; res.code; ")"
+        ' -6: the TV couldn't look up the name (its DNS doesn't know home
+        ' names, often after the server that answers them was down). Try the
+        ' Jellyfin machine's address, which usually runs the same proxy.
+        seerrHost = urlHost(m.global.seerrUrl)
+        jfHost = urlHost(m.global.serverUrl)
+        if res.code = -6 and m.global.seerrVia = "" and not isIpHost(seerrHost) and isIpHost(jfHost)
+            m.global.seerrVia = swapHost(m.global.seerrUrl, jfHost)
+            print "[Matinee] trying Seerr through "; m.global.seerrVia
+            seerrRequest("/status", {}, "onSeerrStatus")
+            return
+        end if
+        if m.global.seerrVia <> "" then m.global.seerrVia = ""
         seerrRetryLater()
         return
     end if

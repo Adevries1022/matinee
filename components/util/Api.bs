@@ -31,7 +31,15 @@ end sub
 sub seerrRequest(path as string, query as object, callback as string, method = "GET" as string, body = invalid as dynamic, tag = invalid as dynamic)
     headers = {}
     if m.global.seerrCookie <> "" then headers["Cookie"] = m.global.seerrCookie
-    startRequest(m.global.seerrUrl + "/api/v1", path, query, callback, method, body, tag, "", headers)
+    base = m.global.seerrUrl
+    ' When the TV can't look up Seerr's name, go through the Jellyfin
+    ' machine's address and name Seerr in the Host header (see MainScene).
+    via = m.global.seerrVia
+    if via <> invalid and via <> ""
+        base = via
+        headers["Host"] = urlHost(m.global.seerrUrl)
+    end if
+    startRequest(base + "/api/v1", path, query, callback, method, body, tag, "", headers)
 end sub
 
 sub startRequest(base as string, path as string, query as object, callback as string, method as string, body as dynamic, tag as dynamic, auth as string, headers as object)
@@ -910,6 +918,27 @@ function normalizeUrl(raw as string) as string
 end function
 
 ' "http://192.168.1.50:8096" -> "http://192.168.1.50"
+' The host name alone: "http://seerr.home:80/x" gives "seerr.home".
+function urlHost(url as string) as string
+    base = hostBase(url)
+    sep = Instr(1, base, "://")
+    if sep = 0 then return base
+    return Mid(base, sep + 3)
+end function
+
+' url with its host name swapped for host, keeping the scheme, port and path.
+function swapHost(url as string, host as string) as string
+    base = hostBase(url)
+    sep = Instr(1, base, "://")
+    if sep = 0 then return url
+    return Left(base, sep + 2) + host + Mid(url, Len(base) + 1)
+end function
+
+' True for an address like 192.168.0.10, which needs no name lookup.
+function isIpHost(host as string) as boolean
+    return CreateObject("roRegex", "^[0-9.]+$", "").IsMatch(host)
+end function
+
 function hostBase(url as string) as string
     sep = Instr(1, url, "://")
     if sep = 0 then return url

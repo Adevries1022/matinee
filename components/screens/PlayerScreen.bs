@@ -31,6 +31,13 @@ sub init()
     m.countdown.observeField("fire", "onTick")
     m.hideTimer.observeField("fire", "hideOsd")
     m.seekTimer.observeField("fire", "applySeek")
+    m.scrubTimer = m.top.findNode("scrubTimer")
+    m.holdTimer = m.top.findNode("holdTimer")
+    m.scrubTimer.observeField("fire", "scrubStep")
+    m.holdTimer.observeField("fire", "onHold")
+    m.scrubLevel = 0
+    m.scrubDir = 0
+    m.holdKey = ""
     m.top.observeField("focusedChild", "onFocusChanged")
 
     m.di = CreateObject("roDeviceInfo")
@@ -89,6 +96,9 @@ sub start()
     m.upNext.visible = false
     closePicker()
     m.countdown.control = "stop"
+    m.scrubTimer.control = "stop"
+    m.scrubLevel = 0
+    m.seekTarget = -1
     m.status.text = "Loading..."
     m.status.visible = true
     if m.isRestart
@@ -511,6 +521,12 @@ sub buildOsd()
     m.barFill.translation = [m.barX, barY - 4]
     m.barFill.height = 8
     m.barFill.color = t.accent
+    ' "Fast-forward 2x" over the seek bar while scrubbing.
+    m.scrubLabel = makeLabel(o, "", 26, "semibold", t.text)
+    m.scrubLabel.translation = [0, barY - 80]
+    m.scrubLabel.width = 1920
+    m.scrubLabel.horizAlign = "center"
+    m.scrubLabel.visible = false
     m.thumbRing = makeShape(o, "pkg:/images/circle.png", 40, 40, t.accent)
     m.thumb = makeShape(o, "pkg:/images/circle.png", 28, 28, t.white)
     m.barY = barY
@@ -626,7 +642,8 @@ end sub
 
 sub paintOsd()
     paused = (m.video.state = "paused")
-    m.pauseBadge.visible = paused
+    m.pauseBadge.visible = paused and m.scrubLevel = 0
+    paintScrub()
     if paused
         setBtnIcon(m.btnPlay, "play")
     else
@@ -719,6 +736,74 @@ sub applySeek()
     m.video.seek = m.seekTarget
     m.seekTarget = -1
     restartHideTimer()
+end sub
+
+' ---------- Fast-forward and rewind ----------
+' Fast-forward or Rewind starts scrubbing; pressing it again goes faster
+' (three speeds), the other one turns around. Holding Left or Right scrubs
+' until it's let go. OK or Play jumps there; Back cancels.
+
+function scrubSpeeds() as object
+    ' Seconds of video per second of scrubbing, for 1x, 2x and 3x.
+    return [30, 90, 240]
+end function
+
+sub startScrub(dirn as integer)
+    if not m.started then return
+    if m.scrubLevel > 0 and m.scrubDir = dirn
+        if m.scrubLevel < scrubSpeeds().Count() then m.scrubLevel = m.scrubLevel + 1
+    else
+        m.scrubLevel = 1
+        m.scrubDir = dirn
+    end if
+    m.seekTimer.control = "stop"
+    if m.seekTarget < 0 then m.seekTarget = m.video.position
+    m.hideTimer.control = "stop"
+    m.osd.visible = true
+    paintOsd()
+    m.scrubTimer.control = "start"
+end sub
+
+sub scrubStep()
+    if m.scrubLevel <= 0 then return
+    rate = scrubSpeeds()[m.scrubLevel - 1] * 0.25
+    target = m.seekTarget + m.scrubDir * rate
+    if target < 0 then target = 0
+    dur = m.video.duration
+    if dur > 0 and target > dur - 2 then target = dur - 2
+    m.seekTarget = target
+    updateBar()
+end sub
+
+' commit: jump to the scrubbed spot; otherwise stay where playback is.
+sub stopScrub(commit as boolean)
+    m.scrubTimer.control = "stop"
+    m.holdTimer.control = "stop"
+    m.holdKey = ""
+    if m.scrubLevel = 0 then return
+    m.scrubLevel = 0
+    m.scrubDir = 0
+    if commit
+        applySeek()
+        if m.video.state = "paused" then m.video.control = "resume"
+    else
+        m.seekTarget = -1
+    end if
+    paintOsd()
+    restartHideTimer()
+end sub
+
+sub onHold()
+    if m.holdKey = "left" then startScrub(-1)
+    if m.holdKey = "right" then startScrub(1)
+end sub
+
+sub paintScrub()
+    m.scrubLabel.visible = m.scrubLevel > 0
+    if m.scrubLevel = 0 then return
+    word = "Fast-forward"
+    if m.scrubDir < 0 then word = "Rewind"
+    m.scrubLabel.text = word + " " + m.scrubLevel.ToStr() + Chr(215)
 end sub
 
 sub doControl(index as integer)
@@ -957,37 +1042,63 @@ sub showUpNext()
     t = th()
     m.upNextShown = true
     m.countLeft = 10
+    ' A small card: the next episode's picture with the countdown as a bar
+    ' filling along its bottom edge, then its name and the keys.
+    cardW = 360
+    pad = 12
+    picW = cardW - pad * 2
+    picH = picW * 9 \ 16
+    cardH = pad + picH + 14 + 26 + 4 + 22 + pad
     g = m.upNext
     g.removeChildrenIndex(g.getChildCount(), 0)
-    g.translation = [1920 - 80 - 520, 1080 - 80 - 190]
-    makeBox(g, 520, 190, 18, t.panel, 0.94)
-    l1 = makeLabel(g, "UP NEXT", 15, "semibold", t.accent)
-    l1.translation = [32, 28]
-    title = makeLabel(g, m.nextTitle.text, 26, "display", t.text)
-    title.translation = [32, 54]
-    title.width = 456
-    m.upCountdown = makeLabel(g, "", 18, "regular", t.muted)
-    m.upCountdown.translation = [32, 100]
-    m.upCountdown.width = 456
-    m.upCountdown.wrap = true
-    updateCountdown()
+    g.translation = [1920 - 80 - cardW, 1080 - 80 - cardH]
+    makeBox(g, cardW, cardH, 18, t.panel, 0.94)
+    makeBox(g, picW, picH, 10, t.raised).translation = [pad, pad]
+    pic = g.CreateChild("Poster")
+    pic.translation = [pad, pad]
+    pic.width = picW
+    pic.height = picH
+    pic.loadWidth = picW
+    pic.loadHeight = picH
+    pic.loadDisplayMode = "scaleToZoom"
+    pic.uri = imageUrl(safeStr(m.nextEp.Id), "Primary", 640)
+    track = g.CreateChild("Rectangle")
+    track.translation = [pad, pad + picH - 6]
+    track.width = picW
+    track.height = 6
+    track.color = t.barBg
+    fill = g.CreateChild("Rectangle")
+    fill.id = "upFill"
+    fill.translation = [pad, pad + picH - 6]
+    fill.width = 0
+    fill.height = 6
+    fill.color = t.accent
+    makeShape(g, "pkg:/images/corners_r10.9.png", picW, picH, t.panel, 0.94).translation = [pad, pad]
+    y = pad + picH + 14
+    title = makeLabel(g, "Up next " + Chr(183) + " " + m.nextTitle.text, 20, "semibold", t.text)
+    title.translation = [pad + 4, y]
+    title.width = picW - 8
+    hint = makeLabel(g, "OK plays now " + Chr(183) + " Back keeps watching", 16, "regular", t.muted)
+    hint.translation = [pad + 4, y + 30]
+    hint.width = picW - 8
+    ' The bar fills over the countdown.
+    anim = g.CreateChild("Animation")
+    anim.duration = m.countLeft
+    anim.easeFunction = "linear"
+    interp = anim.CreateChild("FloatFieldInterpolator")
+    interp.key = [0.0, 1.0]
+    interp.keyValue = [0.0, picW * 1.0]
+    interp.fieldToInterp = "upFill.width"
     g.visible = true
     paintSkip()
+    anim.control = "start"
     m.countdown.control = "start"
     m.sink.setFocus(true)
 end sub
 
-sub updateCountdown()
-    m.upCountdown.text = "Starting in " + m.countLeft.ToStr() + " s. OK plays it now, Back keeps watching."
-end sub
-
 sub onTick()
     m.countLeft = m.countLeft - 1
-    if m.countLeft <= 0
-        playNext()
-    else
-        updateCountdown()
-    end if
+    if m.countLeft <= 0 then playNext()
 end sub
 
 sub playNext()
@@ -1014,7 +1125,29 @@ sub onFocusChanged()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    if not press then return false
+    if not press
+        ' Letting go of a held Left or Right ends its scrub there.
+        if key = m.holdKey
+            held = m.scrubLevel > 0
+            m.holdTimer.control = "stop"
+            m.holdKey = ""
+            if held then stopScrub(true)
+            return held
+        end if
+        return false
+    end if
+    if m.scrubLevel > 0 and not m.pickerOpen
+        if key = "fastforward"
+            startScrub(1)
+        else if key = "rewind"
+            startScrub(-1)
+        else if key = "back"
+            stopScrub(false)
+        else
+            stopScrub(true)
+        end if
+        return true
+    end if
     if m.pickerOpen
         if key = "up"
             if m.pickIndex > 0 then m.pickIndex = m.pickIndex - 1
@@ -1062,11 +1195,17 @@ function onKeyEvent(key as string, press as boolean) as boolean
         togglePause()
         return true
     else if key = "rewind"
-        seekBy(-30)
+        startScrub(-1)
         return true
     else if key = "fastforward"
-        seekBy(30)
+        startScrub(1)
         return true
+    end if
+    ' Holding Left or Right on the seek bar (or with no OSD) scrubs.
+    if (key = "left" or key = "right") and (not m.osd.visible or m.zone = "seek")
+        m.holdKey = key
+        m.holdTimer.control = "stop"
+        m.holdTimer.control = "start"
     end if
     if not m.osd.visible
         ' The first press only brings up the OSD, except for seeking.
@@ -1136,6 +1275,8 @@ sub onClosed()
     if not m.top.closed then return
     m.countdown.control = "stop"
     m.hideTimer.control = "stop"
+    m.scrubTimer.control = "stop"
+    m.holdTimer.control = "stop"
     reportStopped()
     m.video.control = "stop"
 end sub

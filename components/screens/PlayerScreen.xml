@@ -22,5 +22,7 @@
     <Timer id="countdown" duration="1" repeat="true" />
     <Timer id="hideTimer" duration="5" repeat="false" />
     <Timer id="seekTimer" duration="0.6" repeat="false" />
+    <Timer id="scrubTimer" duration="0.25" repeat="true" />
+    <Timer id="holdTimer" duration="0.5" repeat="false" />
   </children>
 </component>
