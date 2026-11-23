@@ -1,6 +1,6 @@
 {
   "name": "matinee",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "Matinee: a Roku app for Jellyfin, with Seerr requests",
   "private": true,
   "license": "GPL-3.0-only",
