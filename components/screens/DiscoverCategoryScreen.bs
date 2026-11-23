@@ -1,0 +1,125 @@
+' One Discover category: a streaming service or a genre, laid out like
+' Discover (a Hero and Rows, from DiscoverHost.bs). A service gets popular,
+' new and top rated Rows for both movies and series; a genre gets popular,
+' new, top rated and coming soon. Back returns to Discover.
+
+sub init()
+    m.heroLayer = m.top.findNode("heroLayer")
+    m.rows = m.top.findNode("rows")
+    m.layer = m.top.findNode("layer")
+    m.sink = m.top.findNode("sink")
+    m.back = makeBackPill(m.layer, m.top.backLabel)
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.top.observeField("backLabel", "onBackLabel")
+    discoverInit()
+end sub
+
+sub onBackLabel()
+    setBtnText(m.back, m.top.backLabel)
+end sub
+
+sub onCategory()
+    cat = m.top.category
+    if cat = invalid then return
+    name = safeStr(cat.name)
+    m.eyebrowPrefix = name
+    heroText("", name, "", "Loading...")
+    m.heroNote.text = ""
+    defs = []
+    if cat.kind = "service"
+        q = { "watchProviders": safeStr(cat.id), "watchRegion": safeStr(cat.region) }
+        addRow(defs, "Popular movies", "movie", q, {})
+        addRow(defs, "Popular series", "tv", q, {})
+        addRow(defs, "New movies", "movie", q, recentQuery("movie"))
+        addRow(defs, "New series", "tv", q, recentQuery("tv"))
+        addRow(defs, "Top rated movies", "movie", q, topQuery())
+        addRow(defs, "Top rated series", "tv", q, topQuery())
+    else
+        mt = safeStr(cat.mediaType)
+        kind = "movies"
+        if mt = "tv" then kind = "series"
+        m.eyebrowPrefix = name + " " + kind
+        q = { "genre": safeStr(cat.id) }
+        addRow(defs, "Popular", mt, q, {})
+        addRow(defs, "New", mt, q, recentQuery(mt))
+        addRow(defs, "Top rated", mt, q, topQuery())
+        addRow(defs, "Coming soon", mt, q, upcomingQuery(mt))
+    end if
+    fetchRows(defs)
+end sub
+
+sub addRow(defs as object, title as string, mediaType as string, base as object, extra as object)
+    q = { "page": "1" }
+    q.Append(base)
+    q.Append(extra)
+    path = "/discover/movies"
+    if mediaType = "tv" then path = "/discover/tv"
+    defs.Push({ title: title, path: path, query: q, mediaType: mediaType, tiles: "" })
+end sub
+
+' "2026-11-22", days from today.
+function isoDay(days as integer) as string
+    d = CreateObject("roDateTime")
+    d.FromSeconds(d.AsSeconds() + days * 86400)
+    return Left(d.ToISOString(), 10)
+end function
+
+function dateKey(mediaType as string) as string
+    if mediaType = "tv" then return "firstAirDate"
+    return "primaryReleaseDate"
+end function
+
+' Popular titles from the last year.
+function recentQuery(mediaType as string) as object
+    q = {}
+    q[dateKey(mediaType) + "Gte"] = isoDay(-365)
+    q[dateKey(mediaType) + "Lte"] = isoDay(0)
+    return q
+end function
+
+' Best scored, among titles enough people have scored.
+function topQuery() as object
+    return { "sortBy": "vote_average.desc", "voteCountGte": "300" }
+end function
+
+function upcomingQuery(mediaType as string) as object
+    q = {}
+    q[dateKey(mediaType) + "Gte"] = isoDay(1)
+    return q
+end function
+
+function makeTiles(_d as object, _data as dynamic) as object
+    return []
+end function
+
+sub tileSelected(_c as object)
+end sub
+
+function canTakeFocus() as boolean
+    return true
+end function
+
+sub noRows()
+    heroText("", safeStr(m.top.category.name), "", "Nothing here right now.")
+    m.heroNote.text = ""
+end sub
+
+' ---------- Focus & keys ----------
+
+sub restoreContentFocus()
+    if m.rows.visible and m.rows.content <> invalid
+        m.rows.setFocus(true)
+    else
+        m.sink.setFocus(true)
+    end if
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() then restoreContentFocus()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "back" then return rowsBackToTop()
+    return false
+end function

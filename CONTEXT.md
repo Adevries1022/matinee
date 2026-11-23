@@ -136,8 +136,12 @@ A User asking Seerr to add a movie, or some or all seasons of a show, in their o
 _Avoid_: Download, add
 
 **Discover**:
-The main screen for browsing titles to Request: a Hero and Rows of trending, popular and coming-soon titles, then streaming services and genres, each of which opens a grid of its own. Search is for a title you already know.
-_Avoid_: Requests screen, Explore
+The main screen for browsing titles to Request: a Hero and Rows of trending, popular and coming-soon titles, then streaming services and genres. Each service or genre opens a Discover category, laid out the same way: a Hero and Rows of popular, new and top rated titles (a genre adds coming soon). Search is for a title you already know.
+_Avoid_: Requests screen, Explore, Discover grid
+
+**Request Details**:
+The screen for one title that can be Requested, laid out like Detail: Request in place of Play, season pills for shows that pick what Request sends, the Request Status once it's requested, Watch when part of it is on the server, and More like this. A second "Request in 4K" button appears only when 4K is really on offer. Titles that are all on the server open their Detail instead.
+_Avoid_: Request panel, request dialog
 
 **My requests**:
 The main screen listing a User's own Requests that aren't ready to watch yet (titles that are ready drop off, since they're in the library), with a progress bar for each download. Its Rail icon shows how many are downloading.

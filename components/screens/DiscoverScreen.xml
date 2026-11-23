@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!-- Discover (Seerr): browse what to request. A Hero for the Focused title
      and Rows: trending, popular, coming soon, streaming services and
-     genres. Services and genres open a DiscoverGridScreen. -->
+     genres. Services and genres open a DiscoverCategoryScreen. -->
 <component name="DiscoverScreen" extends="Group">
   <interface>
-    <!-- open: { tmdbId, mediaType } opens the request panel for that title -->
-    <field id="open" type="assocarray" onChange="onOpen" />
     <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
     <field id="navigate" type="assocarray" alwaysNotify="true" />
   </interface>
@@ -13,7 +11,7 @@
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
-  <script type="text/brightscript" uri="pkg:/components/util/RequestPanel.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/DiscoverHost.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ratings.bs" />
   <children>
     <Group id="heroLayer" />
@@ -27,7 +25,6 @@
       showRowLabel="[true]"
       visible="false" />
     <Group id="empty" visible="false" />
-    <Group id="modal" visible="false" />
     <Group id="sink" focusable="true" />
   </children>
 </component>

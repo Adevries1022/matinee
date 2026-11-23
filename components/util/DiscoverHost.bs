@@ -1,0 +1,320 @@
+' The Hero and Rows shared by Discover and its category screens (one
+' streaming service or genre). A Hero shows the Focused title; each Row is
+' one Seerr query. OK on a title opens its Request Details (or its Detail
+' when it's on the server).
+' The screen has m.heroLayer and m.rows nodes, calls discoverInit(), then
+' fetchRows(defs) with defs of { title, path, query, mediaType, tiles }.
+' It defines makeTiles(def, data) for Rows of tiles (tiles <> ""),
+' tileSelected(card), canTakeFocus() and noRows().
+
+sub discoverInit()
+    m.gen = 0
+    m.heroItem = invalid
+    m.heroRatings = invalid
+    m.eyebrowPrefix = ""
+    ratingsInit()
+    buildHero()
+    styleRows()
+    m.rows.observeField("rowItemFocused", "onItemFocused")
+    m.rows.observeField("rowItemSelected", "onItemSelected")
+end sub
+
+' ---------- Hero ----------
+
+sub buildHero()
+    t = th()
+    layer = m.heroLayer
+    m.heroArt = layer.CreateChild("Poster")
+    m.heroArt.id = "heroArt"
+    m.heroArt.width = 1920
+    m.heroArt.height = 780
+    m.heroArt.loadWidth = 1920
+    m.heroArt.loadHeight = 780
+    m.heroArt.loadDisplayMode = "scaleToZoom"
+    m.heroArt.opacity = 0
+    m.heroArt.observeField("loadStatus", "onHeroArtStatus")
+    makeFade(layer, "hero", 1920, 780)
+    fade = makeFadeUp(layer, 1920, 204, t.bg)
+    fade.translation = [0, 480]
+    below = layer.CreateChild("Rectangle")
+    below.translation = [0, 684]
+    below.width = 1920
+    below.height = 396
+    below.color = t.bg
+
+    m.heroFade = layer.CreateChild("Animation")
+    m.heroFade.duration = 0.35
+    m.heroFade.easeFunction = "outQuad"
+    interp = m.heroFade.CreateChild("FloatFieldInterpolator")
+    interp.key = [0.0, 1.0]
+    interp.keyValue = [0.0, 1.0]
+    interp.fieldToInterp = "heroArt.opacity"
+
+    x = t.leftPad
+    m.heroEyebrow = makeLabel(layer, "", 18, "semibold", t.accent)
+    m.heroEyebrow.translation = [x, 196]
+    m.heroEyebrow.height = 22
+    m.heroEyebrow.vertAlign = "center"
+    m.heroTitle = makeLabel(layer, "", 88, "display", t.text)
+    m.heroTitle.translation = [x, 228]
+    ' Discover has no Hero buttons, so long titles can run to the right edge.
+    m.heroTitle.width = 1600
+    m.heroTitle.height = 116
+    m.heroTitle.vertAlign = "center"
+    m.heroMetaHost = layer.CreateChild("Group")
+    m.heroMetaHost.translation = [x, 360]
+    m.heroBlurb = makeLabel(layer, "", 26, "regular", t.soft)
+    m.heroBlurb.translation = [x, 410]
+    m.heroBlurb.width = 860
+    m.heroBlurb.wrap = true
+    m.heroBlurb.maxLines = 2
+    m.heroBlurb.lineSpacing = 8
+    ' What OK does.
+    m.heroNote = makeLabel(layer, "", 22, "semibold", t.muted)
+    m.heroNote.translation = [x, 520]
+    m.heroNote.width = 1400
+
+    m.heroTimer = layer.CreateChild("Timer")
+    m.heroTimer.duration = 0.3
+    m.heroTimer.repeat = false
+    m.heroTimer.observeField("fire", "applyHero")
+end sub
+
+sub heroText(eyebrow as string, title as string, meta as string, blurb as string)
+    size = 88
+    ' measureText runs a little short of the drawn width, so step down early.
+    if measureText(title, 88, "display") > 1100 then size = 64
+    if size = 64 and measureText(title, 64, "display") > 1400 then size = 52
+    m.heroTitle.font = makeFont(size, "display")
+    if m.eyebrowPrefix <> "" and eyebrow <> ""
+        eyebrow = m.eyebrowPrefix + " " + Chr(183) + " " + eyebrow
+    end if
+    m.heroEyebrow.text = UCase(eyebrow)
+    m.heroTitle.text = title
+    drawHeroMeta([meta])
+    m.heroBlurb.text = blurb
+end sub
+
+' Show a Card in the Hero after a short pause, so scrolling stays smooth.
+sub heroShow(c as object, immediate = false as boolean)
+    m.heroItem = c
+    if immediate
+        applyHero()
+    else
+        m.heroTimer.control = "stop"
+        m.heroTimer.control = "start"
+    end if
+end sub
+
+sub applyHero()
+    c = m.heroItem
+    if c = invalid then return
+    heroText(c.rowTitle, c.heading, c.meta, c.description)
+    m.heroRatings = invalid
+    if Left(c.itemType, 6) = "seerr-"
+        m.heroRatings = ratingsFor(Mid(c.itemType, 7), c.tmdbId, 0, c.score)
+        drawTitleMeta()
+    end if
+    noteFor(c)
+    ' Services have no backdrop: keep the last one.
+    if c.backdropUrl <> "" and c.backdropUrl <> m.heroArt.uri
+        m.heroArt.opacity = 0
+        m.heroArt.uri = c.backdropUrl
+    end if
+end sub
+
+sub drawHeroMeta(parts as object)
+    m.heroMetaHost.removeChildrenIndex(m.heroMetaHost.getChildCount(), 0)
+    makeMeta(m.heroMetaHost, parts, 22)
+end sub
+
+' "2026 · Movie" and the title's scores.
+sub drawTitleMeta()
+    c = m.heroItem
+    if c = invalid then return
+    kind = "Movie"
+    if c.itemType = "seerr-tv" then kind = "Series"
+    parts = [c.year, kind]
+    parts.Append(ratingParts(m.heroRatings))
+    drawHeroMeta(parts)
+end sub
+
+sub ratingsArrived(key as string)
+    if m.heroRatings <> invalid
+        if m.heroRatings.key = key then drawTitleMeta()
+    end if
+end sub
+
+sub noteFor(c as object)
+    m.heroNote.color = th().muted
+    s = c.requestStatus
+    text = "Press OK for details"
+    if Left(c.itemType, 9) = "discover-"
+        text = "Press OK to browse"
+    else if s = 5
+        text = "On your server " + Chr(183) + " press OK for details"
+    else if s = 2
+        text = "Requested " + Chr(183) + " waiting for approval"
+    else if s = 3
+        text = "Requested " + Chr(183) + " downloading"
+    else if s = 4
+        text = "Partly on your server " + Chr(183) + " press OK for details"
+    end if
+    m.heroNote.text = text
+end sub
+
+sub onHeroArtStatus()
+    if m.heroArt.loadStatus = "ready" then m.heroFade.control = "start"
+end sub
+
+' ---------- Rows ----------
+
+sub styleRows()
+    t = th()
+    m.rows.translation = [t.leftPad - t.cellPadX, t.rowsTop]
+    m.rows.itemSize = [1920 - t.leftPad + t.cellPadX, t.landH + t.cellPadY * 2 + 56]
+    m.rows.rowItemSpacing = [[0, 0]]
+    m.rows.itemSpacing = [0, 18]
+    m.rows.rowLabelOffset = [[t.cellPadX, 2]]
+    m.rows.rowLabelColor = t.heading
+    m.rows.rowLabelFont = makeFont(26, "semibold")
+end sub
+
+' A Seerr title as a backdrop Card for Discover's Rows.
+function discoverContent(r as object, mediaType = "" as string) as object
+    if safeStr(r.mediaType) = "" and mediaType <> "" then r.mediaType = mediaType
+    c = seerrToContent(r)
+    url = tmdbImage(r.backdropPath, "w780")
+    if url = "" then url = tmdbImage(r.posterPath, "w500")
+    c.HDPosterUrl = url
+    if c.backdropUrl = "" then c.backdropUrl = url
+    setCardSize(c, true)
+    return c
+end function
+
+sub fetchRows(defs as object)
+    m.gen = m.gen + 1
+    m.rowDefs = defs
+    m.rowResults = []
+    for i = 0 to defs.Count() - 1
+        m.rowResults.Push(invalid)
+    end for
+    m.pending = defs.Count()
+    for i = 0 to defs.Count() - 1
+        d = defs[i]
+        seerrRequest(d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
+    end for
+end sub
+
+sub onRowData(event as object)
+    res = event.getData()
+    tag = res.tag
+    if tag \ 1000 <> m.gen then return
+    i = tag mod 1000
+    d = m.rowDefs[i]
+    items = []
+    if res.ok and isValid(res.data)
+        if d.tiles <> ""
+            items = makeTiles(d, res.data)
+        else if isValid(res.data.results)
+            for each r in res.data.results
+                mt = safeStr(r.mediaType)
+                if mt = "" then mt = d.mediaType
+                if mt = "movie" or mt = "tv" then items.Push(discoverContent(r, mt))
+            end for
+        end if
+    else if res.code = 401 or res.code = 403
+        m.top.navigate = { action: "seerrSignedOut" }
+    else
+        print "[Matinee] discover: "; d.title; " failed, HTTP "; res.code
+        if d.tiles <> "" then items = makeTiles(d, invalid)
+    end if
+    m.rowResults[i] = items
+    m.pending = m.pending - 1
+    if m.pending <= 0 then buildRows()
+end sub
+
+sub buildRows()
+    t = th()
+    root = CreateObject("roSGNode", "ContentNode")
+    sizes = []
+    heights = []
+    for i = 0 to m.rowDefs.Count() - 1
+        items = m.rowResults[i]
+        d = m.rowDefs[i]
+        if items <> invalid
+            if items.Count() > 0
+                row = root.CreateChild("ContentNode")
+                row.title = d.title
+                for each c in items
+                    c.rowTitle = d.title
+                    row.appendChild(c)
+                end for
+                cw = items[0].cardW
+                ch = items[0].cardH
+                sizes.Push([cw + t.cellPadX * 2, ch + t.cellPadY * 2])
+                heights.Push(ch + t.cellPadY * 2 + 56)
+            end if
+        end if
+    end for
+
+    if root.getChildCount() = 0
+        noRows()
+        m.rows.visible = false
+        return
+    end if
+
+    m.rows.rowItemSize = sizes
+    m.rows.rowHeights = heights
+    m.rows.content = root
+    m.rows.visible = true
+    if m.top.isInFocusChain() and canTakeFocus() then m.rows.setFocus(true)
+    heroShow(root.getChild(0).getChild(0), true)
+end sub
+
+' ---------- Choosing ----------
+
+sub onItemFocused(event as object)
+    c = cardAt(event.getData())
+    if c <> invalid then heroShow(c)
+end sub
+
+sub onItemSelected(event as object)
+    c = cardAt(event.getData())
+    if c = invalid then return
+    if Left(c.itemType, 6) = "seerr-"
+        m.top.navigate = seerrNav(c)
+    else
+        tileSelected(c)
+    end if
+end sub
+
+function cardAt(idx as dynamic) as object
+    if idx = invalid or m.rows.content = invalid then return invalid
+    row = m.rows.content.getChild(idx[0])
+    if row = invalid then return invalid
+    return row.getChild(idx[1])
+end function
+
+' Back from lower Rows jumps to the top instead of leaving. True if it did.
+function rowsBackToTop() as boolean
+    if not m.rows.visible then return false
+    f = m.rows.rowItemFocused
+    if f = invalid then return false
+    if f[0] > 0 or f[1] > 0
+        m.rows.jumpToRowItem = [0, 0]
+        return true
+    end if
+    return false
+end function
+
+' Seerr's public settings: the country for streaming services.
+function seerrRegion(settings as dynamic) as string
+    if isValid(settings)
+        for each k in ["streamingRegion", "discoverRegion", "region"]
+            v = safeStr(settings[k])
+            if Len(v) = 2 then return v
+        end for
+    end if
+    return "US"
+end function

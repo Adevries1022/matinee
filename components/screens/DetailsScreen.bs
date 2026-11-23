@@ -427,11 +427,11 @@ sub onCardSelected(event as object)
     if c = invalid then return
     m.restoreCard = idx[1]
     if Left(c.itemType, 6) = "seerr-"
-        ' On the server already: its Details. Otherwise the request panel.
+        ' On the server already: its Details. Otherwise its Request Details.
         if c.jellyfinId <> ""
             m.top.navigate = { action: "details", itemId: c.jellyfinId }
         else
-            m.top.navigate = { action: "discover", tmdbId: c.itemId, mediaType: Mid(c.itemType, 7) }
+            m.top.navigate = seerrNav(c)
         end if
     else if m.isSeries
         m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }

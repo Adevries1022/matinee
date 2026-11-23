@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- One Discover category, laid out like Discover itself: a Hero for the
+     Focused title and Rows for a streaming service (movies and series) or
+     a genre. -->
+<component name="DiscoverCategoryScreen" extends="Group">
+  <interface>
+    <!-- category: { kind: "genre" | "service", id, name, mediaType (genre), region (service) } -->
+    <field id="category" type="assocarray" onChange="onCategory" />
+    <field id="backLabel" type="string" value="Discover" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="DiscoverCategoryScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/DiscoverHost.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ratings.bs" />
+  <children>
+    <Group id="heroLayer" />
+    <RowList
+      id="rows"
+      itemComponentName="CardItem"
+      numRows="3"
+      drawFocusFeedback="false"
+      vertFocusAnimationStyle="fixedFocus"
+      rowFocusAnimationStyle="floatingFocus"
+      showRowLabel="[true]"
+      visible="false" />
+    <Group id="layer" />
+    <Group id="sink" focusable="true" />
+  </children>
+</component>

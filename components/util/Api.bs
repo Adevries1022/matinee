@@ -913,6 +913,14 @@ function seerrStatus(result as object) as integer
     return safeInt(mi.status)
 end function
 
+' Where OK on a Seerr title goes: its Detail when it's all on the server,
+' otherwise its Request Details. card is the Card, so a request made there
+' can update its badge.
+function seerrNav(c as object) as object
+    if c.requestStatus = 5 and c.jellyfinId <> "" then return { action: "details", itemId: c.jellyfinId }
+    return { action: "requestDetails", tmdbId: c.tmdbId, mediaType: Mid(c.itemType, 7), card: c }
+end function
+
 ' Convert a Seerr movie or show result into a Card.
 function seerrToContent(r as object) as object
     c = newContent()

@@ -28,9 +28,9 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 - **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays behind the Hero, shifted right so you can see it clearly, with sound (turn Trailer sound off in Playback & quality to start them muted). The header fades out while it plays.
 
 ### Requests and downloads
-- **Discover** appears in the Rail when Matinee finds Seerr. Until an Administrator enters an address, it looks on port 5055 of the Jellyfin machine, then at seerr.home, seerr.lan, seerr.local and seerr, and keeps the first that answers. Each person signs in to Seerr with their Jellyfin account, so requests are in their name. It's for browsing what to request: Rows of trending, popular and coming-soon movies and series, then streaming services (Netflix, Prime Video, Disney+ and others in Seerr's region) and genres, each opening a grid with more. OK on a title opens the request panel.
+- **Discover** appears in the Rail when Matinee finds Seerr. Until an Administrator enters an address, it looks on port 5055 of the Jellyfin machine, then at seerr.home, seerr.lan, seerr.local and seerr, and keeps the first that answers. Each person signs in to Seerr with their Jellyfin account, so requests are in their name. It's for browsing what to request: Rows of trending, popular and coming-soon movies and series, then streaming services (Netflix, Prime Video, Disney+ and others in Seerr's region) and genres. A service or genre opens a page laid out the same way, with Rows of popular, new and top rated movies and series. OK on a title opens its Request Details: artwork, scores, the story and a Request button, with season pills for shows and More like this below. Once it's requested, the Request Status shows where the button was.
 - **My requests** sits under Discover in the Rail. It's the one place for current requests. It lists your requests that aren't ready yet (waiting for approval, looking for a download, or downloading), with a progress bar for each download from Seerr. While any are downloading, its Rail icon shows how many.
-- A show can be requested as all seasons, Season 1 or only the latest season. **4K** is offered only when "Show 4K requests" is on and Seerr has a 4K server for that kind of title.
+- A show can be requested as all seasons (or the rest of them, when some are already there) or one season, picked with the season pills; seasons on the server have a check. **4K** is offered, as a second button, only when "Show 4K requests" is on and Seerr has a 4K server for that kind of title. "Default request quality" decides which of the two comes first.
 - **Radarr and Sonarr** can be set up from Seerr: in Settings › Servers & services › Seerr, an Administrator whose Seerr account can manage Seerr's settings picks "Set up from Seerr". Matinee copies the address and API key Seerr uses and keeps the first address that answers from the TV.
 - **Activity** appears once Radarr or Sonarr is set up, with the download queue, what's coming up this week and storage space. Anyone can look; only an Administrator can remove a download. "Show queue on Home" adds a Row of downloads.
 
@@ -83,7 +83,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 | Search, in the results | Left from the first column, or Back | Returns to the keys |
 | My List | * | Removes the title from My List and from your Jellyfin Favorites |
 | My List, Requests, Activity | Up from the top | Moves to the filters or tabs |
-| Discover | OK | Opens details for an available title, or the request panel for one you can ask for |
+| Discover | OK | Opens Detail for an available title, or Request Details for one you can ask for |
 | Activity | OK | Administrators: asks before removing the download |
 | Settings | Right or OK / Left or Back | Goes into a section / back out (Themes opens with OK) |
 | Settings, on a value | OK | Changes it to the next choice, or opens the keyboard |
@@ -127,7 +127,7 @@ Music, Live TV, Collections Rows.
 - `components/screens/`: the screens
 - `components/MainScene.*`: start-up, the screen stack and saved sign-ins
 - `components/MainMenu.*`: the Rail
-- `components/CardItem.*`, `components/RequestItem.*`: the Cards
+- `components/CardItem.*`: the Cards
 - `components/util/Api.bs`: Theme tokens, requests to each service, shared drawing helpers
 - `components/util/Ui.bs`: buttons, pills, fields and the rest of the component kit
 - `fonts/`: Inter and Space Grotesk, under the SIL Open Font License (included)

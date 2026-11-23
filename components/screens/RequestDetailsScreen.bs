@@ -1,0 +1,831 @@
+' Request Details: a Seerr title laid out like Detail. Artwork on the right,
+' a back pill, eyebrow, title (or the Logo when part of it is on the
+' server), meta, blurb, then Request in place of Play. Shows get season
+' pills that pick what Request sends, with a line about the picked season.
+' Quality (1080p or 4K) only shows as a second "Request in 4K" button when
+' 4K is really on offer. Once requested, the Request Status shows in place
+' of the button. "More like this" holds Seerr's recommendations.
+' Focus zones: back, buttons, seasons, cards. Requests go out as the
+' signed-in User's own Seerr account.
+
+sub init()
+    t = th()
+    m.art = m.top.findNode("art")
+    m.layer = m.top.findNode("layer")
+    m.cards = m.top.findNode("cards")
+    m.sink = m.top.findNode("sink")
+    m.fadeIn = m.top.findNode("fadeIn")
+    m.x = 120
+
+    makeFade(m.layer, "detail", 1920, 1080)
+    m.back = makeBackPill(m.layer, m.top.backLabel)
+
+    m.eyebrow = makeLabel(m.layer, "", 18, "semibold", t.accent)
+    m.eyebrow.translation = [m.x, 176]
+    m.eyebrow.height = 22
+    m.eyebrow.vertAlign = "center"
+    m.title = makeLabel(m.layer, "", 96, "display", t.text)
+    m.title.translation = [m.x, 206]
+    m.title.width = 1100
+    m.title.height = 110
+    m.title.vertAlign = "center"
+    m.logoBox = [m.x, 204, t.detailLogoW, t.detailLogoH]
+    m.logo = makeLogo(m.layer)
+    m.logo.observeField("loadStatus", "onLogoStatus")
+    m.metaHost = m.layer.CreateChild("Group")
+    m.metaHost.translation = [m.x, 330]
+    m.blurb = makeLabel(m.layer, "", 24, "regular", t.soft)
+    m.blurb.translation = [m.x, 384]
+    m.blurb.width = 760
+    m.blurb.wrap = true
+    m.blurb.maxLines = 3
+    m.blurb.lineSpacing = 10
+    m.btnHost = m.layer.CreateChild("Group")
+    ' Where a request goes, or how it went.
+    m.note = makeLabel(m.layer, "", 20, "regular", t.meta)
+    m.note.height = 72
+    m.note.vertAlign = "center"
+    m.note.width = 900
+    m.pillHost = m.layer.CreateChild("Group")
+    m.pillHost.translation = [m.x, 636]
+    m.seasonLine = makeLabel(m.layer, "", 20, "regular", t.meta)
+    m.seasonLine.translation = [m.x, 702]
+    m.rowLabel = makeLabel(m.layer, "More like this", 26, "semibold", t.heading)
+    m.rowLabel.visible = false
+    m.status = makeLabel(m.layer, "Loading...", 26, "regular", t.muted)
+    m.status.translation = [m.x, 400]
+
+    m.cards.observeField("rowItemSelected", "onCardSelected")
+    m.art.observeField("loadStatus", "onArtStatus")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.top.observeField("backLabel", "onBackLabel")
+
+    m.zone = "buttons"
+    m.btnIndex = 0
+    m.buttons = []
+    m.actions = []
+    m.pills = []
+    m.seasonList = []
+    m.pick = 0
+    m.data = invalid
+    m.isTv = false
+    m.perms = 0
+    m.settings = invalid
+    m.sending = false
+    m.noteText = ""
+    m.itemRatings = invalid
+    m.metaParts = []
+    m.simItems = invalid
+    ratingsInit()
+    paintAll()
+end sub
+
+sub onBackLabel()
+    setBtnText(m.back, m.top.backLabel)
+end sub
+
+sub load()
+    md = m.top.media
+    if md = invalid then return
+    m.isTv = (safeStr(md.mediaType) = "tv")
+    m.path = "/" + safeStr(md.mediaType) + "/" + safeStr(md.tmdbId)
+    seerrRequest(m.path, {}, "onTitle")
+    seerrRequest("/auth/me", {}, "onMe")
+    seerrRequest("/settings/public", {}, "onSettings")
+    seerrRequest(m.path + "/recommendations", { "page": "1" }, "onSimilar")
+end sub
+
+sub onMe(event as object)
+    res = event.getData()
+    if res.ok and isValid(res.data)
+        m.perms = safeInt(res.data.permissions)
+        if m.data <> invalid then buildButtons()
+    else if res.code = 401 or res.code = 403
+        m.top.navigate = { action: "seerrSignedOut" }
+    end if
+end sub
+
+sub onSettings(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    m.settings = res.data
+    if m.data <> invalid
+        drawMeta()
+        buildButtons()
+    end if
+end sub
+
+sub onTitle(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data)
+        if res.code = 401 or res.code = 403
+            m.top.navigate = { action: "seerrSignedOut" }
+            return
+        end if
+        m.status.text = "Couldn" + Chr(8217) + "t load this title."
+        m.status.visible = true
+        return
+    end if
+    d = res.data
+    m.data = d
+    m.status.visible = false
+    t = th()
+
+    name = safeStr(d.title)
+    if name = "" then name = safeStr(d.name)
+    size = 96
+    if measureText(name, 96, "display") > 1100 then size = 76
+    if size = 76 and measureText(name, 76, "display") > 1100 then size = 60
+    m.title.font = makeFont(size, "display")
+    m.title.text = name
+    ' Seerr has no Logos, but Jellyfin does for what's already on the server.
+    logo = ""
+    jf = jellyfinId()
+    if jf <> "" then logo = m.global.serverUrl + "/Items/" + jf + "/Images/Logo?maxWidth=" + t.detailLogoW.ToStr() + "&maxHeight=" + t.detailLogoH.ToStr() + "&quality=90"
+    showLogo(m.logo, m.title, logo, m.logoBox)
+
+    m.blurb.text = safeStr(d.overview)
+    m.itemRatings = ratingsFor(mediaKind(), safeStr(d.id), 0, toFloat(d.voteAverage))
+    drawMeta()
+
+    art = tmdbImage(d.backdropPath, "w1280")
+    if art <> "" and art <> m.art.uri
+        m.art.opacity = 0
+        m.art.uri = art
+    end if
+
+    if m.isTv then buildSeasons()
+    buildButtons()
+    if m.top.isInFocusChain() then restoreFocus()
+end sub
+
+function mediaKind() as string
+    if m.isTv then return "tv"
+    return "movie"
+end function
+
+function toFloat(v as dynamic) as float
+    if not isValid(v) then return 0.0
+    return v
+end function
+
+function jellyfinId() as string
+    if m.data = invalid then return ""
+    if not isValid(m.data.mediaInfo) then return ""
+    return safeStr(m.data.mediaInfo.jellyfinMediaId)
+end function
+
+' ---------- Meta ----------
+
+sub drawMeta()
+    d = m.data
+    if d = invalid then return
+    parts = []
+    dateStr = safeStr(d.releaseDate)
+    if m.isTv then dateStr = safeStr(d.firstAirDate)
+    if Len(dateStr) >= 4 then parts.Push(Left(dateStr, 4))
+    cert = certification()
+    if cert <> "" then parts.Push({ text: cert, boxed: true })
+    if m.isTv
+        n = safeInt(d.numberOfSeasons)
+        if n = 1 then parts.Push("1 season")
+        if n > 1 then parts.Push(n.ToStr() + " seasons")
+    else
+        parts.Push(minutesText(safeInt(d.runtime)))
+    end if
+    if isValid(d.genres)
+        if d.genres.Count() > 0 then parts.Push(safeStr(d.genres[0].name))
+    end if
+    m.metaParts = parts
+    m.eyebrow.text = UCase(eyebrowText())
+    m.metaHost.removeChildrenIndex(m.metaHost.getChildCount(), 0)
+    shown = []
+    shown.Append(parts)
+    shown.Append(ratingParts(m.itemRatings))
+    makeMeta(m.metaHost, shown, 22)
+end sub
+
+sub ratingsArrived(key as string)
+    if m.itemRatings <> invalid
+        if m.itemRatings.key = key then drawMeta()
+    end if
+end sub
+
+function minutesText(mins as integer) as string
+    if mins <= 0 then return ""
+    if mins < 60 then return mins.ToStr() + "m"
+    h = mins \ 60
+    rest = mins mod 60
+    if rest = 0 then return h.ToStr() + "h"
+    return h.ToStr() + "h " + rest.ToStr() + "m"
+end function
+
+' The age rating for Seerr's region (or the US).
+function certification() as string
+    d = m.data
+    region = "US"
+    if m.settings <> invalid
+        for each k in ["discoverRegion", "region", "streamingRegion"]
+            v = safeStr(m.settings[k])
+            if Len(v) = 2
+                region = v
+                exit for
+            end if
+        end for
+    end if
+    for each want in [region, "US"]
+        if m.isTv
+            if isValid(d.contentRatings)
+                if isValid(d.contentRatings.results)
+                    for each r in d.contentRatings.results
+                        if safeStr(r.iso_3166_1) = want and safeStr(r.rating) <> "" then return safeStr(r.rating)
+                    end for
+                end if
+            end if
+        else if isValid(d.releases)
+            if isValid(d.releases.results)
+                for each r in d.releases.results
+                    if safeStr(r.iso_3166_1) = want and isValid(r.release_dates)
+                        for each rd in r.release_dates
+                            if safeStr(rd.certification) <> "" then return safeStr(rd.certification)
+                        end for
+                    end if
+                end for
+            end if
+        end if
+    end for
+    return ""
+end function
+
+' "Discover · Series · Partly on your server"
+function eyebrowText() as string
+    s = "Discover " + Chr(183) + " Movie"
+    if m.isTv then s = "Discover " + Chr(183) + " Series"
+    st = statusText(titleStatus(false))
+    if st <> "" then s = s + " " + Chr(183) + " " + st
+    return s
+end function
+
+' ---------- Request Status ----------
+
+' Seerr's media status for the whole title: 0 none, 2 waiting for approval,
+' 3 on its way, 4 partly available, 5 available, 6 blocklisted.
+function titleStatus(is4k as boolean) as integer
+    if m.data = invalid then return 0
+    mi = m.data.mediaInfo
+    if not isValid(mi) then return 0
+    s = safeInt(mi.status)
+    if is4k then s = safeInt(mi.status4k)
+    if s = 1 or s > 6 then s = 0
+    if s = 0 and not m.isTv
+        ' A request that's still open counts even before the media updates.
+        s = openRequestStatus(mi, is4k, -1)
+    end if
+    return s
+end function
+
+' 2 for a request waiting for approval, 3 for an approved one, else 0
+' (declined, failed and completed requests don't count).
+' seasonNumber -1 means any request; otherwise one that holds that season.
+function openRequestStatus(mi as object, is4k as boolean, seasonNumber as integer) as integer
+    if not isValid(mi.requests) then return 0
+    best = 0
+    for each rq in mi.requests
+        rs0 = safeInt(rq.status)
+        if isTrue(rq.is4k) = is4k and (rs0 = 1 or rs0 = 2)
+            holds = (seasonNumber < 0)
+            if not holds and isValid(rq.seasons)
+                for each rs in rq.seasons
+                    if safeInt(rs.seasonNumber) = seasonNumber then holds = true
+                end for
+            end if
+            if holds
+                s = 2
+                if rs0 = 2 then s = 3
+                if s > best then best = s
+            end if
+        end if
+    end for
+    return best
+end function
+
+function statusText(s as integer) as string
+    if s = 2 then return "Waiting for approval"
+    if s = 3 then return "Downloading"
+    if s = 4 then return "Partly on your server"
+    if s = 5 then return "On your server"
+    if s = 6 then return "Can" + Chr(8217) + "t be requested"
+    return ""
+end function
+
+function statusColor(s as integer) as string
+    t = th()
+    if s = 5 or s = 4 then return t.ok
+    if s = 2 then return t.warn
+    if s = 3 then return t.accent
+    return t.muted
+end function
+
+' ---------- Seasons ----------
+
+sub buildSeasons()
+    m.seasonList = []
+    d = m.data
+    if isValid(d.seasons)
+        for each s in d.seasons
+            num = safeInt(s.seasonNumber)
+            if num > 0
+                air = safeStr(s.airDate)
+                yr = ""
+                if Len(air) >= 4 then yr = Left(air, 4)
+                m.seasonList.Push({ num: num, episodes: safeInt(s.episodeCount), year: yr })
+            end if
+        end for
+    end if
+    refreshSeasonStatus()
+    drawPills()
+end sub
+
+sub refreshSeasonStatus()
+    mi = invalid
+    if m.data <> invalid then mi = m.data.mediaInfo
+    for each s in m.seasonList
+        s.status = seasonStatusOf(mi, s.num, false)
+        s.status4k = seasonStatusOf(mi, s.num, true)
+    end for
+end sub
+
+function seasonStatusOf(mi as dynamic, num as integer, is4k as boolean) as integer
+    if not isValid(mi) then return 0
+    st = 0
+    if isValid(mi.seasons)
+        for each ms in mi.seasons
+            if safeInt(ms.seasonNumber) = num
+                if is4k
+                    st = safeInt(ms.status4k)
+                else
+                    st = safeInt(ms.status)
+                end if
+            end if
+        end for
+    end if
+    if st = 1 or st > 5 then st = 0
+    if st = 0 then st = openRequestStatus(mi, is4k, num)
+    return st
+end function
+
+sub drawPills()
+    m.pillHost.removeChildrenIndex(m.pillHost.getChildCount(), 0)
+    m.pills = []
+    if m.seasonList.Count() = 0
+        m.seasonLine.text = ""
+        placeLower()
+        return
+    end if
+    short = m.seasonList.Count() > 8
+    labels = ["All seasons"]
+    for each s in m.seasonList
+        if short
+            labels.Push("S" + s.num.ToStr())
+        else
+            labels.Push("Season " + s.num.ToStr())
+        end if
+    end for
+    for i = 0 to labels.Count() - 1
+        opts = { kind: "pill", text: labels[i], h: 52, size: 20, padX: 26, selected: (i = m.pick) }
+        ' A check on seasons already on the server.
+        if i > 0
+            if m.seasonList[i - 1].status = 5
+                opts.icon = "check"
+                opts.iconSize = 20
+                opts.iconAfter = true
+            end if
+        end if
+        m.pills.Push(makeBtn(m.pillHost, opts))
+    end for
+    rowBtns(m.pills, 0, 0, 12)
+    drawSeasonLine()
+    placeLower()
+end sub
+
+' "Season 2 · 10 episodes · 2016 · On your server", or for All seasons
+' "4 seasons · 40 episodes · 2015–2019".
+sub drawSeasonLine()
+    sep = " " + Chr(183) + " "
+    if m.pick = 0
+        eps = 0
+        for each s in m.seasonList
+            eps = eps + s.episodes
+        end for
+        n = m.seasonList.Count()
+        parts = []
+        if n = 1 then parts.Push("1 season") else parts.Push(n.ToStr() + " seasons")
+        if eps > 0 then parts.Push(eps.ToStr() + " episodes")
+        y1 = m.seasonList[0].year
+        y2 = m.seasonList[n - 1].year
+        if y1 <> "" and y2 <> "" and y1 <> y2
+            parts.Push(y1 + Chr(8211) + y2)
+        else if y1 <> ""
+            parts.Push(y1)
+        end if
+        if m.data <> invalid
+            if safeStr(m.data.status) = "Ended" then parts.Push("Ended")
+        end if
+        m.seasonLine.text = parts.Join(sep)
+    else
+        s = m.seasonList[m.pick - 1]
+        parts = ["Season " + s.num.ToStr()]
+        if s.episodes = 1 then parts.Push("1 episode")
+        if s.episodes > 1 then parts.Push(s.episodes.ToStr() + " episodes")
+        if s.year <> "" then parts.Push(s.year)
+        st = statusText(s.status)
+        if st = "" then st = "Not requested"
+        parts.Push(st)
+        m.seasonLine.text = parts.Join(sep)
+    end if
+end sub
+
+' Season numbers Request would send for the picked pill.
+function openSeasons(is4k as boolean) as object
+    out = []
+    for i = 0 to m.seasonList.Count() - 1
+        if m.pick = 0 or m.pick = i + 1
+            s = m.seasonList[i]
+            st = s.status
+            if is4k then st = s.status4k
+            if st = 0 then out.Push(s.num)
+        end if
+    end for
+    return out
+end function
+
+' ---------- Buttons ----------
+
+function can4k() as boolean
+    if readSetting("seerr4k", "false") <> "true" then return false
+    if m.settings = invalid then return false
+    if m.isTv then return isTrue(m.settings.series4kEnabled)
+    return isTrue(m.settings.movie4kEnabled)
+end function
+
+' What Request (or Request in 4K) would do now: { ok, label, status }.
+function requestState(is4k as boolean) as object
+    if m.isTv
+        if m.seasonList.Count() = 0
+            s = titleStatus(is4k)
+            return { ok: (s = 0 or s = 4), label: "Request", status: s }
+        end if
+        wanted = openSeasons(is4k)
+        if wanted.Count() > 0
+            lbl = "Request"
+            if m.pick > 0
+                lbl = "Request season " + m.seasonList[m.pick - 1].num.ToStr()
+            else if wanted.Count() < m.seasonList.Count()
+                lbl = "Request the rest"
+            else if m.seasonList.Count() > 1
+                lbl = "Request all seasons"
+            end if
+            return { ok: true, label: lbl, status: 0 }
+        end if
+        s = titleStatus(is4k)
+        if m.pick > 0
+            s = m.seasonList[m.pick - 1].status
+            if is4k then s = m.seasonList[m.pick - 1].status4k
+        else if s = 0
+            s = 2
+        end if
+        return { ok: false, label: "", status: s }
+    end if
+    s = titleStatus(is4k)
+    return { ok: (s = 0), label: "Request", status: s }
+end function
+
+sub buildButtons()
+    t = th()
+    m.btnHost.removeChildrenIndex(m.btnHost.getChildCount(), 0)
+    m.buttons = []
+    m.actions = []
+    if m.data = invalid then return
+    hd = requestState(false)
+    show4k = can4k()
+    uhd = invalid
+    if show4k then uhd = requestState(true)
+
+    ' Sit the buttons under the blurb, above the season pills.
+    y = 384
+    if m.blurb.text <> ""
+        rect = m.blurb.boundingRect()
+        y = 384 + Int(rect.height) + 32
+    end if
+    if y > 540 then y = 540
+    x = m.x
+
+    ' The Request Status in place of the button once it's requested.
+    if not hd.ok and statusText(hd.status) <> ""
+        st = makeStatus(m.btnHost, statusText(hd.status), statusColor(hd.status), 24)
+        st.group.translation = [x, y + (72 - Int(24 * 1.4)) \ 2]
+        x = x + st.w + 40
+    end if
+    ' The "Default request quality" setting picks which one comes first.
+    want4k = readSetting("seerrQuality", "1080p") = "4K"
+    reqs = []
+    if hd.ok
+        lbl = hd.label
+        if show4k then lbl = lbl + " in 1080p"
+        reqs.Push({ text: lbl, icon: "plus", action: "request" })
+    end if
+    if uhd <> invalid
+        if uhd.ok
+            r4 = { text: uhd.label + " in 4K", icon: "hd", action: "request4k" }
+            if want4k then reqs.Unshift(r4) else reqs.Push(r4)
+        end if
+    end if
+    for i = 0 to reqs.Count() - 1
+        r = reqs[i]
+        if i = 0
+            addButton({ kind: "primary", icon: r.icon, text: r.text }, r.action)
+        else
+            addButton({ kind: "secondary", icon: r.icon, text: r.text, size: 22, padX: 30, iconSize: 24 }, r.action)
+        end if
+    end for
+    if jellyfinId() <> "" then addButton({ kind: "secondary", icon: "play", text: "Watch", size: 22, padX: 30, iconSize: 24 }, "watch")
+    endX = rowBtns(m.buttons, x, y, 20)
+    if m.buttons.Count() = 0 then endX = x - 40
+
+    ' Where a request goes, unless a message about the last one is showing.
+    if m.noteText <> ""
+        m.note.text = m.noteText
+        m.note.color = t.accent
+    else if hd.ok or (uhd <> invalid and uhd.ok = true)
+        dest = "Radarr"
+        if m.isTv then dest = "Sonarr"
+        approval = "needs an admin to approve"
+        if seerrAutoApproves(m.perms, m.isTv, false) then approval = "approved automatically"
+        m.note.text = "Goes to " + dest + " " + Chr(183) + " " + approval
+        m.note.color = t.meta
+    else
+        m.note.text = ""
+    end if
+    m.note.translation = [endX + 32, y]
+    m.note.width = 1800 - (endX + 32)
+
+    if m.btnIndex >= m.buttons.Count() then m.btnIndex = 0
+    if m.zone = "buttons" and m.buttons.Count() = 0
+        if m.pills.Count() > 0
+            m.zone = "seasons"
+        else if m.cards.visible
+            m.zone = "cards"
+        else
+            m.zone = "back"
+        end if
+        if m.top.isInFocusChain() then restoreFocus()
+    end if
+    paintAll()
+end sub
+
+sub addButton(opts as object, action as string)
+    m.buttons.Push(makeBtn(m.btnHost, opts))
+    m.actions.Push(action)
+end sub
+
+sub doButton()
+    if m.actions.Count() = 0 then return
+    action = m.actions[m.btnIndex]
+    if action = "request"
+        sendRequest(false)
+    else if action = "request4k"
+        sendRequest(true)
+    else if action = "watch"
+        m.top.navigate = { action: "details", itemId: jellyfinId() }
+    end if
+end sub
+
+sub sendRequest(is4k as boolean)
+    if m.sending or m.data = invalid then return
+    body = { "mediaType": mediaKind(), "mediaId": safeInt(m.data.id), "is4k": is4k }
+    if m.isTv
+        wanted = openSeasons(is4k)
+        if wanted.Count() = 0 then return
+        body.seasons = wanted
+    end if
+    m.sending = true
+    m.noteText = "Sending your request..."
+    buildButtons()
+    seerrRequest("/request", {}, "onRequested", "POST", body)
+end sub
+
+sub onRequested(event as object)
+    res = event.getData()
+    m.sending = false
+    if res.ok
+        m.noteText = "Requested. It" + Chr(8217) + "s in My requests until it" + Chr(8217) + "s ready to watch."
+        c = m.top.card
+        if c <> invalid
+            if c.requestStatus < 2
+                c.requestStatus = 2
+                c.badge = requestStatusLabel(2)
+            end if
+        end if
+        ' Fetch the title again for its new Request Status.
+        seerrRequest(m.path, {}, "onTitle")
+    else if res.code = 403
+        m.noteText = "Your Seerr account isn" + Chr(8217) + "t allowed to request this. Ask an Administrator."
+    else if res.code = 409
+        m.noteText = "Someone has already requested this."
+    else if res.code = 401
+        m.top.navigate = { action: "seerrSignedOut" }
+    else
+        m.noteText = "The request didn" + Chr(8217) + "t go through (error " + res.code.ToStr() + ")."
+    end if
+    print "[Matinee] request: HTTP "; res.code
+    buildButtons()
+end sub
+
+sub onLogoStatus()
+    placeLogo(m.logo, m.title, m.logoBox)
+end sub
+
+sub onArtStatus()
+    if m.art.loadStatus = "ready" then m.fadeIn.control = "start"
+end sub
+
+' ---------- More like this ----------
+
+sub onSimilar(event as object)
+    res = event.getData()
+    items = []
+    if res.ok and isValid(res.data)
+        if isValid(res.data.results) then items = res.data.results
+    else
+        print "[Matinee] request details: recommendations failed, HTTP "; res.code
+    end if
+    root = CreateObject("roSGNode", "ContentNode")
+    row = root.CreateChild("ContentNode")
+    for each r in items
+        if row.getChildCount() < 16
+            if safeStr(r.mediaType) = "" then r.mediaType = mediaKind()
+            c = seerrToContent(r)
+            img = tmdbImage(r.backdropPath, "w780")
+            if img = "" then img = tmdbImage(r.posterPath, "w500")
+            c.HDPosterUrl = img
+            setCardSize(c, true)
+            if c.badge = "" then c.badge = "Request"
+            row.appendChild(c)
+        end if
+    end for
+    m.simItems = root
+    t = th()
+    count = row.getChildCount()
+    m.cards.itemSize = [1920 - m.x + t.cellPadX, t.landH + t.cellPadY * 2]
+    m.cards.rowItemSize = [[t.landW + t.cellPadX * 2, t.landH + t.cellPadY * 2]]
+    m.cards.rowItemSpacing = [[0, 0]]
+    m.cards.content = root
+    m.cards.visible = count > 0
+    m.rowLabel.visible = count > 0
+    placeLower()
+    if m.top.isInFocusChain() then restoreFocus()
+end sub
+
+' The season pills and line take the space above "More like this" for shows.
+sub placeLower()
+    t = th()
+    y = 636
+    if m.pills.Count() > 0 then y = 756
+    m.rowLabel.translation = [m.x, y]
+    m.cards.translation = [m.x - t.cellPadX, y + 50 - t.cellPadY]
+end sub
+
+sub onCardSelected(event as object)
+    idx = event.getData()
+    c = m.cards.content.getChild(0).getChild(idx[1])
+    if c = invalid then return
+    if c.jellyfinId <> ""
+        m.top.navigate = { action: "details", itemId: c.jellyfinId }
+    else
+        m.top.navigate = seerrNav(c)
+    end if
+end sub
+
+' ---------- Focus & keys ----------
+
+sub paintAll()
+    focusBtn = -1
+    if m.zone = "buttons" then focusBtn = m.btnIndex
+    paintBtns(m.buttons, focusBtn)
+    paintBtn(m.back, m.zone = "back")
+    focusPill = -1
+    if m.zone = "seasons" then focusPill = m.pick
+    selectPill(m.pills, m.pick, focusPill)
+    scrollPills()
+end sub
+
+' Keep the picked pill on screen when a show has many seasons.
+sub scrollPills()
+    if m.pills.Count() = 0 then return
+    p = m.pills[m.pick]
+    edge = p.group.translation[0] + p.w
+    room = 1800 - m.x
+    shift = 0
+    if edge > room then shift = room - edge
+    m.pillHost.translation = [m.x + shift, 636]
+end sub
+
+sub restoreFocus()
+    if m.zone = "cards" and m.cards.visible
+        m.cards.setFocus(true)
+    else
+        m.sink.setFocus(true)
+    end if
+end sub
+
+sub setZone(zone as string)
+    m.zone = zone
+    paintAll()
+    restoreFocus()
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() then restoreFocus()
+end sub
+
+' The zone above or below the current one that has something to focus.
+function zoneAbove() as string
+    order = ["back", "buttons", "seasons", "cards"]
+    i = 0
+    for k = 0 to order.Count() - 1
+        if order[k] = m.zone then i = k
+    end for
+    while i > 0
+        i = i - 1
+        if zoneHas(order[i]) then return order[i]
+    end while
+    return ""
+end function
+
+function zoneBelow() as string
+    order = ["back", "buttons", "seasons", "cards"]
+    i = 0
+    for k = 0 to order.Count() - 1
+        if order[k] = m.zone then i = k
+    end for
+    while i < order.Count() - 1
+        i = i + 1
+        if zoneHas(order[i]) then return order[i]
+    end while
+    return ""
+end function
+
+function zoneHas(zone as string) as boolean
+    if zone = "back" then return true
+    if zone = "buttons" then return m.buttons.Count() > 0
+    if zone = "seasons" then return m.pills.Count() > 0
+    return m.cards.visible
+end function
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "up" or key = "down"
+        z = zoneBelow()
+        if key = "up" then z = zoneAbove()
+        if z <> "" then setZone(z)
+        return true
+    end if
+    if m.zone = "back"
+        if key = "OK"
+            m.top.navigate = { action: "back" }
+            return true
+        end if
+        return key <> "back"
+    else if m.zone = "buttons"
+        if key = "left"
+            if m.btnIndex > 0 then m.btnIndex = m.btnIndex - 1
+            paintAll()
+        else if key = "right"
+            if m.btnIndex < m.buttons.Count() - 1 then m.btnIndex = m.btnIndex + 1
+            paintAll()
+        else if key = "OK"
+            doButton()
+        else
+            return false
+        end if
+        return true
+    else if m.zone = "seasons"
+        if key = "left" or key = "right"
+            dirn = 1
+            if key = "left" then dirn = -1
+            n = m.pick + dirn
+            if n >= 0 and n < m.pills.Count()
+                m.pick = n
+                drawSeasonLine()
+                m.noteText = ""
+                buildButtons()
+            end if
+        else if key = "OK"
+            if m.buttons.Count() > 0 then setZone("buttons")
+        else
+            return false
+        end if
+        return true
+    end if
+    return false
+end function
