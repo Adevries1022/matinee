@@ -13,7 +13,7 @@
   <children>
     <Rectangle width="1920" height="1080" color="0x000000FF" />
     <Video id="video" width="1920" height="1080" enableUI="false" />
-    <Label id="status" translation="[160,500]" width="1600" horizAlign="center" wrap="true" text="Loading..." />
+    <Label id="status" translation="[160,500]" width="1600" horizAlign="center" wrap="true" text="" visible="false" />
     <Group id="osd" visible="false" />
     <Group id="skipLayer" visible="false" />
     <Group id="upNext" visible="false" />

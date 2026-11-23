@@ -252,6 +252,8 @@ function themeTokens(prefs as object) as object
     t.countPillW = 248
     t.countPillH = 60
     t.countBarH = 4
+    ' The Player's loading spinner (its images are 96 px).
+    t.spinnerSize = 96
     ' Seconds a title is Focused before its Trailer Preview starts.
     t.trailerDelaySeconds = 5
     t.trailerFeatherY = 160

@@ -295,6 +295,10 @@ save('circle_dashed.png', 216, 216, raster(216, 216, 1, [(x, y) => {
     return Math.floor(a * 72) % 2 === 0;
 }]));
 
+// The loading spinner: a quarter arc that turns over a faint full track.
+save('spinner_arc.png', 96, 96, raster(96, 96, 1, [P.arc(48, 48, 42, -90, 0, 7)]));
+save('spinner_track.png', 96, 96, raster(96, 96, 1, [P.circle(48, 48, 42, 7)]));
+
 // Horizontal: Home Hero (solid to 0.88 at 32%, clear at 68%) and Detail art fade.
 gradient('grad_hero.png', 256, 2, stops([[0, 1], [0.32, 0.88], [0.68, 0]]));
 gradient('grad_detail.png', 256, 2, stops([[0, 1], [0.36, 1], [0.52, 0.7], [0.78, 0]]));

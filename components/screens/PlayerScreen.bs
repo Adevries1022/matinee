@@ -61,7 +61,62 @@ sub init()
     m.ctlIndex = 1
     m.seekTarget = -1
     clearSegments()
+    buildSpinner()
     buildOsd()
+end sub
+
+' ---------- Loading spinner ----------
+
+' A quarter arc turning over a faint ring, in the middle of the screen,
+' while a title loads or buffers.
+sub buildSpinner()
+    t = th()
+    sz = t.spinnerSize
+    g = CreateObject("roSGNode", "Group")
+    g.translation = [(1920 - sz) \ 2, (1080 - sz) \ 2]
+    g.visible = false
+    m.top.insertChild(g, 2)
+    track = g.CreateChild("Poster")
+    track.uri = "pkg:/images/spinner_track.png"
+    track.width = sz
+    track.height = sz
+    track.blendColor = t.white
+    track.opacity = 0.18
+    spin = g.CreateChild("Group")
+    spin.id = "spinArc"
+    spin.scaleRotateCenter = [sz / 2.0, sz / 2.0]
+    arc = spin.CreateChild("Poster")
+    arc.uri = "pkg:/images/spinner_arc.png"
+    arc.width = sz
+    arc.height = sz
+    arc.blendColor = t.accent
+    anim = g.CreateChild("Animation")
+    anim.duration = 0.9
+    anim.repeat = true
+    anim.easeFunction = "linear"
+    ri = anim.CreateChild("FloatFieldInterpolator")
+    ri.key = [0.0, 1.0]
+    ri.keyValue = [0.0, -6.2831853]
+    ri.fieldToInterp = "spinArc.rotation"
+    m.spinner = g
+    m.spinAnim = anim
+end sub
+
+sub showSpinner(on as boolean)
+    if on = m.spinner.visible then return
+    m.spinner.visible = on
+    if on
+        m.spinAnim.control = "start"
+    else
+        m.spinAnim.control = "stop"
+    end if
+end sub
+
+' A message in the middle of the screen (errors), instead of the spinner.
+sub showStatus(text as string)
+    showSpinner(false)
+    m.status.text = text
+    m.status.visible = true
 end sub
 
 sub clearSegments()
@@ -103,8 +158,9 @@ sub start()
     m.scrubTimer.control = "stop"
     m.scrubLevel = 0
     m.seekTarget = -1
-    m.status.text = "Loading..."
-    m.status.visible = true
+    m.status.visible = false
+    showSpinner(true)
+    m.loadStart = CreateObject("roTimespan")
     if m.isRestart
         requestPlayback()
     else
@@ -116,7 +172,7 @@ end sub
 sub onItem(event as object)
     res = event.getData()
     if not res.ok or not isValid(res.data)
-        m.status.text = "Couldn't load this title (error " + res.code.ToStr() + ")."
+        showStatus("Couldn't load this title (error " + res.code.ToStr() + ").")
         return
     end if
     m.item = res.data
@@ -298,20 +354,20 @@ end function
 sub onPlaybackInfo(event as object)
     res = event.getData()
     if not res.ok or not isValid(res.data)
-        m.status.text = "Jellyfin couldn't start playback (error " + res.code.ToStr() + ")."
+        showStatus("Jellyfin couldn't start playback (error " + res.code.ToStr() + ").")
         return
     end if
     data = res.data
     if isValid(data.ErrorCode)
-        m.status.text = "Jellyfin couldn't start playback: " + safeStr(data.ErrorCode)
+        showStatus("Jellyfin couldn't start playback: " + safeStr(data.ErrorCode))
         return
     end if
     if not isValid(data.MediaSources)
-        m.status.text = "This title has no playable files."
+        showStatus("This title has no playable files.")
         return
     end if
     if data.MediaSources.Count() = 0
-        m.status.text = "This title has no playable files."
+        showStatus("This title has no playable files.")
         return
     end if
 
@@ -359,7 +415,7 @@ sub onPlaybackInfo(event as object)
         content.streamFormat = "hls"
         m.playMethod = "Transcode"
     else
-        m.status.text = "This file can't be played on your Roku."
+        showStatus("This file can't be played on your Roku.")
         return
     end if
 
@@ -1108,17 +1164,20 @@ end function
 sub onState()
     st = m.video.state
     if st = "paused"
+        showSpinner(false)
         if m.started then apiRequest("/Sessions/Playing/Progress", {}, "onIgnore", "POST", progressBody(true))
         showOsd()
     else if st = "playing"
         m.status.visible = false
+        showSpinner(false)
+        if m.loadStart <> invalid
+            print "[Matinee] player: playing after "; m.loadStart.TotalMilliseconds(); " ms at "; m.video.position; " s ("; m.playMethod; ")"
+            m.loadStart = invalid
+        end if
         if m.osd.visible then paintOsd()
         restartHideTimer()
     else if st = "buffering"
-        if m.started
-            m.status.text = "Buffering..."
-            m.status.visible = true
-        end if
+        showSpinner(true)
     else if st = "finished"
         if m.nextEp <> invalid and not m.upNextCancelled and autoplayNext()
             playNext()
@@ -1127,8 +1186,7 @@ sub onState()
             m.top.navigate = { action: "back" }
         end if
     else if st = "error"
-        m.status.text = "Playback failed: " + safeStr(m.video.errorMsg) + Chr(10) + "Press Back to return."
-        m.status.visible = true
+        showStatus("Playback failed: " + safeStr(m.video.errorMsg) + Chr(10) + "Press Back to return.")
     end if
 end sub
 
