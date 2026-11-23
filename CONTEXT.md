@@ -30,7 +30,7 @@ The always-visible column of icons down the left edge that leads to each main sc
 _Avoid_: Side Rail, sidebar, drawer, menu bar, Top Bar
 
 **Focused**:
-The Card, Rail icon or control the remote's highlight is on.
+The Card, Rail icon or control the remote's highlight is on. A Focused button is the only solid one, so it's always clear what OK will press.
 _Avoid_: Hover, hovered, selected (selecting means pressing OK)
 
 **Hero**:
@@ -90,19 +90,23 @@ _Avoid_: Discover search, request search
 ### Playback
 
 **Player OSD**:
-Matinee's own on-screen playback controls: the title, seek bar, buttons and Up Next Card.
+Matinee's own on-screen playback controls: the title, seek bar, buttons and Up Next Card. Back hides it and playback carries on; Back with it hidden leaves the player.
 _Avoid_: Trickplay bar, HUD, player UI
+
+**Skip Intro**:
+The button that shows while playback is inside a title's Intro, as marked by the server's media segments (the Intro Skipper plugin). It is Focused while the Player OSD is hidden, so OK jumps past the Intro.
+_Avoid_: Skip opening, skip credits
 
 **Track Picker**:
 The panel during playback for choosing subtitles or the audio track.
 _Avoid_: Language menu, options menu
 
 **Up Next Card**:
-The part of the Player OSD that names the following episode.
+The part of the Player OSD that names the following episode. It shows only while the Next episode button is Focused.
 _Avoid_: Next Up
 
 **Up Next Prompt**:
-The countdown near the end of an episode that offers to play the following one.
+The countdown that offers to play the following episode, when its end credits (the Outro segment) start, or 25 seconds before the end when the server doesn't know where they are.
 _Avoid_: Autoplay screen, Up Next Card
 
 ### Requests and downloads

@@ -5,6 +5,8 @@
 ' Keys: OK or Play/Pause toggles; Left/Right seek 10 s on the seek bar
 ' (presses add up before the jump); Rewind/Fast-forward seek 30 s;
 ' Up/Down move between the header, seek bar and controls; * opens subtitles.
+' Back hides the OSD and keeps playing; with it hidden, Back leaves.
+' Skip intro shows during the Intro segment; OK on it jumps past it.
 
 sub init()
     m.video = m.top.findNode("video")
@@ -16,6 +18,7 @@ sub init()
     m.countdown = m.top.findNode("countdown")
     m.hideTimer = m.top.findNode("hideTimer")
     m.seekTimer = m.top.findNode("seekTimer")
+    m.skipLayer = m.top.findNode("skipLayer")
 
     t = th()
     m.status.font = makeFont(30)
@@ -46,7 +49,16 @@ sub init()
     m.zone = "seek"
     m.ctlIndex = 1
     m.seekTarget = -1
+    clearSegments()
     buildOsd()
+end sub
+
+sub clearSegments()
+    m.introStart = -1
+    m.introEnd = -1
+    m.outroStart = -1
+    m.inIntro = false
+    m.skipDismissed = false
 end sub
 
 ' ---------- Starting playback ----------
@@ -68,7 +80,10 @@ sub start()
     m.started = false
     m.stopped = false
     m.lastReport = 0
-    if not m.isRestart then m.nextEp = invalid
+    if not m.isRestart
+        m.nextEp = invalid
+        clearSegments()
+    end if
     m.upNextShown = false
     m.upNextCancelled = false
     m.upNext.visible = false
@@ -92,6 +107,8 @@ sub onItem(event as object)
     m.item = res.data
     setHeader()
     refreshNextUi()
+    ' Intro and Outro times, from Jellyfin's media segments (Intro Skipper).
+    apiRequest("/MediaSegments/" + m.itemId, {}, "onSegments")
     if safeStr(m.item.Type) = "Episode" and isValid(m.item.SeriesId)
         apiRequest("/Shows/" + safeStr(m.item.SeriesId) + "/Episodes", { "userId": m.global.userId, "startItemId": m.itemId, "Limit": "3", "EnableTotalRecordCount": "false" }, "onNextEp")
     end if
@@ -133,6 +150,24 @@ sub onNextEp(event as object)
         if safeStr(items[i].Id) = m.itemId then m.nextEp = items[i + 1]
     end for
     refreshNextUi()
+end sub
+
+sub onSegments(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    items = res.data.Items
+    if not isValid(items) then return
+    for each seg in items
+        kind = safeStr(seg.Type)
+        if kind = "Intro" and m.introStart < 0
+            m.introStart = ticksToSeconds(seg.StartTicks)
+            m.introEnd = ticksToSeconds(seg.EndTicks)
+        else if kind = "Outro" and m.outroStart < 0
+            m.outroStart = ticksToSeconds(seg.StartTicks)
+        end if
+    end for
+    if m.introEnd <= m.introStart then m.introStart = -1
+    print "[Matinee] segments: intro " + m.introStart.ToStr() + "-" + m.introEnd.ToStr() + ", outro " + m.outroStart.ToStr()
 end sub
 
 ' Tell Jellyfin what this Roku can play, so it direct-plays when possible
@@ -433,7 +468,7 @@ sub buildOsd()
     ' Up next card.
     m.nextCard = o.CreateChild("Group")
     m.nextCard.translation = [1920 - 80 - 440, 1080 - 236 - 122]
-    makeBox(m.nextCard, 440, 122, 18, "0x141820FF", 0.85)
+    makeBox(m.nextCard, 440, 122, 18, t.nextCard, 0.85)
     m.nextThumb = m.nextCard.CreateChild("Poster")
     m.nextThumb.translation = [16, 16]
     m.nextThumb.width = 160
@@ -441,7 +476,7 @@ sub buildOsd()
     m.nextThumb.loadWidth = 160
     m.nextThumb.loadHeight = 90
     m.nextThumb.loadDisplayMode = "scaleToZoom"
-    corners = makeShape(m.nextCard, "pkg:/images/corners_r10.9.png", 160, 90, "0x141820FF")
+    corners = makeShape(m.nextCard, "pkg:/images/corners_r10.9.png", 160, 90, t.nextCard)
     corners.translation = [16, 16]
     lbl = makeLabel(m.nextCard, "UP NEXT", 15, "semibold", t.accent)
     lbl.translation = [194, 22]
@@ -493,8 +528,38 @@ sub buildOsd()
     m.btnNext = makeBtn(o, { kind: "pill", icon: "next", text: "Next episode", h: 64, size: 20, padX: 28, iconSize: 24, iconAfter: true })
     m.btnNext.kind = "primary"
     m.controls = [m.btnBack10, m.btnPlay, m.btnFwd10, m.btnSubs, m.btnAudio, m.btnNext]
+
+    ' Skip intro: on its own layer, so it shows without the OSD.
+    m.btnSkip = makeBtn(m.skipLayer, { kind: "pill", icon: "next", text: "Skip intro", h: 64, size: 22, padX: 30, iconSize: 24, iconAfter: true })
     layoutPills()
     paintOsd()
+end sub
+
+' Skip intro shows while the position is inside the Intro. With the OSD
+' hidden it is Focused, so OK skips; with the OSD up it sits above the seek
+' bar and is reached with Up.
+sub paintSkip()
+    show = m.inIntro and not m.skipDismissed and not m.pickerOpen and not m.upNext.visible and not m.nextCard.visible
+    if not show and m.zone = "skip" then m.zone = "seek"
+    m.skipLayer.visible = show
+    if not show then return
+    x = 1920 - 80 - m.btnSkip.w
+    if m.osd.visible
+        m.btnSkip.group.translation = [x, 770]
+        paintBtn(m.btnSkip, m.zone = "skip")
+    else
+        m.btnSkip.group.translation = [x, 1080 - 80 - 64]
+        paintBtn(m.btnSkip, true)
+    end if
+end sub
+
+sub skipIntro()
+    if m.introEnd <= 0 then return
+    m.video.seek = m.introEnd
+    m.skipDismissed = true
+    m.zone = "seek"
+    paintSkip()
+    if m.osd.visible then paintOsd()
 end sub
 
 sub layoutPills()
@@ -530,7 +595,6 @@ end sub
 
 sub refreshNextUi()
     has = m.nextEp <> invalid
-    m.nextCard.visible = has
     m.btnNext.group.visible = has
     if has
         ep = m.nextEp
@@ -572,8 +636,11 @@ sub paintOsd()
     if m.zone = "controls" then focus = m.ctlIndex
     paintBtns(m.controls, focus)
     paintBtn(m.backBtn, m.zone = "header")
+    ' The Up next card shows only while Next episode is Focused.
+    m.nextCard.visible = (m.nextEp <> invalid and focus = 5)
     m.thumbRing.visible = (m.zone = "seek")
     updateBar()
+    paintSkip()
 end sub
 
 sub updateBar()
@@ -612,8 +679,15 @@ end sub
 
 sub hideOsd()
     if m.video.state <> "playing" or m.pickerOpen or m.seekTarget >= 0 then return
+    closeOsd()
+end sub
+
+' Back hides the OSD whatever the state; playback carries on.
+sub closeOsd()
+    m.hideTimer.control = "stop"
     m.osd.visible = false
     m.zone = "seek"
+    paintSkip()
 end sub
 
 sub togglePause()
@@ -698,6 +772,7 @@ sub openPicker(kind as string)
     end for
     m.pickerOpen = true
     m.hideTimer.control = "stop"
+    paintSkip()
     drawPicker()
     m.picker.visible = true
     m.sink.setFocus(true)
@@ -707,6 +782,7 @@ sub closePicker()
     m.pickerOpen = false
     m.picker.visible = false
     restartHideTimer()
+    paintSkip()
 end sub
 
 sub drawPicker()
@@ -821,9 +897,19 @@ sub onPosition()
         m.lastReport = curPos
         apiRequest("/Sessions/Playing/Progress", {}, "onIgnore", "POST", progressBody(false))
     end if
+    inIntro = m.introStart >= 0 and curPos >= m.introStart and curPos < m.introEnd - 1
+    if inIntro <> m.inIntro
+        m.inIntro = inIntro
+        ' Leaving the Intro (or seeking back before it) offers the skip again next time.
+        if not inIntro and curPos < m.introStart then m.skipDismissed = false
+        paintSkip()
+    end if
     dur = m.video.duration
     if m.nextEp <> invalid and not m.upNextShown and not m.upNextCancelled and not m.pickerOpen and autoplayNext()
-        if dur > 120 and (dur - curPos) <= 25 then showUpNext()
+        ' Up next comes up when the end credits (the Outro) start, or 25 s
+        ' before the end when the server doesn't know where they are.
+        atOutro = m.outroStart > 0 and dur > 0 and m.outroStart > dur / 2 and curPos >= m.outroStart
+        if dur > 120 and (atOutro or (dur - curPos) <= 25) then showUpNext()
     end if
 end sub
 
@@ -886,6 +972,7 @@ sub showUpNext()
     m.upCountdown.wrap = true
     updateCountdown()
     g.visible = true
+    paintSkip()
     m.countdown.control = "start"
     m.sink.setFocus(true)
 end sub
@@ -951,7 +1038,23 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
     end if
-    if key = "back" then return false
+    if key = "back"
+        ' First Back hides the OSD (or Skip intro); the next leaves.
+        if m.osd.visible
+            closeOsd()
+            return true
+        end if
+        if m.skipLayer.visible
+            m.skipDismissed = true
+            paintSkip()
+            return true
+        end if
+        return false
+    end if
+    if key = "OK" and not m.osd.visible and m.skipLayer.visible
+        skipIntro()
+        return true
+    end if
     if key = "options"
         openPicker("sub")
         return true
@@ -982,6 +1085,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.top.navigate = { action: "back" }
         else if key = "down"
             m.zone = "seek"
+            if m.skipLayer.visible then m.zone = "skip"
             paintOsd()
         end if
         return true
@@ -994,9 +1098,21 @@ function onKeyEvent(key as string, press as boolean) as boolean
             togglePause()
         else if key = "up"
             m.zone = "header"
+            if m.skipLayer.visible then m.zone = "skip"
             paintOsd()
         else if key = "down"
             m.zone = "controls"
+            paintOsd()
+        end if
+        return true
+    else if m.zone = "skip"
+        if key = "OK"
+            skipIntro()
+        else if key = "up"
+            m.zone = "header"
+            paintOsd()
+        else if key = "down"
+            m.zone = "seek"
             paintOsd()
         end if
         return true

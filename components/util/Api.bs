@@ -190,11 +190,16 @@ function themeTokens(prefs as object) as object
     t.info = "0x60A5FAFF"
     t.ratingBorder = "0x8D96A6FF"
 
-    ' Focus: an Accent ring and a small zoom. Primary and selected
-    ' controls are solid light with dark text.
+    ' Focus: an Accent ring, a small zoom and a solid light fill with dark
+    ' text. Only the Focused control is solid; primary and selected ones
+    ' get a stronger glass fill while they aren't Focused.
     t.focusScale = 1.04
     t.solid = t.text
     t.onSolid = t.bg
+    t.primaryFill = 0.24
+    t.selectedFill = 0.30
+    ' The Player's Up next card.
+    t.nextCard = t.panel
 
     t.largerText = isTrue(prefs.largerText)
     t.portraitPosters = isTrue(prefs.portraitPosters)

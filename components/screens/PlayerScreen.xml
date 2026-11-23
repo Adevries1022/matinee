@@ -15,6 +15,7 @@
     <Video id="video" width="1920" height="1080" enableUI="false" />
     <Label id="status" translation="[160,500]" width="1600" horizAlign="center" wrap="true" text="Loading..." />
     <Group id="osd" visible="false" />
+    <Group id="skipLayer" visible="false" />
     <Group id="upNext" visible="false" />
     <Group id="picker" visible="false" />
     <Group id="sink" focusable="true" />

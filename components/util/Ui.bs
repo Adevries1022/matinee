@@ -1,7 +1,7 @@
 ' The Lumen component kit: buttons, pills, tags, toggles, fields, panels,
 ' the wordmark, setup steps and the meta line. Every color and size comes
-' from th(). Focus is always an Accent ring plus a slight zoom; primary and
-' selected controls are solid light with dark text.
+' from th(). Focus is an Accent ring, a slight zoom and a solid light fill
+' with dark text; only the Focused control is solid.
 ' Needs Api.bs in the same component.
 
 ' ================= Buttons =================
@@ -112,23 +112,28 @@ end sub
 sub paintBtn(b as object, focused as boolean)
     t = th()
     b.focused = focused
-    solid = (b.kind = "primary") or b.selected
-    if solid
+    ' Only the Focused button is solid, so it's always clear what OK presses.
+    ' Primary and selected buttons get a stronger glass fill when they aren't.
+    if focused
         b.bg.blendColor = t.solid
         b.bg.opacity = 1.0
         fg = t.onSolid
     else
         b.bg.blendColor = t.white
-        if b.kind = "ghost" or b.kind = "nav"
+        if b.selected
+            b.bg.opacity = t.selectedFill
+        else if b.kind = "primary"
+            b.bg.opacity = t.primaryFill
+        else if b.kind = "ghost"
             b.bg.opacity = 0.10
         else if b.kind = "pill" or b.kind = "round"
             b.bg.opacity = 0.12
         else
             b.bg.opacity = 0.14
         end if
-        if b.kind = "nav" then b.bg.opacity = 0
+        if b.kind = "nav" and not b.selected then b.bg.opacity = 0
         fg = t.text
-        if b.kind = "nav" then fg = t.meta
+        if b.kind = "nav" and not b.selected then fg = t.meta
     end if
     if not b.enabled
         fg = t.faint
@@ -168,7 +173,7 @@ function makeBackPill(parent as object, text as string) as object
     return b
 end function
 
-' Pill tabs (Seasons, filters): the selected one is solid light.
+' Pill tabs (Seasons, filters): the selected one has a stronger fill.
 function makePills(parent as object, labels as object, selected as integer, h = 52 as integer, size = 20 as integer) as object
     list = []
     for i = 0 to labels.Count() - 1
