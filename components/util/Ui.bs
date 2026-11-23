@@ -467,13 +467,14 @@ function makeTitle(parent as object, text as string, size as integer, color = ""
     return makeLabel(parent, text, size, "display", color)
 end function
 
-' The play-circle mark in the Accent and the MATINEE wordmark.
+' The ticket mark in the Accent and the MATINEE wordmark.
 function makeWordmark(parent as object) as object
     t = th()
     g = parent.CreateChild("Group")
-    makeIcon(g, "logo", 34, t.accent)
+    ' The ticket fills the middle two thirds of its square icon.
+    makeIcon(g, "logo", 48, t.accent).translation = [-2, -7]
     l = makeLabel(g, "MATINEE", 30, "display", t.text)
-    l.translation = [46, 0]
+    l.translation = [56, 0]
     l.height = 34
     l.vertAlign = "center"
     return g

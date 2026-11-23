@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
+  <!-- Matinee's mark: an admit-one ticket with notched sides, a torn-off
+       stub line and a play triangle cut through it. The ticket is the
+       Accent; the cut-outs show the background. -->
+  <path fill="#FFB547" fill-rule="evenodd" d="M10 4 h100 a8 8 0 0 1 8 8 v16 a12 12 0 0 0 0 24 v16 a8 8 0 0 1 -8 8 h-100 a8 8 0 0 1 -8 -8 v-16 a12 12 0 0 0 0 -24 v-16 a8 8 0 0 1 8 -8z
+    M46 23 L46 57 L75 40z
+    M88.5 12 h3 v6 h-3z M88.5 24 h3 v6 h-3z M88.5 36 h3 v8 h-3z M88.5 50 h3 v6 h-3z M88.5 62 h3 v6 h-3z"/>
+</svg>

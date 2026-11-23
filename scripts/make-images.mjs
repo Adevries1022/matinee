@@ -193,7 +193,15 @@ const icons = {
     close: [P.line(6, 6, 18, 18, 2), P.line(18, 6, 6, 18, 2)],
     server: [P.rect(4, 4, 16, 7, 1.5, S), P.rect(4, 13, 16, 7, 1.5, S), P.fillCircle(8, 7.5, 1.1), P.fillCircle(8, 16.5, 1.1)],
     scan: [P.arc(12, 12, 8, -90, 180, 2)],
-    logo: [P.circle(12, 12, 9, 2), P.fillPoly([[10, 8.5], [10, 15.5], [15.5, 12]])],
+    // The Matinee mark (design/brand/logo.svg): a notched ticket with a play
+    // triangle and a stub line cut through it.
+    logo: [(x, y) => {
+        if (roundRectSd(x, y, 0.5, 4, 23, 16, 1.6) > 0) return false;
+        if (hypot(x - 0.5, y - 12) < 2.4 || hypot(x - 23.5, y - 12) < 2.4) return false;
+        if (inPoly(x, y, [[9.2, 7.8], [9.2, 16.2], [15, 12]])) return false;
+        if (Math.abs(x - 18.2) < 0.4 && y > 5.6 && y < 18.4 && Math.floor((y - 5.6) / 1.6) % 2 === 0) return false;
+        return true;
+    }],
     backspace: [P.poly([[9, 6], [20, 6], [20, 18], [9, 18], [3, 12]], S, true), P.line(12, 9.5, 17, 14.5, S), P.line(17, 9.5, 12, 14.5, S)],
     user: [P.circle(12, 8, 4, S), P.arc(12, 21, 8, 180, 360, S)],
     signout: [P.poly([[10, 4], [5, 4], [5, 20], [10, 20]], S), P.line(9, 12, 20, 12, S), P.poly([[16, 8], [20, 12], [16, 16]], S)],
