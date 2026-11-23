@@ -1,8 +1,10 @@
 ' Home, Series and Movies: the Rail, the Hero for the Focused title with
-' Play / Details / My List, and Rows of Cards from y = 640. OK on a Card
-' opens Details; Play on the remote plays it.
-' Focus moves between three zones: the Rows, the Hero buttons (Up from the
-' first Row) and the server pill and avatar at the top right (Up again).
+' Play / Details / My List, and Rows of Cards. OK on a Card opens Details;
+' Play on the remote plays it.
+' Focus starts on the Hero buttons, with the Rows low so only the tops of
+' the first Row show (t.rowsPeek). Down slides the Rows up to y = 640;
+' Up from the first Row slides them back down. Up from the buttons goes to
+' the server pill and avatar at the top right.
 
 sub init()
     t = th()
@@ -13,7 +15,7 @@ sub init()
     m.sink = m.top.findNode("sink")
     m.status.font = makeFont(26)
     m.status.color = t.muted
-    m.status.translation = [t.leftPad, t.rowsTop + 20]
+    m.status.translation = [t.leftPad, t.rowsPeek + 20]
     m.status.width = 1600
     m.status.text = "Loading..."
 
@@ -27,7 +29,7 @@ sub init()
     m.rows.observeField("rowItemSelected", "onItemSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
 
-    m.zone = "rows"
+    m.zone = "buttons"
     m.btnIndex = 0
     m.badgeIndex = 1
     m.gen = 0
@@ -46,22 +48,38 @@ sub buildHero()
     m.heroArt = layer.CreateChild("Poster")
     m.heroArt.id = "heroArt"
     m.heroArt.width = 1920
-    m.heroArt.height = 780
+    m.heroArt.height = 1080
     m.heroArt.loadWidth = 1920
-    m.heroArt.loadHeight = 780
+    m.heroArt.loadHeight = 1080
     m.heroArt.loadDisplayMode = "scaleToZoom"
     m.heroArt.opacity = 0
     m.heroArt.observeField("loadStatus", "onHeroArtStatus")
-    makeFade(layer, "hero", 1920, 780)
+    makeFade(layer, "hero", 1920, 1080)
     ' Solid by 684, the top of a Focused Card in the first Row: the Cards'
-    ' rounded corners are painted in the background color.
-    fade = makeFadeUp(layer, 1920, 204, t.bg)
+    ' rounded corners are painted in the background color. It slides down
+    ' with the Rows when they peek.
+    m.heroBottom = layer.CreateChild("Group")
+    m.heroBottom.id = "heroBottom"
+    fade = makeFadeUp(m.heroBottom, 1920, 204, t.bg)
     fade.translation = [0, 480]
-    below = layer.CreateChild("Rectangle")
+    below = m.heroBottom.CreateChild("Rectangle")
     below.translation = [0, 684]
     below.width = 1920
-    below.height = 396
+    below.height = 396 + t.rowsPeek - t.rowsTop
     below.color = t.bg
+    m.heroBottom.translation = [0, t.rowsPeek - t.rowsTop]
+
+    ' Slides the Rows (and the bottom fade) between peeking and browsing.
+    m.rowsSlide = layer.CreateChild("Animation")
+    m.rowsSlide.duration = 0.3
+    m.rowsSlide.easeFunction = "outQuad"
+    m.rowsInterp = m.rowsSlide.CreateChild("Vector2DFieldInterpolator")
+    m.rowsInterp.key = [0.0, 1.0]
+    m.rowsInterp.fieldToInterp = "rows.translation"
+    m.bottomInterp = m.rowsSlide.CreateChild("Vector2DFieldInterpolator")
+    m.bottomInterp.key = [0.0, 1.0]
+    m.bottomInterp.fieldToInterp = "heroBottom.translation"
+    m.rowsLow = true
     ' The Trailer Preview sits just above the backdrop, under the Hero's fades.
     setupTrailer(layer, 1, [t.trailerX, t.trailerY, t.trailerW, t.trailerH], m.heroArt, m.chrome)
 
@@ -225,7 +243,7 @@ end function
 
 sub styleRows()
     t = th()
-    m.rows.translation = [t.leftPad - t.cellPadX, t.rowsTop]
+    m.rows.translation = [t.leftPad - t.cellPadX, t.rowsPeek]
     m.rows.itemSize = [1920 - t.leftPad + t.cellPadX, t.posterH + t.cellPadY * 2 + 56]
     m.rows.rowItemSpacing = [[0, 0]]
     m.rows.itemSpacing = [0, 18]
@@ -414,7 +432,7 @@ sub buildRows()
     m.rows.rowHeights = heights
     m.rows.content = root
     m.rows.visible = true
-    if m.top.isInFocusChain() and not menuIsOpen() and m.zone = "rows" then m.rows.setFocus(true)
+    if m.top.isInFocusChain() and not menuIsOpen() then setZone(m.zone)
     heroShow(root.getChild(0).getChild(0), true)
     if m.kind = "" then savePreview(root)
 end sub
@@ -550,11 +568,30 @@ sub setZone(zone as string)
         trailerHideChrome()
     end if
     paintTopBadges(m.badges, badgeFocus)
+    slideRows(zone <> "rows")
     if zone = "rows"
         restoreRows()
     else
         m.sink.setFocus(true)
     end if
+end sub
+
+' Rows low (peeking under the Hero) or up where they can be browsed.
+sub slideRows(low as boolean)
+    if low = m.rowsLow then return
+    m.rowsLow = low
+    t = th()
+    x = t.leftPad - t.cellPadX
+    fromY = t.rowsPeek
+    toY = t.rowsTop
+    if low
+        fromY = t.rowsTop
+        toY = t.rowsPeek
+    end if
+    m.rowsSlide.control = "stop"
+    m.rowsInterp.keyValue = [[x, fromY], [x, toY]]
+    m.bottomInterp.keyValue = [[0, fromY - t.rowsTop], [0, toY - t.rowsTop]]
+    m.rowsSlide.control = "start"
 end sub
 
 sub restoreRows()
@@ -570,9 +607,7 @@ sub restoreContentFocus()
 end sub
 
 sub onFocusChanged()
-    if m.top.hasFocus() and not menuIsOpen() and m.zone = "rows"
-        if m.rows.content <> invalid and m.rows.visible then m.rows.setFocus(true)
-    end if
+    if m.top.hasFocus() and not menuIsOpen() then setZone(m.zone)
 end sub
 
 sub onRefresh()
@@ -614,6 +649,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
                     return true
                 end if
             end if
+            ' At the start of the first Row: back up to the Hero.
+            setZone("buttons")
+            return true
         end if
         return false
     else if m.zone = "buttons"
@@ -627,8 +665,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
         else if key = "right"
             if m.btnIndex < m.buttons.Count() - 1 then m.btnIndex = m.btnIndex + 1
             paintBtns(m.buttons, m.btnIndex)
-        else if key = "down" or key = "back"
+        else if key = "down"
             setZone("rows")
+        else if key = "back"
+            return false
         else if key = "up"
             setZone("badges")
         else if key = "OK"

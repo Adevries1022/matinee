@@ -205,6 +205,9 @@ function themeTokens(prefs as object) as object
     t.leftPad = 160
     t.railW = 112
     t.rowsTop = 640
+    ' While the Hero buttons have focus, the Rows sit this low: only the first
+    ' Row's name and the tops of its Cards show, leaving room for the Hero.
+    t.rowsPeek = 940
     t.landW = 352
     t.landH = 198
     t.posterW = 220

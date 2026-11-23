@@ -18,7 +18,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 ## Features
 
 ### Watching
-- **Home:** a Hero for the title you're on, with Play or Resume, Details and My List, above Rows for Continue watching, Next up, Recently added, Picked for you and Highly rated.
+- **Home:** a Hero for the title you're on, with Play or Resume, Details and My List. Focus starts on those buttons with only the tops of the Rows showing at the bottom; press Down to slide the Rows up. The Rows are for Continue watching, Next up, Recently added, Picked for you and Highly rated.
 - **Series and Movies:** every show or movie from all your libraries, with Rows for what you're watching, what's new, what you haven't watched, and up to 14 genres.
 - **Details:** seasons and episodes for shows, More like this for movies (similar titles from your library, then Seerr's recommendations you can request), and buttons for My List, Watched, Start over (a movie you've started) and Trailer.
 - **Ratings:** the Hero, Details and Discover show IMDb and Rotten Tomatoes scores. Rotten Tomatoes comes from Jellyfin when its OMDb plugin has filled it in; IMDb, and Rotten Tomatoes for series, come from Seerr while you're signed in to it. When neither is known, TMDB's score shows instead.
