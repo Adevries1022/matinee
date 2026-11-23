@@ -5,6 +5,10 @@ end sub
 
 sub execute()
     req = m.top.request
+    if req.warmHls = true
+        warmHls(req)
+        return
+    end if
     result = { ok: false, code: 0, data: invalid, error: "", tag: req.tag, cookie: "" }
 
     xfer = CreateObject("roUrlTransfer")
@@ -117,4 +121,112 @@ function readCookies(msg as object) as string
         end for
     end for
     return pairs.Join("; ")
+end function
+
+' ---------- Warming up a transcode ----------
+
+' Jellyfin's first HLS segment after it starts (or restarts) a transcode
+' carries several seconds of earlier audio, so the sound runs ahead of the
+' picture. Fetching the segment before the start point first makes the
+' Roku's first segment come from a transcode that's already running, and
+' that one is in sync. req.server is the master playlist URL; req.start is
+' the start point in seconds.
+sub warmHls(req as object)
+    result = { ok: false, code: 0, data: invalid, error: "", tag: req.tag, cookie: "" }
+    url = req.server
+    cut = Instr(1, url, "master.m3u8")
+    if cut = 0
+        result.error = "not a master playlist"
+        m.top.response = result
+        return
+    end if
+    base = Left(url, cut - 1)
+    master = getText(url, req)
+    mainRel = firstUri(master)
+    if mainRel = ""
+        result.error = "no variant playlist"
+        m.top.response = result
+        return
+    end if
+    playlist = getText(base + mainRel, req)
+    startAt = req.start
+    t = 0.0
+    idx = -1
+    uris = []
+    dur = 0.0
+    for each line in playlist.Tokenize(Chr(10))
+        line = line.Trim()
+        if Left(line, 8) = "#EXTINF:"
+            dur = Val(Mid(line, 9))
+        else if line <> "" and Left(line, 1) <> "#"
+            if idx < 0 and startAt >= t and startAt < t + dur then idx = uris.Count()
+            uris.Push(line)
+            t = t + dur
+        end if
+    end for
+    if idx < 1
+        ' At the very start the first segment is already in sync.
+        result.ok = true
+        result.data = { segment: idx }
+        m.top.response = result
+        return
+    end if
+    xfer = newXfer(base + uris[idx - 1], req)
+    port = CreateObject("roMessagePort")
+    xfer.SetMessagePort(port)
+    tmp = "tmp:/warm.ts"
+    if xfer.AsyncGetToFile(tmp)
+        msg = wait(30000, port)
+        if type(msg) = "roUrlEvent"
+            result.code = msg.GetResponseCode()
+            result.ok = (result.code >= 200 and result.code < 300)
+        else
+            xfer.AsyncCancel()
+            result.error = "timeout"
+        end if
+    end if
+    DeleteFile(tmp)
+    result.data = { segment: idx }
+    m.top.response = result
+end sub
+
+function firstUri(text as string) as string
+    for each line in text.Tokenize(Chr(10))
+        line = line.Trim()
+        if line <> "" and Left(line, 1) <> "#" then return line
+    end for
+    return ""
+end function
+
+function getText(url as string, req as object) as string
+    xfer = newXfer(url, req)
+    port = CreateObject("roMessagePort")
+    xfer.SetMessagePort(port)
+    if not xfer.AsyncGetToString() then return ""
+    msg = wait(15000, port)
+    if type(msg) <> "roUrlEvent"
+        xfer.AsyncCancel()
+        return ""
+    end if
+    if msg.GetResponseCode() <> 200 then return ""
+    return msg.GetString()
+end function
+
+function newXfer(url as string, req as object) as object
+    xfer = CreateObject("roUrlTransfer")
+    xfer.SetUrl(url)
+    if LCase(Left(url, 5)) = "https"
+        xfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        xfer.InitClientCertificates()
+        verify = req.verify
+        if type(verify) <> "Boolean" and type(verify) <> "roBoolean" then verify = false
+        if not verify
+            xfer.EnablePeerVerification(false)
+            xfer.EnableHostVerification(false)
+        end if
+    end if
+    if req.auth <> invalid
+        if req.auth <> "" then xfer.AddHeader("Authorization", req.auth)
+    end if
+    return xfer
 end function

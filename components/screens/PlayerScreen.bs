@@ -208,7 +208,15 @@ sub requestPlayback()
         query["EnableDirectStream"] = "false"
     end if
     if m.wantAudio <> invalid then query["AudioStreamIndex"] = m.wantAudio.ToStr()
-    if m.wantSub <> invalid then query["SubtitleStreamIndex"] = m.wantSub.ToStr()
+    if m.wantSub <> invalid
+        query["SubtitleStreamIndex"] = m.wantSub.ToStr()
+        ' Picture subtitles are burned in, which only a transcode can do.
+        ' Newer servers still offer direct play then, so ask for it outright.
+        if isImageSub(m.wantSub)
+            query["EnableDirectPlay"] = "false"
+            query["EnableDirectStream"] = "false"
+        end if
+    end if
     if m.startSeconds > 0 then query["StartTimeTicks"] = (Int(m.startSeconds) * 10000000&).ToStr()
     apiRequest("/Items/" + m.itemId + "/PlaybackInfo", query, "onPlaybackInfo", "POST", { "DeviceProfile": deviceProfile() })
 end sub
@@ -399,7 +407,7 @@ sub onPlaybackInfo(event as object)
     token = m.global.token
 
     content = CreateObject("roSGNode", "ContentNode")
-    if isTrue(ms.SupportsDirectPlay) and prefValue("directPlay", "prefer") <> "off"
+    if isTrue(ms.SupportsDirectPlay) and prefValue("directPlay", "prefer") <> "off" and not isImageSub(m.subIndex)
         url = server + "/Videos/" + m.itemId + "/stream?static=true&MediaSourceId=" + m.mediaSourceId
         url = url + "&PlaySessionId=" + m.playSessionId + "&api_key=" + token + "&ApiKey=" + token
         fmt = LCase(safeStr(ms.Container))
@@ -431,6 +439,32 @@ sub onPlaybackInfo(event as object)
     content.url = url
     content.title = playTitle(m.item)
     content.PlayStart = m.startSeconds
+    m.pendingContent = content
+    ' A transcode that starts partway in is warmed up first, so the sound
+    ' doesn't run ahead of the picture (see warmHls in ApiTask).
+    if m.playMethod = "Transcode" and m.startSeconds > 5
+        m.warmToken = m.playSessionId
+        warmTranscode(url, m.startSeconds * 1.0, "onWarm")
+        return
+    end if
+    beginVideo()
+end sub
+
+sub onWarm(event as object)
+    res = event.getData()
+    if m.warmToken <> m.playSessionId or m.pendingContent = invalid then return
+    seg = -1
+    if isValid(res.data) then seg = res.data.segment
+    msElapsed = 0
+    if m.loadStart <> invalid then msElapsed = m.loadStart.TotalMilliseconds()
+    print "[Matinee] player: warmed transcode (segment "; seg; ", ok "; res.ok; " "; res.error; ") after "; msElapsed; " ms"
+    beginVideo()
+end sub
+
+sub beginVideo()
+    content = m.pendingContent
+    m.pendingContent = invalid
+    if content = invalid then return
     m.video.content = content
     m.video.control = "play"
     applySubtitle()
@@ -1440,6 +1474,10 @@ sub onClosed()
     m.hideTimer.control = "stop"
     m.scrubTimer.control = "stop"
     m.holdTimer.control = "stop"
+    ' A warm-up still running must not start the video after leaving.
+    m.pendingContent = invalid
+    m.warmToken = ""
+    showSpinner(false)
     reportStopped()
     m.video.control = "stop"
 end sub

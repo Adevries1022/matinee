@@ -64,6 +64,25 @@ sub startRequest(base as string, path as string, query as object, callback as st
     if m.apiTasks.Count() > 48 then m.apiTasks.Shift()
 end sub
 
+' Warm up a Jellyfin transcode before the Roku plays it (see warmHls in
+' ApiTask). masterUrl carries the api_key.
+sub warmTranscode(masterUrl as string, startSeconds as float, callback as string)
+    task = CreateObject("roSGNode", "ApiTask")
+    task.request = {
+        warmHls: true,
+        server: masterUrl,
+        start: startSeconds,
+        tag: invalid,
+        auth: "",
+        verify: readSetting("allowSelfSigned", "true") <> "true"
+    }
+    task.observeField("response", callback)
+    task.control = "RUN"
+    if m.apiTasks = invalid then m.apiTasks = []
+    m.apiTasks.Push(task)
+    if m.apiTasks.Count() > 48 then m.apiTasks.Shift()
+end sub
+
 sub onIgnore(_event as object)
 end sub
 
