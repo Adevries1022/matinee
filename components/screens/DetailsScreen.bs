@@ -13,6 +13,7 @@ sub init()
     m.x = 120
 
     makeFade(m.layer, "detail", 1920, 1080)
+    makeFadeUp(m.layer, 1920, 1080 - t.detailFadeTop, t.bg).translation = [0, t.detailFadeTop]
     m.back = makeBackPill(m.layer, m.top.backLabel)
 
     m.eyebrow = makeLabel(m.layer, "", 18, "semibold", t.accent)

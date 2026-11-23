@@ -285,6 +285,8 @@ function themeTokens(prefs as object) as object
     ' Seconds a title is Focused before its Trailer Preview starts.
     t.trailerDelaySeconds = 5
     t.trailerFeatherY = 160
+    ' Detail darkens from here to the bottom, so episode text reads on light art.
+    t.detailFadeTop = 560
     t.detailLogoW = 600
     t.playerLogoW = 360
     t.playerLogoH = 96
@@ -709,9 +711,10 @@ end function
 ' ================= My List (Jellyfin Favorites) =================
 
 ' A short message at the bottom of the screen; MainScene draws it (Toast).
-' seconds: 0 for the Theme's usual time.
-sub showToast(text as string, icon = "check" as string, seconds = 0 as float)
-    m.global.toast = { text: text, icon: icon, seconds: seconds }
+' seconds: 0 for the Theme's usual time. place: "bottom" (centered), or
+' "top" (top right) where the bottom is busy, as in the Player.
+sub showToast(text as string, icon = "check" as string, seconds = 0 as float, place = "bottom" as string)
+    m.global.toast = { text: text, icon: icon, seconds: seconds, place: place }
 end sub
 
 ' Continue watching. With the DiscontinueWatching plugin on the server, its

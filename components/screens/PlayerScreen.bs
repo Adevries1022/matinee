@@ -1449,7 +1449,7 @@ sub subtitlesTip()
     if readSetting("subtitlesTipShown") <> "" then return
     if CreateObject("roDeviceInfo").GetModelType() <> "TV" then return
     writeSetting("subtitlesTipShown", "true")
-    showToast("For subtitles, press Down twice, then choose Subtitles", "subtitles", th().tipSeconds)
+    showToast("For subtitles, press Down twice, then choose Subtitles", "subtitles", th().tipSeconds, "top")
 end sub
 
 sub reportStopped()

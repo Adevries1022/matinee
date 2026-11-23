@@ -4,7 +4,7 @@
      calls showToast() in Api.bs. -->
 <component name="Toast" extends="Group">
   <interface>
-    <!-- { text, icon, seconds } (seconds 0: th().toastSeconds) -->
+    <!-- { text, icon, seconds, place } (seconds 0: th().toastSeconds; place "bottom" centered or "top" at the top right) -->
     <field id="show" type="assocarray" alwaysNotify="true" onChange="onShow" />
   </interface>
   <script type="text/brightscript" uri="Toast.bs" />

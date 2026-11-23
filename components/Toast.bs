@@ -28,6 +28,11 @@ sub onShow()
     h = 64
     x = Int((1920 - w) / 2)
     y = 1080 - 80 - h
+    if safeStr(s.place) = "top"
+        ' Top right, clear of the Player's title at the top left.
+        x = 1920 - 80 - w
+        y = 56
+    end if
     makeBox(p, w, h, 32, t.panel, 0.96).translation = [x, y]
     tx = x + padX
     if icon <> ""
