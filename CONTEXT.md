@@ -38,7 +38,7 @@ The large area at the top of Home, Series and Movies showing the Focused title's
 _Avoid_: Banner, billboard, spotlight
 
 **Logo**:
-A title's own name artwork from Jellyfin (a transparent image), drawn in place of the text title in the Hero and on Detail. Episodes use their show's Logo; titles without one, such as Seerr results, keep the text title.
+A title's own name artwork from Jellyfin (a transparent image), drawn in place of the text title in the Hero, on Detail and in the Player header. Episodes use their show's Logo; titles without one, such as Seerr results, keep the text title.
 _Avoid_: Title art, clear logo, wordmark
 
 **Row**:

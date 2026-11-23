@@ -277,6 +277,8 @@ function themeTokens(prefs as object) as object
     t.trailerDelaySeconds = 5
     t.trailerFeatherY = 160
     t.detailLogoW = 600
+    t.playerLogoW = 360
+    t.playerLogoH = 96
     t.detailLogoH = 116
     t.cellPadX = 12
     t.cellPadY = 16

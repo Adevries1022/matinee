@@ -632,6 +632,11 @@ sub buildOsd()
     m.hTitle.vertAlign = "center"
     m.hSub = makeLabel(o, "", 20, "regular", t.meta)
     m.hSub.translation = [172, 96]
+    ' The title's Logo in place of its name, as in the Hero, with the
+    ' episode line below it.
+    m.hLogoBox = [172, 28, t.playerLogoW, t.playerLogoH]
+    m.hLogo = makeLogo(o)
+    m.hLogo.observeField("loadStatus", "onHeaderLogo")
 
     ' Pause badge in the middle.
     m.pauseBadge = o.CreateChild("Group")
@@ -767,6 +772,8 @@ sub setHeader()
     it = m.item
     if it = invalid then return
     m.hTitle.text = playTitle(it)
+    showLogo(m.hLogo, m.hTitle, logoUrl(it, th().playerLogoW, th().playerLogoH), m.hLogoBox)
+    placeHeaderSub()
     if safeStr(it.Type) = "Episode"
         parts = []
         if isValid(it.ParentIndexNumber) then parts.Push("Season " + it.ParentIndexNumber.ToStr())
@@ -779,6 +786,20 @@ sub setHeader()
         r = formatRuntime(it.RunTimeTicks)
         if r <> "" then parts.Push(r)
         m.hSub.text = parts.Join(" " + Chr(183) + " ")
+    end if
+end sub
+
+sub onHeaderLogo()
+    placeLogo(m.hLogo, m.hTitle, m.hLogoBox)
+    placeHeaderSub()
+end sub
+
+' The episode line sits under the Logo when there is one, else under the name.
+sub placeHeaderSub()
+    if m.hLogo.visible
+        m.hSub.translation = [172, m.hLogoBox[1] + m.hLogoBox[3] + 12]
+    else
+        m.hSub.translation = [172, 96]
     end if
 end sub
 
