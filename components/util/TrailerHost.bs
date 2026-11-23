@@ -1,17 +1,18 @@
 ' Trailer Preview: after a title has been Focused for a few seconds, its
-' trailer fades in behind the Hero text, with sound unless Trailer sound
+' trailer fades in, framed in the Hero beside the title and its details, with sound unless Trailer sound
 ' in Playback & quality is off, and the screen's header fades out. Only
 ' trailer files stored on the server are used (for example ones downloaded
 ' by Trailarr). Play toggles the sound. Moving focus or leaving the screen
 ' stops it, and Trailer previews in Playback & quality turns it off.
 
-' chrome: the header (wordmark, server pill, avatar) to fade out while a
-' trailer plays. It needs an id.
-sub setupTrailer(layer as object, insertIndex as integer, hintY as integer, chrome as object)
+' frame: [x, y, w, h] where the trailer plays. chrome: the header (wordmark,
+' server pill, avatar) to fade out while a trailer plays. It needs an id.
+sub setupTrailer(layer as object, insertIndex as integer, frame as object, chrome as object)
     v = CreateObject("roSGNode", "Video")
     v.id = "trailerVideo"
-    v.width = 1920
-    v.height = 1080
+    v.translation = [frame[0], frame[1]]
+    v.width = frame[2]
+    v.height = frame[3]
     v.enableUI = false
     v.mute = true
     v.opacity = 0
@@ -22,7 +23,8 @@ sub setupTrailer(layer as object, insertIndex as integer, hintY as integer, chro
 
     ' A quiet hint so people know the sound is one press away.
     m.trailerHint = makeLabel(layer, "Press Play for sound", 24, true, th().muted)
-    m.trailerHint.translation = [1920 - 96 - 400, hintY]
+    ' Just above the frame, lined up with its right edge.
+    m.trailerHint.translation = [frame[0] + frame[2] - 400, frame[1] - 40]
     m.trailerHint.width = 400
     m.trailerHint.horizAlign = "right"
     m.trailerHint.visible = false

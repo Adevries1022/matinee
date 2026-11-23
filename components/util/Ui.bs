@@ -529,7 +529,9 @@ function makeSteps(parent as object, active as integer, rightX as integer, y as 
 end function
 
 ' "2026 · [TV-MA] · 2 seasons · Drama": parts are strings, or
-' { text, boxed: true } for the outlined rating. Returns the group.
+' { text, boxed: true } for the outlined rating, or a score from
+' ratingParts(): { text, badge: "IMDb", badgeBg } or { text, icon, iconColor }.
+' Returns the group.
 function makeMeta(parent as object, parts as object, size = 22 as integer) as object
     t = th()
     g = parent.CreateChild("Group")
@@ -539,11 +541,42 @@ function makeMeta(parent as object, parts as object, size = 22 as integer) as ob
     for each p in parts
         text = ""
         boxed = false
+        lead = invalid
         if type(p) = "roAssociativeArray"
             text = safeStr(p.text)
             boxed = isTrue(p.boxed)
+            lead = p
         else
             text = safeStr(p)
+        end if
+        if text <> "" and lead <> invalid
+            ' A score's source goes in front: a small colored tag or an icon.
+            if lead.badge <> invalid or lead.icon <> invalid
+                if not first
+                    d = makeLabel(g, Chr(183), size, "regular", t.meta)
+                    d.translation = [x + 16, 0]
+                    d.height = h
+                    d.vertAlign = "center"
+                    x = x + 16 + measureText(Chr(183), size, "regular") + 16
+                end if
+                first = false
+                if lead.badge <> invalid
+                    tg = makeTag(g, lead.badge, { bg: lead.badgeBg, fg: t.black, size: size - 6, h: h - 8, r: 6, padX: 8, style: "semibold" })
+                    tg.group.translation = [x, 4]
+                    x = x + tg.w + 10
+                else
+                    isz = size + 8
+                    ic = makeIcon(g, lead.icon, isz, lead.iconColor)
+                    ic.translation = [x, (h - isz) \ 2 - 1]
+                    x = x + isz + 6
+                end if
+                l = makeLabel(g, text, size, "semibold", t.text)
+                l.translation = [x, 0]
+                l.height = h
+                l.vertAlign = "center"
+                x = x + measureText(text, size, "semibold")
+                text = ""
+            end if
         end if
         if text <> ""
             if not first

@@ -65,6 +65,9 @@ sub init()
     m.favorite = false
     m.trailerCount = 0
     m.item = invalid
+    m.metaParts = []
+    m.itemRatings = invalid
+    ratingsInit()
     m.seenVersion = m.global.watchVersion
     paintAll()
 end sub
@@ -76,7 +79,7 @@ end sub
 sub load()
     id = m.top.itemId
     if id = "" then return
-    apiRequest("/Items/" + id, { "userId": m.global.userId, "Fields": "Overview,Genres,ChildCount,MediaStreams,DateLastMediaAdded" }, "onItem")
+    apiRequest("/Items/" + id, { "userId": m.global.userId, "Fields": "Overview,Genres,ChildCount,MediaStreams,DateLastMediaAdded,ProviderIds" }, "onItem")
 end sub
 
 sub onItem(event as object)
@@ -124,7 +127,15 @@ sub onItem(event as object)
     parts.Push(firstGenre(item))
     access = accessText(item)
     if access <> "" then parts.Push(access)
-    makeMeta(m.metaHost, parts, 22)
+    m.metaParts = parts
+    kind = "movie"
+    if m.isSeries then kind = "tv"
+    tmdb = ""
+    if isValid(item.ProviderIds) then tmdb = safeStr(item.ProviderIds.Tmdb)
+    score = 0.0
+    if isValid(item.CommunityRating) then score = item.CommunityRating
+    m.itemRatings = ratingsFor(kind, tmdb, safeInt(item.CriticRating), score)
+    drawMeta()
     m.blurb.text = safeStr(item.Overview)
 
     if hasBackdrop(item)
@@ -151,6 +162,21 @@ sub onItem(event as object)
     end if
     buildButtons()
     if m.top.isInFocusChain() then restoreFocus()
+end sub
+
+' The meta line, then IMDb and Rotten Tomatoes scores after it.
+sub drawMeta()
+    m.metaHost.removeChildrenIndex(m.metaHost.getChildCount(), 0)
+    parts = []
+    parts.Append(m.metaParts)
+    parts.Append(ratingParts(m.itemRatings))
+    makeMeta(m.metaHost, parts, 22)
+end sub
+
+sub ratingsArrived(key as string)
+    if m.itemRatings <> invalid
+        if m.itemRatings.key = key then drawMeta()
+    end if
 end sub
 
 ' "Shows library · New episode added", "Movies library · Watched"

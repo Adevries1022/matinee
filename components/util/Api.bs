@@ -215,6 +215,12 @@ function themeTokens(prefs as object) as object
     ' Title Logos: the box each one is fitted into, bottom left.
     t.heroLogoW = 640
     t.heroLogoH = 124
+    ' The Trailer Preview frame on Home, Series and Movies: 16:9, centered in
+    ' the space right of the Hero text and level with it.
+    t.trailerW = 800
+    t.trailerH = 450
+    t.trailerX = 978
+    t.trailerY = 167
     t.detailLogoW = 600
     t.detailLogoH = 116
     t.cellPadX = 12
@@ -573,6 +579,9 @@ function itemToContent(item as object, landscape as boolean, rowKind = "" as str
     c.length = lengthText(item)
     c.genre = firstGenre(item)
     c.epCode = code
+    if isValid(item.ProviderIds) then c.tmdbId = safeStr(item.ProviderIds.Tmdb)
+    c.criticRating = safeInt(item.CriticRating)
+    if isValid(item.CommunityRating) then c.score = item.CommunityRating
 
     if hasBackdrop(item)
         c.backdropUrl = imageUrl(id, "Backdrop", 1920)
@@ -844,6 +853,8 @@ function seerrToContent(r as object) as object
     mediaType = safeStr(r.mediaType)
     c.itemType = "seerr-" + mediaType
     c.itemId = safeStr(r.id)
+    c.tmdbId = c.itemId
+    if isValid(r.voteAverage) then c.score = r.voteAverage
     name = safeStr(r.title)
     if name = "" then name = safeStr(r.name)
     c.heading = name
@@ -852,7 +863,10 @@ function seerrToContent(r as object) as object
     dateStr = safeStr(r.releaseDate)
     if dateStr = "" then dateStr = safeStr(r.firstAirDate)
     parts = []
-    if Len(dateStr) >= 4 then parts.Push(Left(dateStr, 4))
+    if Len(dateStr) >= 4
+        c.year = Left(dateStr, 4)
+        parts.Push(c.year)
+    end if
     if mediaType = "tv"
         parts.Push("Series")
     else

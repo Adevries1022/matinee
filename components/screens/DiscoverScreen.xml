@@ -14,6 +14,7 @@
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/RequestPanel.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ratings.bs" />
   <children>
     <Group id="heroLayer" />
     <RowList

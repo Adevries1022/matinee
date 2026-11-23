@@ -22,6 +22,8 @@ sub init()
     m.gen = 0
     m.loaded = false
     m.heroItem = invalid
+    m.heroRatings = invalid
+    ratingsInit()
     panelInit()
     setupMenu("discover")
     start()
@@ -91,8 +93,8 @@ sub buildHero()
     m.heroTitle.width = 1600
     m.heroTitle.height = 116
     m.heroTitle.vertAlign = "center"
-    m.heroMeta = makeLabel(layer, "", 22, "regular", t.meta)
-    m.heroMeta.translation = [x, 360]
+    m.heroMetaHost = layer.CreateChild("Group")
+    m.heroMetaHost.translation = [x, 360]
     m.heroBlurb = makeLabel(layer, "", 26, "regular", t.soft)
     m.heroBlurb.translation = [x, 410]
     m.heroBlurb.width = 860
@@ -118,7 +120,7 @@ sub heroText(eyebrow as string, title as string, meta as string, blurb as string
     m.heroTitle.font = makeFont(size, "display")
     m.heroEyebrow.text = UCase(eyebrow)
     m.heroTitle.text = title
-    m.heroMeta.text = meta
+    drawHeroMeta([meta])
     m.heroBlurb.text = blurb
 end sub
 
@@ -137,11 +139,38 @@ sub applyHero()
     c = m.heroItem
     if c = invalid then return
     heroText(c.rowTitle, c.heading, c.meta, c.description)
+    m.heroRatings = invalid
+    if Left(c.itemType, 6) = "seerr-"
+        m.heroRatings = ratingsFor(Mid(c.itemType, 7), c.tmdbId, 0, c.score)
+        drawTitleMeta()
+    end if
     noteFor(c)
     ' Services have no backdrop: keep the last one.
     if c.backdropUrl <> "" and c.backdropUrl <> m.heroArt.uri
         m.heroArt.opacity = 0
         m.heroArt.uri = c.backdropUrl
+    end if
+end sub
+
+sub drawHeroMeta(parts as object)
+    m.heroMetaHost.removeChildrenIndex(m.heroMetaHost.getChildCount(), 0)
+    makeMeta(m.heroMetaHost, parts, 22)
+end sub
+
+' "2026 · Movie" and the title's scores.
+sub drawTitleMeta()
+    c = m.heroItem
+    if c = invalid then return
+    kind = "Movie"
+    if c.itemType = "seerr-tv" then kind = "Series"
+    parts = [c.year, kind]
+    parts.Append(ratingParts(m.heroRatings))
+    drawHeroMeta(parts)
+end sub
+
+sub ratingsArrived(key as string)
+    if m.heroRatings <> invalid
+        if m.heroRatings.key = key then drawTitleMeta()
     end if
 end sub
 

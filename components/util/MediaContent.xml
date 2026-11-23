@@ -32,5 +32,10 @@
     <field id="requestStatus" type="integer" />
     <!-- Seerr titles that are on the server: their Jellyfin item. -->
     <field id="jellyfinId" type="string" />
+    <!-- For Ratings: the title's TMDB id, Jellyfin's Rotten Tomatoes score
+         (CriticRating, 0 when unknown) and TMDB's 0-10 score. -->
+    <field id="tmdbId" type="string" />
+    <field id="criticRating" type="integer" />
+    <field id="score" type="float" />
   </interface>
 </component>

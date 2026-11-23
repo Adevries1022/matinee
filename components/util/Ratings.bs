@@ -1,0 +1,88 @@
+' Ratings: IMDb and Rotten Tomatoes scores for a movie or series, shown in
+' meta lines. Rotten Tomatoes comes from Jellyfin's CriticRating (filled by
+' its OMDb plugin) when it has one; IMDb, and Rotten Tomatoes for series,
+' come from Seerr while the User is signed in to it. TMDB's score is the
+' fallback when neither is known. Answers are kept for the screen's life.
+' The screen calls ratingsInit() and defines ratingsArrived(key).
+
+sub ratingsInit()
+    m.ratings = {}
+end sub
+
+' kind: "movie" or "tv". critic: Jellyfin's CriticRating, or 0. score:
+' a 0-10 community score (Jellyfin's or Seerr's, both from TMDB), or 0.
+' Returns { key, imdb, rt, tmdb }; Seerr's answer arrives later through
+' ratingsArrived(key).
+function ratingsFor(kind as string, tmdbId as string, critic as integer, score as float) as object
+    key = kind + ":" + tmdbId
+    if tmdbId <> "" and m.ratings.DoesExist(key)
+        r = m.ratings[key]
+        if r.rt = "" and critic > 0 then r.rt = critic.ToStr() + "%"
+        return r
+    end if
+    r = { key: key, imdb: "", rt: "", tmdb: oneDecimal(score), triedPlain: false }
+    if critic > 0 then r.rt = critic.ToStr() + "%"
+    if tmdbId = "" then return r
+    m.ratings[key] = r
+    if m.global.seerrState = "ready"
+        if kind = "movie"
+            seerrRequest("/movie/" + tmdbId + "/ratingscombined", {}, "onRatings", "GET", invalid, key)
+        else
+            seerrRequest("/tv/" + tmdbId + "/ratings", {}, "onRatings", "GET", invalid, key)
+        end if
+    end if
+    return r
+end function
+
+function oneDecimal(v as dynamic) as string
+    if not isValid(v) then return ""
+    x = Int(v * 10 + 0.5)
+    if x <= 0 then return ""
+    return (x \ 10).ToStr() + "." + (x mod 10).ToStr()
+end function
+
+sub onRatings(event as object)
+    res = event.getData()
+    key = safeStr(res.tag)
+    if not m.ratings.DoesExist(key) then return
+    r = m.ratings[key]
+    if not res.ok
+        ' Seerr versions without the combined endpoint: Rotten Tomatoes only.
+        if res.code = 404 and Left(key, 6) = "movie:" and not r.triedPlain and r.rt = ""
+            r.triedPlain = true
+            seerrRequest("/movie/" + Mid(key, 7) + "/ratings", {}, "onRatings", "GET", invalid, key)
+        end if
+        return
+    end if
+    d = res.data
+    if not isValid(d) then return
+    ' /ratings answers with the Rotten Tomatoes rating itself;
+    ' /ratingscombined with { rt, imdb }.
+    rt = invalid
+    if isValid(d.criticsScore)
+        rt = d
+    else if isValid(d.rt)
+        rt = d.rt
+    end if
+    if isValid(d.imdb)
+        if isValid(d.imdb.criticsScore) then r.imdb = oneDecimal(d.imdb.criticsScore)
+    end if
+    if rt <> invalid and r.rt = ""
+        if isValid(rt.criticsScore)
+            n = safeInt(rt.criticsScore)
+            if n > 0 then r.rt = n.ToStr() + "%"
+        end if
+    end if
+    ratingsArrived(key)
+end sub
+
+' The scores as makeMeta parts: IMDb, then Rotten Tomatoes, or TMDB alone.
+function ratingParts(r as object) as object
+    t = th()
+    parts = []
+    if r = invalid then return parts
+    if r.imdb <> "" then parts.Push({ text: r.imdb, badge: "IMDb", badgeBg: t.warn })
+    if r.rt <> "" then parts.Push({ text: r.rt, icon: "tomato", iconColor: t.error })
+    if parts.Count() = 0 and r.tmdb <> "" then parts.Push({ text: r.tmdb, badge: "TMDB", badgeBg: t.info })
+    return parts
+end function
