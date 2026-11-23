@@ -240,10 +240,16 @@ function themeTokens(prefs as object) as object
     t.trailerY = 0
     t.trailerFeatherX = 320
     ' Auto-play: seconds on a title with no Trailer Preview before it starts.
-    t.autoPlaySeconds = 10
+    t.autoPlaySeconds = 12
     ' ...and on a title the User is watching, which resumes (or starts the
     ' next episode) instead of showing a trailer.
-    t.autoResumeSeconds = 8
+    t.autoResumeSeconds = 12
+    ' The Auto-play Countdown: the last seconds of the wait (or of a Trailer
+    ' Preview) show "Starting in 5" in a pill with a filling bar.
+    t.autoCountSeconds = 5
+    t.countPillW = 248
+    t.countPillH = 60
+    t.countBarH = 4
     ' Seconds a title is Focused before its Trailer Preview starts.
     t.trailerDelaySeconds = 5
     t.trailerFeatherY = 160

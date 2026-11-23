@@ -64,8 +64,12 @@ A title's IMDb and Rotten Tomatoes scores in its meta line, with TMDB's score wh
 _Avoid_: Reviews, stars
 
 **Auto-play**:
-Staying on a title in the Hero until its Trailer Preview ends, or for 10 seconds when it has none, opens the player and starts it. A title the User is Watching skips its Trailer Preview: after 8 seconds it resumes, or starts the next episode. Any key press restarts the wait.
+Staying on a title in the Hero until its Trailer Preview ends, or for 12 seconds when it has none, opens the player and starts it. A title the User is Watching skips its Trailer Preview: after 12 seconds it resumes, or starts the next episode. The last 5 seconds show the Auto-play Countdown. Any key press restarts the wait (during a Trailer Preview's Countdown, it waits the full time again after the trailer ends).
 _Avoid_: Autoplay next (that's the next episode, in the player)
+
+**Auto-play Countdown**:
+The "Starting in 5" pill at the bottom right of the Hero, with an Accent bar filling under the number, over the last 5 seconds before Auto-play starts a title, including the end of a Trailer Preview. It takes the place of the trailer sound hint.
+_Avoid_: Up Next Prompt (that's in the player)
 
 **Watching**:
 A title the User is partway through: a movie or episode with a resume point, an unwatched episode, or a show with some but not all episodes watched.

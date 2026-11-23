@@ -11,7 +11,9 @@
 ' streaming services: when its Trailer Preview ends, or after
 ' autoPlaySeconds when there's no trailer. The screen can set m.autoSeconds
 ' for a different wait (titles the User is watching skip the trailer and
-' use autoResumeSeconds). Any key press restarts the wait; moving to
+' use autoResumeSeconds). The last autoCountSeconds of the wait, or of the
+' trailer, show the Auto-play Countdown ("Starting in 5" with a filling
+' bar) at the bottom right. Any key press restarts the wait; moving to
 ' another title or leaving the screen cancels it. "Start a title you stay
 ' on" in Playback & quality turns it off. The screen defines
 ' autoPlayStart().
@@ -39,6 +41,8 @@ sub setupTrailer(layer as object, insertIndex as integer, area as object, backdr
     v.enableUI = false
     v.mute = true
     v.observeField("state", "onTrailerState")
+    v.notificationInterval = 0.5
+    v.observeField("position", "onTrailerPosition")
     m.trailerVideo = v
     ' Soft edges in the background color, so the picture melts into the screen.
     edgeL = makeFade(grp, "h", t.trailerFeatherX, h)
@@ -63,6 +67,46 @@ sub setupTrailer(layer as object, insertIndex as integer, area as object, backdr
     m.trailerHint.width = 400
     m.trailerHint.horizAlign = "right"
     m.trailerHint.visible = false
+
+    ' The Auto-play Countdown pill, in the same spot as the hint.
+    pw = t.countPillW
+    ph = t.countPillH
+    m.countPill = layer.CreateChild("Group")
+    m.countPill.translation = [x + w - 96 - pw, t.rowsTop - 40 - (ph - 32) \ 2]
+    m.countPill.visible = false
+    makeBox(m.countPill, pw, ph, ph \ 2, t.black, 0.55)
+    m.countText = makeLabel(m.countPill, "", 22, "semibold", t.text)
+    m.countText.width = pw
+    m.countText.height = ph - 8
+    m.countText.horizAlign = "center"
+    m.countText.vertAlign = "center"
+    barX = ph \ 2
+    barW = pw - barX * 2
+    barY = ph - 10 - t.countBarH
+    track = m.countPill.CreateChild("Rectangle")
+    track.translation = [barX, barY]
+    track.width = barW
+    track.height = t.countBarH
+    track.color = t.barBg
+    m.countFill = m.countPill.CreateChild("Rectangle")
+    m.countFill.id = "countFill"
+    m.countFill.translation = [barX, barY]
+    m.countFill.width = 0
+    m.countFill.height = t.countBarH
+    m.countFill.color = t.accent
+    m.countAnim = m.countPill.CreateChild("Animation")
+    m.countAnim.easeFunction = "linear"
+    ci0 = m.countAnim.CreateChild("FloatFieldInterpolator")
+    ci0.key = [0.0, 1.0]
+    ci0.keyValue = [0.0, barW * 1.0]
+    ci0.fieldToInterp = "countFill.width"
+    m.countBarW = barW
+    m.countTick = layer.CreateChild("Timer")
+    m.countTick.duration = 1
+    m.countTick.repeat = true
+    m.countTick.observeField("fire", "onCountTick")
+    m.counting = false
+    m.autoRearm = false
 
     m.trailerBackdrop = backdrop
     m.trailerFade = layer.CreateChild("Animation")
@@ -93,7 +137,7 @@ sub setupTrailer(layer as object, insertIndex as integer, area as object, backdr
 
     m.autoTimer = layer.CreateChild("Timer")
     m.autoTimer.repeat = false
-    m.autoTimer.observeField("fire", "autoPlayFire")
+    m.autoTimer.observeField("fire", "onAutoWaitDone")
     m.autoArmed = false
 
     m.trailerFor = ""
@@ -112,34 +156,111 @@ function autoPlayOn() as boolean
     return p.autoPlayTitle <> false
 end function
 
-' Start (or restart) the wait for the title in the Hero.
+' Start (or restart) the wait for the title in the Hero. The quiet part of
+' the wait runs on autoTimer; its last autoCountSeconds show the Countdown.
 sub autoPlayArm()
-    m.autoTimer.control = "stop"
-    m.autoArmed = false
+    autoPlayDisarm()
+    m.autoRearm = false
     if not autoPlayOn() or not m.top.visible then return
     m.autoArmed = true
     secs = th().autoPlaySeconds
     if m.autoSeconds <> invalid then secs = m.autoSeconds
-    m.autoTimer.duration = secs
-    m.autoTimer.control = "start"
+    quiet = secs - th().autoCountSeconds
+    if quiet > 0
+        m.autoTimer.duration = quiet
+        m.autoTimer.control = "start"
+    else
+        countdownShow(secs, false)
+    end if
 end sub
 
-' A key was pressed: wait the full time again, unless a trailer is playing
-' (then the title starts when it ends).
+sub onAutoWaitDone()
+    if not m.autoArmed or not m.top.visible then return
+    countdownShow(th().autoCountSeconds, false)
+end sub
+
+' A key was pressed: wait the full time again. While a trailer is playing
+' the title starts when it ends, so a press only matters during its
+' Countdown: that one is called off and the full wait starts after the
+' trailer.
 sub autoPlayNudge()
-    if m.autoArmed and not m.trailerPlaying then autoPlayArm()
+    if not m.autoArmed then return
+    if not m.trailerPlaying
+        autoPlayArm()
+    else if m.counting
+        autoPlayDisarm()
+        m.autoRearm = true
+    end if
 end sub
 
 sub autoPlayDisarm()
     m.autoArmed = false
     if m.autoTimer <> invalid then m.autoTimer.control = "stop"
+    countdownHide()
 end sub
 
 sub autoPlayFire()
     if not m.autoArmed then return
     m.autoArmed = false
+    countdownHide()
     if not m.top.visible then return
     autoPlayStart()
+end sub
+
+' ---------- Auto-play Countdown ----------
+
+' Show "Starting in N" with the bar filling over N seconds. byTrailer: the
+' trailer's end starts the title, so the ticks only count down.
+sub countdownShow(secs as integer, byTrailer as boolean)
+    if secs < 1 then secs = 1
+    m.counting = true
+    m.countByTrailer = byTrailer
+    m.countLeft = secs
+    paintCountdown()
+    m.countFill.width = 0
+    m.countAnim.duration = secs
+    m.countAnim.control = "start"
+    m.countPill.visible = true
+    m.trailerHint.visible = false
+    m.countTick.control = "start"
+    print "[Matinee] auto-play: starting in "; secs
+end sub
+
+sub countdownHide()
+    if m.countTick = invalid then return
+    m.countTick.control = "stop"
+    m.countAnim.control = "stop"
+    m.countPill.visible = false
+    if m.counting and m.trailerPlaying then m.trailerHint.visible = true
+    m.counting = false
+end sub
+
+sub paintCountdown()
+    m.countText.text = "Starting in " + m.countLeft.ToStr()
+end sub
+
+sub onCountTick()
+    if not m.counting then return
+    m.countLeft = m.countLeft - 1
+    if m.countByTrailer
+        if m.countLeft < 1 then m.countLeft = 1
+        paintCountdown()
+    else if m.countLeft <= 0
+        autoPlayFire()
+    else
+        paintCountdown()
+    end if
+end sub
+
+' Over a playing trailer, its last seconds show the Countdown too.
+sub onTrailerPosition()
+    if not m.autoArmed or not m.trailerPlaying or m.counting then return
+    dur = m.trailerVideo.duration
+    if dur <= 0 then return
+    remain = dur - m.trailerVideo.position
+    if remain > th().autoCountSeconds or remain <= 0 then return
+    secs = Int(remain + 0.5)
+    countdownShow(secs, true)
 end sub
 
 ' Start the countdown for a Card. Episodes use their show's trailer.
@@ -158,6 +279,7 @@ end sub
 sub trailerScheduleId(id as string)
     trailerStop()
     m.trailerWant = id
+    m.autoRearm = false
     if id = "" or not m.top.visible then return
     m.trailerFor = id
     m.trailerTimer.control = "start"
@@ -240,15 +362,20 @@ sub onTrailerState()
         if m.trailerTry = "direct"
             playTrailer("hls")
         else
-            armed = m.autoArmed
+            again = m.autoArmed or m.autoRearm
             trailerStop()
-            if armed then autoPlayArm()
+            if again then autoPlayArm()
         end if
     else if st = "finished"
         armed = m.autoArmed
+        rearm = m.autoRearm
         trailerStop()
-        m.autoArmed = armed
-        autoPlayFire()
+        if armed
+            m.autoArmed = true
+            autoPlayFire()
+        else if rearm
+            autoPlayArm()
+        end if
     end if
 end sub
 
