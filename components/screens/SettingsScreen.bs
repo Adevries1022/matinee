@@ -1,6 +1,6 @@
 ' Settings (the Servers & services board). The section list on the left;
 ' Themes opens its own screen. Servers & services lists Jellyfin, Seerr,
-' Radarr and Sonarr with a detail panel: address, API key or sign-in, four
+' and Radarr and Sonarr once needed (see serviceNames) with a detail panel: address, API key or sign-in, four
 ' option tiles, Test connection and Save. Only an Administrator can change
 ' the services; everyone can change their own Playback and Subtitles.
 ' Zones: back, nav, list (services), detail (services), rows (other sections).
@@ -21,6 +21,8 @@ sub init()
     m.navIndex = 0
     m.zone = "nav"
     m.svcIndex = 0
+    m.svcCount = 2
+    m.arrByHand = false
     m.detailSvc = 0
     m.detailIndex = 0
     m.rowIndex = 0
@@ -105,8 +107,17 @@ end sub
 
 ' ---------- Servers & services ----------
 
+' Radarr and Sonarr stay out of the list until they're saved on this TV,
+' while Seerr is signed in: "Set up from Seerr" adds them, and My Requests
+' shows download progress without them. They're listed for typing in by
+' hand when Seerr isn't signed in or couldn't set them up.
 function serviceNames() as object
-    return ["jellyfin", "seerr", "radarr", "sonarr"]
+    names = ["jellyfin", "seerr"]
+    for each n in ["radarr", "sonarr"]
+        saved = readSetting(n + "Url") <> "" or readSetting(n + "Key") <> ""
+        if saved or m.arrByHand = true or m.global.seerrState <> "ready" then names.Push(n)
+    end for
+    return names
 end function
 
 sub loadDrafts()
@@ -287,6 +298,9 @@ sub renderServices()
     t = th()
     c = m.content
     names = serviceNames()
+    m.svcCount = names.Count()
+    if m.svcIndex > m.svcCount then m.svcIndex = m.svcCount
+    if m.detailSvc >= m.svcCount then m.detailSvc = 0
     listX = 500
     h = makeLabel(c, "Connected services", 28, "semibold", t.text)
     h.translation = [listX, 150]
@@ -451,7 +465,7 @@ sub paintServices()
             row.monoBg.blendColor = t.raised
         end if
     end for
-    m.addRing.visible = (m.zone = "list" and m.svcIndex = 4)
+    m.addRing.visible = (m.zone = "list" and m.svcIndex = m.svcCount)
     for i = 0 to m.detailItems.Count() - 1
         it = m.detailItems[i]
         focused = (m.zone = "detail" and i = m.detailIndex)
@@ -766,6 +780,8 @@ sub arrSetupDone(n as string, url as string)
     else
         setMessage("Couldn" + Chr(8217) + "t reach Radarr or Sonarr from this TV. Enter them by hand.", t.warn)
     end if
+    ' List any that couldn't be set up, so they can be typed in.
+    if su.failed.Count() > 0 then m.arrByHand = true
     m.global.servicesVersion = m.global.servicesVersion + 1
     loadDrafts()
     startChecks()
@@ -1070,11 +1086,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
             if m.svcIndex > 0 then m.svcIndex = m.svcIndex - 1
             refreshDetail()
         else if key = "down"
-            if m.svcIndex < 4 then m.svcIndex = m.svcIndex + 1
+            if m.svcIndex < m.svcCount then m.svcIndex = m.svcIndex + 1
             refreshDetail()
         else if key = "OK" or key = "right"
             flushDetail()
-            if m.svcIndex = 4
+            if m.svcIndex = m.svcCount
                 if key = "OK" then addServer()
             else
                 m.zone = "detail"

@@ -170,7 +170,7 @@ The screen for a User's own choices and for the settings that belong to the whol
 _Avoid_: Preferences, options, admin page
 
 **Servers & services**:
-The section of Settings for Jellyfin, Seerr, Radarr and Sonarr on this TV. Anyone can view it; only Administrators can change the services.
+The section of Settings for Jellyfin, Seerr, Radarr and Sonarr on this TV. While Seerr is signed in, Radarr and Sonarr are listed only once they're set up. Anyone can view it; only Administrators can change the services.
 _Avoid_: Connections, admin page
 
 **Connect**:
