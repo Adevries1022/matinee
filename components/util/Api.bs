@@ -226,6 +226,8 @@ function themeTokens(prefs as object) as object
     t.trailerX = 320
     t.trailerY = 0
     t.trailerFeatherX = 320
+    ' Auto-play: seconds on a title with no Trailer Preview before it starts.
+    t.autoPlaySeconds = 10
     t.trailerFeatherY = 160
     t.detailLogoW = 600
     t.detailLogoH = 116

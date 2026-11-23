@@ -79,6 +79,9 @@ sub buildHero()
     m.bottomInterp = m.rowsSlide.CreateChild("Vector2DFieldInterpolator")
     m.bottomInterp.key = [0.0, 1.0]
     m.bottomInterp.fieldToInterp = "heroBottom.translation"
+    m.textInterp = m.rowsSlide.CreateChild("Vector2DFieldInterpolator")
+    m.textInterp.key = [0.0, 1.0]
+    m.textInterp.fieldToInterp = "heroText.translation"
     m.rowsLow = true
     ' The Trailer Preview sits just above the backdrop, under the Hero's fades.
     setupTrailer(layer, 1, [t.trailerX, t.trailerY, t.trailerW, t.trailerH], m.heroArt, m.chrome)
@@ -91,31 +94,37 @@ sub buildHero()
     interp.keyValue = [0.0, 1.0]
     interp.fieldToInterp = "heroArt.opacity"
 
+    ' The title, details and buttons. While the Rows are low they sit at the
+    ' bottom left, just above the Rows; they rise with the Rows.
+    m.heroText = layer.CreateChild("Group")
+    m.heroText.id = "heroText"
+    m.heroText.translation = [0, t.rowsPeek - t.rowsTop]
+    tx = m.heroText
     x = t.leftPad
-    m.heroEyebrow = makeLabel(layer, "", 18, "semibold", t.accent)
+    m.heroEyebrow = makeLabel(tx, "", 18, "semibold", t.accent)
     m.heroEyebrow.translation = [x, 196]
     m.heroEyebrow.height = 22
     m.heroEyebrow.vertAlign = "center"
-    m.heroTitle = makeLabel(layer, "", 104, "display", t.text)
+    m.heroTitle = makeLabel(tx, "", 104, "display", t.text)
     m.heroTitle.translation = [x, 228]
     m.heroTitle.width = 1200
     m.heroTitle.height = 116
     m.heroTitle.vertAlign = "center"
     m.heroLogoBox = [x, 226, t.heroLogoW, t.heroLogoH]
-    m.heroLogo = makeLogo(layer)
+    m.heroLogo = makeLogo(tx)
     m.heroLogo.observeField("loadStatus", "onHeroLogoStatus")
-    m.heroMetaHost = layer.CreateChild("Group")
+    m.heroMetaHost = tx.CreateChild("Group")
     m.heroMetaHost.translation = [x, 360]
-    m.heroBlurb = makeLabel(layer, "", 26, "regular", t.soft)
+    m.heroBlurb = makeLabel(tx, "", 26, "regular", t.soft)
     m.heroBlurb.translation = [x, 410]
     m.heroBlurb.width = 720
     m.heroBlurb.wrap = true
     m.heroBlurb.maxLines = 2
     m.heroBlurb.lineSpacing = 8
 
-    m.btnPlay = makeBtn(layer, { kind: "primary", icon: "play", text: "Play", padX: 40 })
-    m.btnDetails = makeBtn(layer, { kind: "secondary", icon: "info", text: "Details" })
-    m.btnList = makeBtn(layer, { kind: "square", icon: "plus", iconSize: 28 })
+    m.btnPlay = makeBtn(tx, { kind: "primary", icon: "play", text: "Play", padX: 40 })
+    m.btnDetails = makeBtn(tx, { kind: "secondary", icon: "info", text: "Details" })
+    m.btnList = makeBtn(tx, { kind: "square", icon: "plus", iconSize: 28 })
     m.buttons = [m.btnPlay, m.btnDetails, m.btnList]
     rowBtns(m.buttons, x, 516, 20)
 
@@ -178,6 +187,7 @@ sub applyHero()
     paintListButton()
 
     if trailersOn() then trailerSchedule(c)
+    if c.itemType <> "download" then autoPlayArm()
     if c.backdropUrl <> m.heroArt.uri
         m.heroArt.opacity = 0
         m.heroArt.uri = c.backdropUrl
@@ -386,6 +396,7 @@ sub onRowData(event as object)
             items = res.data.records
         end if
     end if
+    if not res.ok then print "[Matinee] row "; m.rowDefs[i].title; " failed, HTTP "; res.code
     m.rowResults[i] = items
     m.pending = m.pending - 1
     if m.pending <= 0 then buildRows()
@@ -591,6 +602,7 @@ sub slideRows(low as boolean)
     m.rowsSlide.control = "stop"
     m.rowsInterp.keyValue = [[x, fromY], [x, toY]]
     m.bottomInterp.keyValue = [[0, fromY - t.rowsTop], [0, toY - t.rowsTop]]
+    m.textInterp.keyValue = m.bottomInterp.keyValue
     m.rowsSlide.control = "start"
 end sub
 
@@ -623,7 +635,18 @@ sub onRefresh()
     end if
 end sub
 
+' Auto-play's time is up: start the title in the Hero, unless the Rail or
+' the server pill and avatar have focus.
+sub autoPlayStart()
+    c = m.heroItem
+    if c = invalid or menuIsOpen() or m.zone = "badges" then return
+    if c.itemType = "download" then return
+    print "[Matinee] auto-play: starting "; c.heading
+    heroButton(0)
+end sub
+
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press then autoPlayNudge()
     if not press or menuIsOpen() then return false
     if key = "play"
         if toggleTrailerSound() then return true

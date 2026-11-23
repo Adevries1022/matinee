@@ -63,6 +63,10 @@ _Avoid_: Film library
 A title's IMDb and Rotten Tomatoes scores in its meta line, with TMDB's score when neither is known.
 _Avoid_: Reviews, stars
 
+**Auto-play**:
+Staying on a title in the Hero until its Trailer Preview ends, or for 10 seconds when it has none, opens the player and starts it. Any key press restarts the wait.
+_Avoid_: Autoplay next (that's the next episode, in the player)
+
 **Trailer Preview**:
 A title's trailer, stored on the server, playing large behind the Hero text, shifted right so more of it shows, with its edges fading into the screen, after its Card has been Focused for a few seconds. It has sound unless Trailer sound is off, and the header fades out while it plays.
 _Avoid_: Autoplay, preview video

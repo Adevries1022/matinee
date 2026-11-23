@@ -6,6 +6,13 @@
 ' stored on the server are used (for example ones downloaded by Trailarr).
 ' Play toggles the sound. Moving focus or leaving the screen stops it, and
 ' Trailer previews in Playback & quality turns it off.
+'
+' Auto-play: staying on a title opens the player and starts it, like the
+' streaming services: when its Trailer Preview ends, or after
+' autoPlaySeconds when there's no trailer. Any key press restarts the
+' wait; moving to another title or leaving the screen cancels it. "Start
+' a title you stay on" in Playback & quality turns it off. The screen
+' defines autoPlayStart().
 
 ' area: [x, y, w, h] where the trailer plays; its left, top and bottom edges
 ' fade into the background. backdrop: the Hero artwork (with an id), faded
@@ -82,12 +89,53 @@ sub setupTrailer(layer as object, insertIndex as integer, area as object, backdr
     m.trailerTimer.repeat = false
     m.trailerTimer.observeField("fire", "trailerFetch")
 
+    m.autoTimer = layer.CreateChild("Timer")
+    m.autoTimer.repeat = false
+    m.autoTimer.observeField("fire", "autoPlayFire")
+    m.autoArmed = false
+
     m.trailerFor = ""
     m.trailerWant = ""
     m.trailerItem = invalid
     m.trailerTry = ""
     m.trailerPlaying = false
     m.top.observeField("visible", "onTrailerScreenVisible")
+end sub
+
+' ---------- Auto-play ----------
+
+function autoPlayOn() as boolean
+    p = m.global.prefs
+    if p = invalid then return true
+    return p.autoPlayTitle <> false
+end function
+
+' Start (or restart) the wait for the title in the Hero.
+sub autoPlayArm()
+    m.autoTimer.control = "stop"
+    m.autoArmed = false
+    if not autoPlayOn() or not m.top.visible then return
+    m.autoArmed = true
+    m.autoTimer.duration = th().autoPlaySeconds
+    m.autoTimer.control = "start"
+end sub
+
+' A key was pressed: wait the full time again, unless a trailer is playing
+' (then the title starts when it ends).
+sub autoPlayNudge()
+    if m.autoArmed and not m.trailerPlaying then autoPlayArm()
+end sub
+
+sub autoPlayDisarm()
+    m.autoArmed = false
+    if m.autoTimer <> invalid then m.autoTimer.control = "stop"
+end sub
+
+sub autoPlayFire()
+    if not m.autoArmed then return
+    m.autoArmed = false
+    if not m.top.visible then return
+    autoPlayStart()
 end sub
 
 ' Start the countdown for a Card. Episodes use their show's trailer.
@@ -180,21 +228,29 @@ sub onTrailerState()
             m.trailerHint.visible = true
             m.trailerFade.control = "start"
             trailerHideChrome()
+            ' The title starts when the trailer ends instead.
+            m.autoTimer.control = "stop"
         end if
     else if st = "error"
         print "[Matinee] trailer: playback error: "; m.trailerVideo.errorMsg
         if m.trailerTry = "direct"
             playTrailer("hls")
         else
+            armed = m.autoArmed
             trailerStop()
+            if armed then autoPlayArm()
         end if
     else if st = "finished"
+        armed = m.autoArmed
         trailerStop()
+        m.autoArmed = armed
+        autoPlayFire()
     end if
 end sub
 
 sub trailerStop()
     if m.trailerTimer = invalid then return
+    autoPlayDisarm()
     m.trailerTimer.control = "stop"
     m.trailerFor = ""
     m.trailerItem = invalid
