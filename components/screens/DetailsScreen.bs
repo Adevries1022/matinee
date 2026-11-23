@@ -533,7 +533,10 @@ end sub
 sub reloadKeepingPlace()
     if m.cards.content <> invalid
         f = m.cards.rowItemFocused
-        if f <> invalid then m.restoreCard = f[1]
+        ' Before the Cards have had focus this can be an empty array.
+        if f <> invalid
+            if f.Count() > 1 and f[1] <> invalid then m.restoreCard = f[1]
+        end if
     end if
     load()
 end sub
