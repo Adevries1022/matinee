@@ -37,7 +37,11 @@ sub init()
     m.holdTimer.observeField("fire", "onHold")
     m.scrubLevel = 0
     m.scrubDir = 0
+    m.scrubByHold = false
+    m.scrubTicks = 0
+    m.scrubWasPlaying = false
     m.holdKey = ""
+    m.trick = invalid
     m.top.observeField("focusedChild", "onFocusChanged")
 
     m.di = CreateObject("roDeviceInfo")
@@ -104,7 +108,8 @@ sub start()
     if m.isRestart
         requestPlayback()
     else
-        apiRequest("/Items/" + m.itemId, { "userId": m.global.userId }, "onItem")
+        m.trick = invalid
+        apiRequest("/Items/" + m.itemId, { "userId": m.global.userId, "Fields": "Trickplay" }, "onItem")
     end if
 end sub
 
@@ -115,6 +120,7 @@ sub onItem(event as object)
         return
     end if
     m.item = res.data
+    readTrickplay(m.item)
     setHeader()
     refreshNextUi()
     ' Intro and Outro times, from Jellyfin's media segments (Intro Skipper).
@@ -160,6 +166,75 @@ sub onNextEp(event as object)
         if safeStr(items[i].Id) = m.itemId then m.nextEp = items[i + 1]
     end for
     refreshNextUi()
+end sub
+
+' Jellyfin's trickplay images (10.9 and newer, when the library has them):
+' sheets of small pictures taken every Interval ms, TileWidth across and
+' TileHeight down. Takes the size nearest 320 px wide.
+sub readTrickplay(item as object)
+    m.trick = invalid
+    tp = item.Trickplay
+    if not isValid(tp) or type(tp) <> "roAssociativeArray" then return
+    for each sourceId in tp
+        sizes = tp[sourceId]
+        if type(sizes) = "roAssociativeArray"
+            best = invalid
+            for each w in sizes
+                info = sizes[w]
+                if best = invalid or Abs(safeInt(info.Width) - 320) < Abs(safeInt(best.Width) - 320) then best = info
+            end for
+            if best <> invalid and safeInt(best.Width) > 0 and safeInt(best.Interval) > 0
+                m.trick = { sourceId: sourceId, w: safeInt(best.Width), h: safeInt(best.Height), cols: safeInt(best.TileWidth), rows: safeInt(best.TileHeight), count: safeInt(best.ThumbnailCount), interval: safeInt(best.Interval), tile: -1 }
+                if m.trick.cols < 1 then m.trick.cols = 1
+                if m.trick.rows < 1 then m.trick.rows = 1
+                print "[Matinee] trickplay: "; m.trick.count; " pictures at "; m.trick.w; " px"
+                return
+            end if
+        end if
+    end for
+end sub
+
+' The picture at seconds, above the seek bar at x.
+sub paintTrick(seconds as float, x as integer)
+    tr = m.trick
+    show = tr <> invalid and m.seekTarget >= 0 and m.osd.visible
+    m.trickWrap.visible = show
+    if not show
+        m.scrubLabel.translation = [0, m.barY - 80]
+        return
+    end if
+    n = Int(seconds * 1000 / tr.interval)
+    if n >= tr.count then n = tr.count - 1
+    if n < 0 then n = 0
+    perTile = tr.cols * tr.rows
+    tile = n \ perTile
+    k = n mod perTile
+    ' Shown 320 px wide, in the pictures' own shape.
+    dw = 320
+    dh = Int(320 * tr.h / tr.w)
+    if tile <> tr.tile
+        tr.tile = tile
+        ' A whole sheet is loaded at most 2048 px wide, to keep memory low.
+        sheetW = tr.cols * dw
+        sheetH = tr.rows * dh
+        s = 1.0
+        if sheetW > 2048 then s = 2048 / sheetW
+        m.trickSheet.width = sheetW
+        m.trickSheet.height = sheetH
+        m.trickSheet.loadWidth = Int(sheetW * s)
+        m.trickSheet.loadHeight = Int(sheetH * s)
+        m.trickSheet.uri = m.global.serverUrl + "/Videos/" + m.itemId + "/Trickplay/" + tr.w.ToStr() + "/" + tile.ToStr() + ".jpg?MediaSourceId=" + tr.sourceId + "&api_key=" + m.global.token
+    end if
+    m.trickSheet.translation = [-(k mod tr.cols) * dw, -(k \ tr.cols) * dh]
+    gx = x - dw \ 2
+    if gx < 80 then gx = 80
+    if gx > 1920 - 80 - dw then gx = 1920 - 80 - dw
+    m.trickWrap.translation = [gx, m.barY - 40 - dh]
+    m.trickFrame.translation = [-4, -4]
+    m.trickFrame.width = dw + 8
+    m.trickFrame.height = dh + 8
+    m.trickGroup.clippingRect = [0, 0, dw, dh]
+    m.scrubLabel.translation = [0, m.barY - 40 - dh - 52]
 end sub
 
 sub onSegments(event as object)
@@ -527,6 +602,14 @@ sub buildOsd()
     m.scrubLabel.width = 1920
     m.scrubLabel.horizAlign = "center"
     m.scrubLabel.visible = false
+    ' The trickplay picture over the seek bar while seeking: a frame, and a
+    ' clipped window onto one sheet of pictures (see paintTrick).
+    m.trickWrap = o.CreateChild("Group")
+    m.trickWrap.visible = false
+    m.trickFrame = makeBox(m.trickWrap, 328, 188, 12, t.white)
+    m.trickGroup = m.trickWrap.CreateChild("Group")
+    m.trickSheet = m.trickGroup.CreateChild("Poster")
+    m.trickSheet.loadDisplayMode = "scaleToFill"
     m.thumbRing = makeShape(o, "pkg:/images/circle.png", 40, 40, t.accent)
     m.thumb = makeShape(o, "pkg:/images/circle.png", 28, 28, t.white)
     m.barY = barY
@@ -676,6 +759,7 @@ sub updateBar()
     tx = m.barX + Int(m.barW * frac)
     m.thumb.translation = [tx - 14, m.barY - 14]
     m.thumbRing.translation = [tx - 20, m.barY - 20]
+    paintTrick(curPos, tx)
     m.elapsed.text = formatClock(Int(curPos))
     remain = Int(dur - curPos)
     if remain < 0 then remain = 0
@@ -748,8 +832,17 @@ function scrubSpeeds() as object
     return [30, 90, 240]
 end function
 
-sub startScrub(dirn as integer)
+' byHold: started by holding Left or Right, so it speeds up on its own the
+' longer the key is held (2x after 2 s, 3x after 5 s).
+sub startScrub(dirn as integer, byHold = false as boolean)
     if not m.started then return
+    if m.scrubLevel = 0
+        ' The picture holds still while scrubbing, as on the streaming services.
+        m.scrubWasPlaying = (m.video.state = "playing")
+        if m.scrubWasPlaying then m.video.control = "pause"
+    end if
+    m.scrubByHold = byHold
+    m.scrubTicks = 0
     if m.scrubLevel > 0 and m.scrubDir = dirn
         if m.scrubLevel < scrubSpeeds().Count() then m.scrubLevel = m.scrubLevel + 1
     else
@@ -766,6 +859,14 @@ end sub
 
 sub scrubStep()
     if m.scrubLevel <= 0 then return
+    if m.scrubByHold
+        m.scrubTicks = m.scrubTicks + 1
+        was = m.scrubLevel
+        m.scrubLevel = 1
+        if m.scrubTicks >= 8 then m.scrubLevel = 2
+        if m.scrubTicks >= 20 then m.scrubLevel = 3
+        if m.scrubLevel <> was then paintScrub()
+    end if
     rate = scrubSpeeds()[m.scrubLevel - 1] * 0.25
     target = m.seekTarget + m.scrubDir * rate
     if target < 0 then target = 0
@@ -788,14 +889,16 @@ sub stopScrub(commit as boolean)
         if m.video.state = "paused" then m.video.control = "resume"
     else
         m.seekTarget = -1
+        if m.scrubWasPlaying then m.video.control = "resume"
     end if
+    m.scrubByHold = false
     paintOsd()
     restartHideTimer()
 end sub
 
 sub onHold()
-    if m.holdKey = "left" then startScrub(-1)
-    if m.holdKey = "right" then startScrub(1)
+    if m.holdKey = "left" then startScrub(-1, true)
+    if m.holdKey = "right" then startScrub(1, true)
 end sub
 
 sub paintScrub()
@@ -1136,6 +1239,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
         return false
     end if
+    ' A held key repeats its press; the hold (and its scrub) carries on.
+    if (key = "left" or key = "right") and key = m.holdKey and not m.pickerOpen then return true
     if m.scrubLevel > 0 and not m.pickerOpen
         if key = "fastforward"
             startScrub(1)

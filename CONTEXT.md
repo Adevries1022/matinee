@@ -102,8 +102,12 @@ The button that shows while playback is inside a title's Intro, as marked by the
 _Avoid_: Skip opening, skip credits
 
 **Scrubbing**:
-Moving through a title fast in the Player OSD: Fast-forward or Rewind starts it and pressing again goes faster (three speeds); holding Left or Right does it until let go. OK or Play jumps to the spot; Back cancels.
+Moving through a title fast in the Player OSD, with the picture paused: Fast-forward or Rewind starts it and pressing again goes faster (three speeds); holding Left or Right does it until let go, speeding up the longer it's held (2x after 2 seconds, 3x after 5). A Trickplay Preview shows where it will land. Letting go, OK or Play jumps to the spot; Back cancels.
 _Avoid_: Trickplay, seeking (one 10-second jump)
+
+**Trickplay Preview**:
+The small picture over the seek bar while seeking or Scrubbing, from the thumbnails Jellyfin makes when trickplay image extraction is on for a library.
+_Avoid_: Thumbnail scrubbing, BIF
 
 **Track Picker**:
 The panel during playback for choosing subtitles or the audio track.
