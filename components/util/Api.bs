@@ -241,6 +241,11 @@ function themeTokens(prefs as object) as object
     t.trailerFeatherX = 320
     ' Auto-play: seconds on a title with no Trailer Preview before it starts.
     t.autoPlaySeconds = 10
+    ' ...and on a title the User is watching, which resumes (or starts the
+    ' next episode) instead of showing a trailer.
+    t.autoResumeSeconds = 8
+    ' Seconds a title is Focused before its Trailer Preview starts.
+    t.trailerDelaySeconds = 5
     t.trailerFeatherY = 160
     t.detailLogoW = 600
     t.detailLogoH = 116
@@ -647,6 +652,15 @@ function itemToContent(item as object, landscape as boolean, rowKind = "" as str
         c.resumeSeconds = ticksToSeconds(ud.PlaybackPositionTicks)
         c.played = isTrue(ud.Played)
         c.favorite = isTrue(ud.IsFavorite)
+        if c.itemType = "Series"
+            ' Some episodes watched, but not all (needs RecursiveItemCount).
+            unplayed = safeInt(ud.UnplayedItemCount)
+            c.watching = unplayed > 0 and safeInt(item.RecursiveItemCount) > unplayed
+        else if c.itemType = "Episode"
+            c.watching = c.resumeSeconds > 0 or not c.played
+        else
+            c.watching = c.resumeSeconds > 0
+        end if
     end if
     return c
 end function

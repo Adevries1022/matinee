@@ -186,7 +186,15 @@ sub applyHero()
     end if
     paintListButton()
 
-    if trailersOn() then trailerSchedule(c)
+    ' A title the User is watching skips its trailer: staying on it resumes
+    ' it (or starts the next episode) sooner instead.
+    m.autoSeconds = th().autoPlaySeconds
+    if c.watching
+        trailerSchedule(invalid)
+        m.autoSeconds = th().autoResumeSeconds
+    else if trailersOn()
+        trailerSchedule(c)
+    end if
     if c.itemType <> "download" then autoPlayArm()
     if c.backdropUrl <> m.heroArt.uri
         m.heroArt.opacity = 0
@@ -300,7 +308,7 @@ sub onViews(event as object)
 end sub
 
 function baseQuery(extra as object) as object
-    q = { "userId": m.global.userId, "Fields": "Overview,Genres,ChildCount,ProviderIds", "EnableTotalRecordCount": "false", "Limit": "24" }
+    q = { "userId": m.global.userId, "Fields": "Overview,Genres,ChildCount,ProviderIds,RecursiveItemCount", "EnableTotalRecordCount": "false", "Limit": "24" }
     q.Append(extra)
     return q
 end function

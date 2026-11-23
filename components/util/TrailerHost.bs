@@ -9,10 +9,12 @@
 '
 ' Auto-play: staying on a title opens the player and starts it, like the
 ' streaming services: when its Trailer Preview ends, or after
-' autoPlaySeconds when there's no trailer. Any key press restarts the
-' wait; moving to another title or leaving the screen cancels it. "Start
-' a title you stay on" in Playback & quality turns it off. The screen
-' defines autoPlayStart().
+' autoPlaySeconds when there's no trailer. The screen can set m.autoSeconds
+' for a different wait (titles the User is watching skip the trailer and
+' use autoResumeSeconds). Any key press restarts the wait; moving to
+' another title or leaving the screen cancels it. "Start a title you stay
+' on" in Playback & quality turns it off. The screen defines
+' autoPlayStart().
 
 ' area: [x, y, w, h] where the trailer plays; its left, top and bottom edges
 ' fade into the background. backdrop: the Hero artwork (with an id), faded
@@ -85,7 +87,7 @@ sub setupTrailer(layer as object, insertIndex as integer, area as object, backdr
     ci.fieldToInterp = chrome.id + ".opacity"
 
     m.trailerTimer = layer.CreateChild("Timer")
-    m.trailerTimer.duration = 3
+    m.trailerTimer.duration = th().trailerDelaySeconds
     m.trailerTimer.repeat = false
     m.trailerTimer.observeField("fire", "trailerFetch")
 
@@ -116,7 +118,9 @@ sub autoPlayArm()
     m.autoArmed = false
     if not autoPlayOn() or not m.top.visible then return
     m.autoArmed = true
-    m.autoTimer.duration = th().autoPlaySeconds
+    secs = th().autoPlaySeconds
+    if m.autoSeconds <> invalid then secs = m.autoSeconds
+    m.autoTimer.duration = secs
     m.autoTimer.control = "start"
 end sub
 

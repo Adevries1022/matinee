@@ -23,6 +23,9 @@
     <field id="cardW" type="integer" />
     <field id="cardH" type="integer" />
     <field id="played" type="boolean" />
+    <!-- The User is partway through it: a movie or episode with a resume
+         point, an unwatched episode, or a show with some episodes watched. -->
+    <field id="watching" type="boolean" />
     <field id="favorite" type="boolean" />
     <!-- Episode Cards: title and description under the artwork, not over it. -->
     <field id="textBelow" type="boolean" />

@@ -64,11 +64,15 @@ A title's IMDb and Rotten Tomatoes scores in its meta line, with TMDB's score wh
 _Avoid_: Reviews, stars
 
 **Auto-play**:
-Staying on a title in the Hero until its Trailer Preview ends, or for 10 seconds when it has none, opens the player and starts it. Any key press restarts the wait.
+Staying on a title in the Hero until its Trailer Preview ends, or for 10 seconds when it has none, opens the player and starts it. A title the User is Watching skips its Trailer Preview: after 8 seconds it resumes, or starts the next episode. Any key press restarts the wait.
 _Avoid_: Autoplay next (that's the next episode, in the player)
 
+**Watching**:
+A title the User is partway through: a movie or episode with a resume point, an unwatched episode, or a show with some but not all episodes watched.
+_Avoid_: In progress, started
+
 **Trailer Preview**:
-A title's trailer, stored on the server, playing large behind the Hero text, shifted right so more of it shows, with its edges fading into the screen, after its Card has been Focused for a few seconds. It has sound unless Trailer sound is off, and the header fades out while it plays.
+A title's trailer, stored on the server, playing large behind the Hero text, shifted right so more of it shows, with its edges fading into the screen, after its Card has been Focused for 5 seconds. It has sound unless Trailer sound is off, and the header fades out while it plays.
 _Avoid_: Autoplay, preview video
 
 **Continue Watching**:
