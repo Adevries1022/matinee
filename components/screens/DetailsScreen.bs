@@ -516,8 +516,10 @@ sub doButton()
         setFavorite(safeStr(m.item.Id), m.favorite)
         if m.favorite
             setBtnIcon(m.buttons[m.btnIndex], "mylist_on")
+            showToast("Added to My List", "mylist_on")
         else
             setBtnIcon(m.buttons[m.btnIndex], "mylist")
+            showToast("Removed from My List", "mylist")
         end if
         m.global.watchVersion = m.global.watchVersion + 1
         m.seenVersion = m.global.watchVersion

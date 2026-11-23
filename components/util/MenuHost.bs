@@ -1,7 +1,7 @@
 ' Shared Rail handling for the browse screens (Home, Series, Movies,
 ' Search, My List, Discover, My requests, Activity). A screen calls setupMenu(key) in
 ' init and defines restoreContentFocus() to put focus back on its content.
-' Left opens the Rail.
+' Left opens the Rail; so does Back on Home, and a second Back exits.
 
 sub setupMenu(currentKey as string)
     m.menuKey = currentKey
@@ -53,7 +53,9 @@ function menuIsOpen() as boolean
     return m.menu.open
 end function
 
-sub openMenu()
+' backExits: Back on Home opened the Rail, so Back again leaves the app.
+sub openMenu(backExits = false as boolean)
+    m.menu.backExits = backExits
     m.menu.open = true
     m.menu.setFocus(true)
 end sub

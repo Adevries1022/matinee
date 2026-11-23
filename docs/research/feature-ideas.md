@@ -34,7 +34,7 @@ The common pattern is **one Options menu per title**, with the same items wherev
 
 ### Ranked fixes
 
-1. **Title Options panel** (M). One small panel with the same actions for any title:
+1. **Title Options panel** (M, done). One small panel with the same actions for any title:
    - Play from the start
    - Mark watched / unwatched
    - Add to / Remove from My List
@@ -45,10 +45,10 @@ The common pattern is **one Options menu per title**, with the same items wherev
 
    APIs: `POST/DELETE /UserPlayedItems/{id}` works on an episode, a season or a show. `/UserFavoriteItems/{id}` handles My List.
 2. **Confirm "Mark the whole show watched"** (S). Marking a show or season watched shows a count first ("Mark 25 episodes watched?"). Marking one episode or movie doesn't ask.
-3. **Feedback for My List and Watched** (S). A short toast ("Added to My List", "Marked watched") that fades after 2 s. Label the Hero's "+" as "My List", like Details.
-4. **Stop relying on \* during playback** (S). Fix the README, and add a one-off tip in the player the first time: "Subtitles: press Down, then choose Subtitles". Keep \* working for Roku sticks, where it does arrive.
-5. **Back on Home opens the Rail first** (S). The first Back opens the Rail with Home Focused, and a second Back exits. This matches Netflix and Max on Roku. It also gives a second route to Search, since the Rail's top icon is Search.
-6. **Switching user takes a deliberate OK** (S). OK on the avatar opens Who's Watching instead of switching. That's one screen, and the person can press Back.
+3. **Feedback for My List and Watched** (S, done). A short toast ("Added to My List", "Marked watched") that fades after 2 s. Label the Hero's "+" as "My List", like Details.
+4. **Stop relying on \* during playback** (S, done). Fix the README, and add a one-off tip in the player the first time: "Subtitles: press Down, then choose Subtitles". Keep \* working for Roku sticks, where it does arrive.
+5. **Back on Home opens the Rail first** (S, done). The first Back opens the Rail with Home Focused, and a second Back exits. This matches Netflix and Max on Roku. It also gives a second route to Search, since the Rail's top icon is Search.
+6. **Switching user takes a deliberate OK** (S, done). OK on the avatar opens Who's Watching instead of switching. That's one screen, and the person can press Back.
 7. **Remove from Continue Watching** (S–M). Jellyfin has no native call for this yet (feature request #517 is "planned"). Two ways to do it:
    - *No plugin:* mark the title unplayed, which clears its resume point. Simple, but it loses the place, so the panel would say "Remove (forgets where you stopped)".
    - *With the DiscontinueWatching plugin* (installed on this server, v0.5.1): `POST /DiscontinueWatching/{itemId}` hides the title without losing the place. Matinee would filter Continue Watching with `GET /DiscontinueWatching`. The plugin documents no un-hide route.

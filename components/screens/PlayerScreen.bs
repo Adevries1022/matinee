@@ -1425,6 +1425,7 @@ sub onState()
         if m.loadStart <> invalid
             print "[Matinee] player: playing after "; m.loadStart.TotalMilliseconds(); " ms at "; m.video.position; " s ("; m.playMethod; ")"
             m.loadStart = invalid
+            subtitlesTip()
         end if
         if m.osd.visible then paintOsd()
         restartHideTimer()
@@ -1440,6 +1441,15 @@ sub onState()
     else if st = "error"
         showStatus("Playback failed: " + safeStr(m.video.errorMsg) + Chr(10) + "Press Back to return.")
     end if
+end sub
+
+' Roku TVs keep * for their own picture and sound menu during video, so
+' the first time a TV plays something, say how to reach subtitles instead.
+sub subtitlesTip()
+    if readSetting("subtitlesTipShown") <> "" then return
+    if CreateObject("roDeviceInfo").GetModelType() <> "TV" then return
+    writeSetting("subtitlesTipShown", "true")
+    showToast("For subtitles, press Down twice, then choose Subtitles", "subtitles", th().tipSeconds)
 end sub
 
 sub reportStopped()

@@ -151,12 +151,14 @@ sub choose()
         end if
         method = "POST"
         if Left(r.id, 9) = "unwatched" then method = "DELETE"
-        m.pending = { itemId: id, what: "played", value: method = "POST" }
+        m.pending = { itemId: id, what: "played", value: method = "POST", icon: "check" }
         apiRequest("/UserPlayedItems/" + id, { "userId": m.global.userId }, "onSaved", method)
         finish({ action: "close" })
     else if r.id = "list" or r.id = "unlist"
         isOn = r.id = "list"
-        m.pending = { itemId: id, what: "favorite", value: isOn }
+        listIcon = "mylist"
+        if isOn then listIcon = "mylist_on"
+        m.pending = { itemId: id, what: "favorite", value: isOn, icon: listIcon }
         setFavorite(id, isOn, "onSaved")
         finish({ action: "close" })
     end if
@@ -167,13 +169,25 @@ sub onSaved(event as object)
     if m.pending = invalid then return
     if not res.ok
         print "[Matinee] title options: saving "; m.pending.what; " failed"
+        showToast("Couldn't save that. Try again.", "close")
+        m.pending = invalid
         return
     end if
     print "[Matinee] title options: "; m.pending.what; " = "; m.pending.value; " for "; m.pending.itemId
+    showToast(savedText(m.pending), m.pending.icon)
     m.global.watchVersion = m.global.watchVersion + 1
     m.top.changed = m.pending
     m.pending = invalid
 end sub
+
+function savedText(p as object) as string
+    if p.what = "favorite"
+        if p.value then return "Added to My List"
+        return "Removed from My List"
+    end if
+    if p.value then return "Marked watched"
+    return "Marked unwatched"
+end function
 
 sub finish(result as object)
     m.top.open = false

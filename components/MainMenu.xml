@@ -8,6 +8,8 @@
     <field id="open" type="boolean" onChange="onOpen" />
     <field id="chosen" type="string" alwaysNotify="true" />
     <field id="closeRequested" type="boolean" alwaysNotify="true" />
+    <!-- True while Back on Home opened the Rail: a second Back exits the app. -->
+    <field id="backExits" type="boolean" value="false" />
   </interface>
   <script type="text/brightscript" uri="MainMenu.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />

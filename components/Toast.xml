@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Toast: a short message at the bottom of the screen ("Added to My List")
+     that fades after a moment. MainScene owns the one Toast; anything else
+     calls showToast() in Api.bs. -->
+<component name="Toast" extends="Group">
+  <interface>
+    <!-- { text, icon, seconds } (seconds 0: th().toastSeconds) -->
+    <field id="show" type="assocarray" alwaysNotify="true" onChange="onShow" />
+  </interface>
+  <script type="text/brightscript" uri="Toast.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <children>
+    <Group id="layer" opacity="0" />
+  </children>
+</component>

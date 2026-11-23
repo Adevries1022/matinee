@@ -1,0 +1,46 @@
+' Toast: see Toast.xml. One fade in, a pause and a fade out, all in a
+' single Animation so it stays light on entry-level TVs.
+
+sub init()
+    m.layer = m.top.findNode("layer")
+    m.anim = m.top.CreateChild("Animation")
+    m.anim.repeat = false
+    fade = m.anim.CreateChild("FloatFieldInterpolator")
+    fade.key = [0.0, 0.08, 0.88, 1.0]
+    fade.keyValue = [0.0, 1.0, 1.0, 0.0]
+    fade.fieldToInterp = "layer.opacity"
+end sub
+
+sub onShow()
+    s = m.top.show
+    if s = invalid then return
+    text = safeStr(s.text)
+    if text = "" then return
+    t = th()
+    p = m.layer
+    p.removeChildrenIndex(p.getChildCount(), 0)
+    icon = safeStr(s.icon)
+    size = 22
+    padX = 36
+    iconW = 0
+    if icon <> "" then iconW = 26 + 14
+    w = padX * 2 + iconW + measureText(text, size, "semibold")
+    h = 64
+    x = Int((1920 - w) / 2)
+    y = 1080 - 80 - h
+    makeBox(p, w, h, 32, t.panel, 0.96).translation = [x, y]
+    tx = x + padX
+    if icon <> ""
+        makeIcon(p, icon, 26, t.accent).translation = [tx, y + 19]
+        tx = tx + iconW
+    end if
+    l = makeLabel(p, text, size, "semibold", t.text)
+    l.translation = [tx, y]
+    l.height = h
+    l.vertAlign = "center"
+    m.anim.control = "stop"
+    m.anim.duration = t.toastSeconds
+    if isValid(s.seconds) and s.seconds > 0 then m.anim.duration = s.seconds
+    m.layer.opacity = 0
+    m.anim.control = "start"
+end sub

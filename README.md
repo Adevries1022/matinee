@@ -21,7 +21,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 - **Home:** a Hero for the title you're on, with Play or Resume, Details and My List. Focus starts on those buttons, at the bottom left, with only the tops of the Rows showing below; press Down to slide the Rows up. Optionally, staying on a title starts it: turn on "Start a title you stay on" in Playback & quality (off by default) and it plays when its trailer ends, or after 12 seconds if it has none, with a "Starting in 5" countdown first. The Rows are for Continue watching, Next up, Recently added, Picked for you and Highly rated.
 - **Series and Movies:** every show or movie from all your libraries, with Rows for what you're watching, what's new, what you haven't watched, and up to 14 genres.
 - **Details:** seasons and episodes for shows, More like this for movies (similar titles from your library, then Seerr's recommendations you can request), and buttons for My List, Start over (a movie you've started), Trailer and More.
-- **Title Options:** hold OK on any title (a Card in a Row, an episode, a search result, My List), or press *, for a short list of actions: Play from the start, Mark watched or unwatched, Add to or Remove from My List, and Go to the show for an episode. More on Details opens the same list for the title on screen. Marking a whole show or season watched asks first.
+- **Title Options:** hold OK on any title (a Card in a Row, an episode, a search result, My List), or press *, for a short list of actions: Play from the start, Mark watched or unwatched, Add to or Remove from My List, and Go to the show for an episode. More on Details opens the same list for the title on screen. Marking a whole show or season watched asks first. A short message at the bottom confirms each change.
 - **Ratings:** the Hero, Details and Discover show IMDb and Rotten Tomatoes scores. Rotten Tomatoes comes from Jellyfin when its OMDb plugin has filled it in; IMDb, and Rotten Tomatoes for series, come from Seerr while you're signed in to it. When neither is known, TMDB's score shows instead.
 - **My List:** your Jellyfin Favorites (movies and shows), so it's the same on every device. Filter by All, In progress or Not started.
 - **Search:** finds titles by name as you type. Up to three Suggestions under the keys finish the title you're typing, and the top one shows faintly in the search field. Pick one to jump to its results. If you're signed in to Seerr, titles you could request follow the matches from your library.
@@ -62,7 +62,8 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 | Home, Series, Movies, Search, My List, Requests, My requests, Activity | Left from the leftmost item | Opens the Rail |
 | Rail | Up / Down, then OK | Goes to that screen |
 | Rail | Right or Back | Closes it |
-| Most screens | Back | Goes back. From Home or Who's watching, exits Matinee |
+| Most screens | Back | Goes back. From Who's watching at start, exits Matinee |
+| Home, on Play, Details and My List | Back | Opens the Rail on Home. Back again exits Matinee |
 
 ### Home, Series and Movies
 | Where | Button | What it does |
@@ -72,7 +73,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 | Details, on a button | * | Opens Title Options for the title |
 | Details, on an episode | Hold OK, or * | Opens Title Options for that episode |
 | First Row | Up | Moves to Play, Details and My List |
-| Play, Details and My List | Up | Moves to the server pill (opens Settings) and your avatar (switches user) |
+| Play, Details and My List | Up | Moves to the server pill (opens Settings) and your avatar (opens Who's watching; Back keeps you signed in) |
 | Any Row or button | Play | Turns a playing Trailer Preview's sound on or off. With none playing, plays the Hero's title |
 | Rows, away from the first Card | Back | Jumps to the first Card |
 
@@ -109,8 +110,8 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 | Seek bar | OK | Pauses or resumes |
 | Controls showing | Up / Down | Moves between the back button, seek bar and buttons |
 | Anywhere | Play/Pause | Pauses or resumes |
-| Anywhere | Rewind / Fast-forward | Back or forward 30 seconds |
-| Anywhere | * | Opens the subtitle choices on a Roku stick or box. Roku TVs keep * for their own picture and sound menu during video, so use Down to the Subtitles button there |
+| Anywhere | Rewind / Fast-forward | Scrubs back or forward. Press again for 2× and 3×; OK jumps there, Back cancels |
+| Anywhere | * | Opens the subtitle choices on a Roku stick or box. Roku TVs keep * for their own picture and sound menu during video, so press Down twice and choose Subtitles there. The first video on a Roku TV says so |
 | Subtitle or audio choices | OK | Chooses |
 | Subtitle or audio choices | Back, Left or * | Closes |
 | Find subtitles | OK on a result | Downloads it and turns it on |

@@ -235,6 +235,9 @@ function themeTokens(prefs as object) as object
     t.scrim = "0x050609FF"
     t.scrimOpacity = 0.6
     t.holdSeconds = 0.6
+    ' A Toast stays this long, fades included.
+    t.toastSeconds = 2.4
+    t.tipSeconds = 6
 
     t.largerText = isTrue(prefs.largerText)
     t.portraitPosters = isTrue(prefs.portraitPosters)
@@ -703,6 +706,12 @@ function itemToContent(item as object, landscape as boolean, rowKind = "" as str
 end function
 
 ' ================= My List (Jellyfin Favorites) =================
+
+' A short message at the bottom of the screen; MainScene draws it (Toast).
+' seconds: 0 for the Theme's usual time.
+sub showToast(text as string, icon = "check" as string, seconds = 0 as float)
+    m.global.toast = { text: text, icon: icon, seconds: seconds }
+end sub
 
 sub setFavorite(itemId as string, isOn as boolean, callback = "onIgnore" as string)
     method = "DELETE"

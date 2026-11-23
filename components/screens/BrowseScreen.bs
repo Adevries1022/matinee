@@ -124,7 +124,7 @@ sub buildHero()
 
     m.btnPlay = makeBtn(tx, { kind: "primary", icon: "play", text: "Play", padX: 40 })
     m.btnDetails = makeBtn(tx, { kind: "secondary", icon: "info", text: "Details" })
-    m.btnList = makeBtn(tx, { kind: "square", icon: "plus", iconSize: 28 })
+    m.btnList = makeBtn(tx, { kind: "secondary", icon: "mylist", text: "My List" })
     m.buttons = [m.btnPlay, m.btnDetails, m.btnList]
     rowBtns(m.buttons, x, 516, 20)
 
@@ -237,9 +237,9 @@ end sub
 
 sub paintListButton()
     if m.heroFavorite
-        setBtnIcon(m.btnList, "check")
+        setBtnIcon(m.btnList, "mylist_on")
     else
-        setBtnIcon(m.btnList, "plus")
+        setBtnIcon(m.btnList, "mylist")
     end if
 end sub
 
@@ -592,6 +592,11 @@ sub heroButton(index as integer)
         if c.itemType <> "Episode" then c.favorite = m.heroFavorite
         setFavorite(target, m.heroFavorite)
         paintListButton()
+        if m.heroFavorite
+            showToast("Added to My List", "mylist_on")
+        else
+            showToast("Removed from My List", "mylist")
+        end if
     end if
 end sub
 
@@ -721,7 +726,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
         else if key = "down"
             setZone("rows")
         else if key = "back"
-            return false
+            ' On Home, Back opens the Rail first; a second Back exits.
+            ' Series and Movies go back to Home.
+            if m.kind <> "" then return false
+            openMenu(true)
         else if key = "up"
             setZone("badges")
         else if key = "OK"

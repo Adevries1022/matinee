@@ -31,6 +31,8 @@ sub init()
     g.addField("seerrUserId", "string", false)
     g.addField("requestsDownloading", "integer", false)
     g.addField("servicesVersion", "integer", false)
+    ' { text, icon } for the Toast; set it with showToast().
+    g.addField("toast", "assocarray", true)
     g.deviceId = di.GetChannelClientId()
     g.watchVersion = 0
     g.prefsVersion = 0
@@ -39,6 +41,10 @@ sub init()
     g.views = []
     g.previewItems = []
     g.trackPrefs = {}
+
+    ' The Toast sits above every screen.
+    m.toast = m.top.CreateChild("Toast")
+    g.observeField("toast", "onToast")
 
     m.downloadWatch = m.top.CreateChild("Timer")
     m.downloadWatch.duration = 60
@@ -61,6 +67,10 @@ sub init()
     else
         showServerPicker("")
     end if
+end sub
+
+sub onToast()
+    m.toast.show = m.global.toast
 end sub
 
 sub onPrefsChanged()
@@ -557,7 +567,8 @@ sub onNavigate(event as object)
     else if a = "signout"
         signOut()
     else if a = "switchUser"
-        showWho("")
+        ' Over the current screen, so Back keeps the User signed in.
+        pushScreen(CreateObject("roSGNode", "WhoScreen"))
     else if a = "changeServer"
         changeServer()
     else if a = "serverChosen"
@@ -619,6 +630,11 @@ end sub
 
 sub onUserChosen(u as object)
     id = safeStr(u.id)
+    ' Picked themself from the avatar: go back to where they were.
+    if id <> "" and id = m.global.userId and m.global.token <> "" and m.stack.Count() > 1
+        popScreen()
+        return
+    end if
     if id <> "" then applyPrefs(readPrefs(id))
     if id <> "" and readSessions().DoesExist(id)
         useSession(id)
