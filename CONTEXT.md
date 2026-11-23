@@ -95,6 +95,10 @@ _Avoid_: Watchlist, bookmarks, queue
 The one place to look up a title by name, both in the library and among titles that can be Requested.
 _Avoid_: Discover search, request search
 
+**Suggestion**:
+A title under the Search keys that finishes what's being typed, taken from the current results. The top one also shows faintly in the query field. Choosing one searches for that title and moves to its results.
+_Avoid_: Autocomplete, hint
+
 ### Playback
 
 **Player OSD**:

@@ -1,6 +1,8 @@
 ' Search (the Search board): a query field with an Accent border, a 6-column
 ' A-Z / 0-9 key grid with Space, Delete and Clear, and results in three
-' columns. With no query it shows "Popular right now". Titles that aren't on
+' columns. Under the keys, up to three Suggestions finish what's being typed
+' (the top one also shows faintly in the field); OK on one searches for it.
+' With no query it shows "Popular right now". Titles that aren't on
 ' the server but can be requested through Seerr come after library matches.
 
 sub init()
@@ -21,6 +23,10 @@ sub init()
     m.queryLabel.width = 430
     m.queryLabel.height = 80
     m.queryLabel.vertAlign = "center"
+    ' The rest of the top Suggestion, faint, right after what's typed.
+    m.ghost = makeLabel(field, "", 30, "medium", t.faint)
+    m.ghost.height = 80
+    m.ghost.vertAlign = "center"
 
     ' Keys: 36 characters in 6 columns, then Space, Delete and Clear.
     m.keys = []
@@ -32,6 +38,23 @@ sub init()
     m.keys.Push(makeKey("Space", "", 168, 160, 708))
     m.keys.Push(makeKey("", "backspace", 168, 336, 708))
     m.keys.Push(makeKey("Clear", "", 168, 512, 708))
+
+    ' Suggestions: up to three titles that finish what's being typed.
+    m.sugRows = []
+    for i = 0 to 2
+        g = m.layer.CreateChild("Group")
+        g.translation = [160, 804 + i * 72]
+        bg = makeBox(g, 520, 60, 12, t.raised)
+        ic = makeIcon(g, "search", 22, t.muted)
+        ic.translation = [20, 19]
+        lbl = makeLabel(g, "", 22, "regular", t.heading)
+        lbl.translation = [56, 0]
+        lbl.width = 444
+        lbl.height = 60
+        lbl.vertAlign = "center"
+        g.visible = false
+        m.sugRows.Push({ group: g, bg: bg, icon: ic, label: lbl })
+    end for
 
     ' Results
     m.heading = makeLabel(m.layer, "Popular right now", 30, "semibold", t.heading)
@@ -63,6 +86,9 @@ sub init()
     m.libItems = []
     m.seerrItems = []
     m.flat = []
+    m.suggestions = []
+    m.sugIndex = 0
+    m.jumpToResults = false
     setupMenu("search")
     showQuery()
     paintKeys()
@@ -117,6 +143,81 @@ sub showQuery()
         m.queryLabel.text = m.query
         m.queryLabel.color = t.text
     end if
+    showGhost()
+end sub
+
+' The top Suggestion's remaining letters, when it starts with the query.
+sub showGhost()
+    m.ghost.text = ""
+    q = m.query
+    if q = "" or m.suggestions.Count() = 0 then return
+    s = m.suggestions[0]
+    if Len(s) <= Len(q) or LCase(Left(s, Len(q))) <> LCase(q) then return
+    x = 70 + measureText(q, 30, "medium")
+    if Right(q, 1) = " " then x = x + measureText("a a", 30, "medium") - measureText("aa", 30, "medium")
+    if x >= 500 then return
+    m.ghost.translation = [x, 0]
+    m.ghost.width = 500 - x
+    m.ghost.text = Mid(s, Len(q) + 1)
+end sub
+
+' Titles from the results that best finish the query: those starting with
+' it first, then those with a word starting with it, then the rest.
+sub makeSuggestions()
+    m.suggestions = []
+    q = LCase(m.searched)
+    if q = "" then return
+    tiers = [[], [], []]
+    seen = {}
+    for each c in m.flat
+        title = safeStr(c.title)
+        low = LCase(title)
+        if title <> "" and low <> q and not seen.DoesExist(low)
+            seen[low] = true
+            if Left(low, Len(q)) = q
+                tiers[0].Push(title)
+            else if Instr(1, " " + low, " " + q) > 0
+                tiers[1].Push(title)
+            else
+                tiers[2].Push(title)
+            end if
+        end if
+    end for
+    for each tier in tiers
+        for each title in tier
+            if m.suggestions.Count() < m.sugRows.Count() then m.suggestions.Push(title)
+        end for
+    end for
+end sub
+
+sub paintSuggestions()
+    t = th()
+    for i = 0 to m.sugRows.Count() - 1
+        r = m.sugRows[i]
+        r.group.visible = i < m.suggestions.Count()
+        if r.group.visible
+            r.label.text = m.suggestions[i]
+            if m.zone = "suggest" and i = m.sugIndex
+                r.bg.blendColor = t.solid
+                r.label.color = t.onSolid
+                r.icon.blendColor = t.onSolid
+            else
+                r.bg.blendColor = t.raised
+                r.label.color = t.heading
+                r.icon.blendColor = t.muted
+            end if
+        end if
+    end for
+end sub
+
+' Search for the chosen Suggestion, then move to its results.
+sub pickSuggestion()
+    if m.sugIndex >= m.suggestions.Count() then return
+    m.query = LCase(m.suggestions[m.sugIndex])
+    m.jumpToResults = true
+    m.debounce.control = "stop"
+    showQuery()
+    doSearch()
 end sub
 
 sub pressKey()
@@ -177,6 +278,12 @@ sub moveKey(key as string)
             i = i + 1
         else if key = "up"
             i = 30 + col * 2
+        else if key = "down"
+            if m.suggestions.Count() > 0
+                m.sugIndex = 0
+                setZone("suggest")
+            end if
+            return
         end if
     end if
     m.keyIndex = i
@@ -260,7 +367,17 @@ sub render()
     m.grid.content = root
     m.grid.visible = n > 0
     m.empty.visible = (n = 0 and q <> "")
-    if n = 0 and m.zone = "grid" then setZone("keys")
+    makeSuggestions()
+    if m.sugIndex >= m.suggestions.Count() then m.sugIndex = 0
+    showGhost()
+    if m.jumpToResults and n > 0
+        m.jumpToResults = false
+        setZone("grid")
+    else if (n = 0 and m.zone = "grid") or (m.suggestions.Count() = 0 and m.zone = "suggest")
+        setZone("keys")
+    else
+        paintSuggestions()
+    end if
 end sub
 
 sub onSelected(event as object)
@@ -279,12 +396,15 @@ end sub
 sub setZone(zone as string)
     m.zone = zone
     paintKeys()
+    paintSuggestions()
     restoreContentFocus()
 end sub
 
 sub restoreContentFocus()
     if m.zone = "grid" and m.grid.visible
         m.grid.setFocus(true)
+    else if m.zone = "suggest" and m.suggestions.Count() > 0
+        m.sink.setFocus(true)
     else
         m.zone = "keys"
         m.sink.setFocus(true)
@@ -310,6 +430,35 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
         return false
+    end if
+    if m.zone = "suggest"
+        if key = "OK"
+            pickSuggestion()
+        else if key = "up"
+            if m.sugIndex > 0
+                m.sugIndex = m.sugIndex - 1
+                paintSuggestions()
+            else
+                m.keyIndex = 37
+                setZone("keys")
+            end if
+        else if key = "down"
+            if m.sugIndex < m.suggestions.Count() - 1 then m.sugIndex = m.sugIndex + 1
+            paintSuggestions()
+        else if key = "right"
+            if m.flat.Count() > 0 then setZone("grid")
+        else if key = "left"
+            openMenu()
+        else if key = "back"
+            setZone("keys")
+        else if key = "replay"
+            m.keyIndex = 37
+            setZone("keys")
+            pressKey()
+        else
+            return false
+        end if
+        return true
     end if
     ' In the results: Left from the first column goes back to the keys.
     if key = "left"

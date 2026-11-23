@@ -23,7 +23,7 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 - **Details:** seasons and episodes for shows, More like this for movies (similar titles from your library, then Seerr's recommendations you can request), and buttons for My List, Watched, Start over (a movie you've started) and Trailer.
 - **Ratings:** the Hero, Details and Discover show IMDb and Rotten Tomatoes scores. Rotten Tomatoes comes from Jellyfin when its OMDb plugin has filled it in; IMDb, and Rotten Tomatoes for series, come from Seerr while you're signed in to it. When neither is known, TMDB's score shows instead.
 - **My List:** your Jellyfin Favorites (movies and shows), so it's the same on every device. Filter by All, In progress or Not started.
-- **Search:** finds titles by name as you type. If you're signed in to Seerr, titles you could request follow the matches from your library.
+- **Search:** finds titles by name as you type. Up to three Suggestions under the keys finish the title you're typing, and the top one shows faintly in the search field. Pick one to jump to its results. If you're signed in to Seerr, titles you could request follow the matches from your library.
 - **Player:** Matinee's own controls, with seeking, subtitle and audio choice, the next episode, and a countdown near the end of an episode. Picture-based subtitles (like PGS) are burned in by the server.
 - **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays behind the Hero, shifted right so you can see it clearly, with sound (turn Trailer sound off in Playback & quality to start them muted). The header fades out while it plays.
 
@@ -80,6 +80,9 @@ Needs Jellyfin 10.9 or newer. Seerr, Radarr and Sonarr are optional.
 | Details, on a button | Play | Plays or resumes |
 | Search, on the keys | Right past the last column | Moves to the results |
 | Search, on the keys | Instant Replay | Deletes a letter |
+| Search, on the keys | Down from Space, Delete or Clear | Moves to the Suggestions |
+| Search, on a Suggestion | OK | Searches for that title and moves to its results |
+| Search, on the Suggestions | Up from the first, or Back | Returns to the keys |
 | Search, in the results | Left from the first column, or Back | Returns to the keys |
 | My List | * | Removes the title from My List and from your Jellyfin Favorites |
 | My List, Requests, Activity | Up from the top | Moves to the filters or tabs |
