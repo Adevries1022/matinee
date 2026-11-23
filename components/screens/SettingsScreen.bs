@@ -828,7 +828,7 @@ function sectionRows(key as string) as object
             { label: "Direct play", value: dp, kind: "cycle", key: "directPlay" },
             { label: "Trailer previews on Home", value: "", kind: "toggle", key: "trailers", on: p.trailers <> false },
             { label: "Trailer sound", value: "", kind: "toggle", key: "trailerSound", on: p.trailerSound <> false },
-            { label: "Start a title you stay on", value: "", kind: "toggle", key: "autoPlayTitle", on: p.autoPlayTitle <> false },
+            { label: "Start a title you stay on", value: "", kind: "toggle", key: "autoPlayTitle", on: isTrue(p.autoPlayTitle) },
             { label: "Play the next episode automatically", value: "", kind: "toggle", key: "autoplayNext", on: p.autoplayNext <> false }
         ]
     else if key = "subtitles"

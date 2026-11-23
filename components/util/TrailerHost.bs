@@ -14,8 +14,8 @@
 ' use autoResumeSeconds). The last autoCountSeconds of the wait, or of the
 ' trailer, show the Auto-play Countdown ("Starting in 5" with a filling
 ' bar) at the bottom right. Any key press restarts the wait; moving to
-' another title or leaving the screen cancels it. "Start a title you stay
-' on" in Playback & quality turns it off. The screen defines
+' another title or leaving the screen cancels it. It's off until "Start a
+' title you stay on" in Playback & quality is turned on. The screen defines
 ' autoPlayStart().
 
 ' area: [x, y, w, h] where the trailer plays; its left, top and bottom edges
@@ -152,8 +152,8 @@ end sub
 
 function autoPlayOn() as boolean
     p = m.global.prefs
-    if p = invalid then return true
-    return p.autoPlayTitle <> false
+    if p = invalid then return false
+    return isTrue(p.autoPlayTitle)
 end function
 
 ' Start (or restart) the wait for the title in the Hero. The quiet part of

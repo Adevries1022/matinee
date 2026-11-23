@@ -164,6 +164,8 @@ function defaultPrefs() as object
         portraitPosters: false,
         trailers: true,
         autoplayNext: true,
+        ' Auto-play from the Hero is off until the User turns it on.
+        autoPlayTitle: false,
         maxBitrate: 0,
         directPlay: "prefer",
         subtitles: "auto",

@@ -64,7 +64,7 @@ A title's IMDb and Rotten Tomatoes scores in its meta line, with TMDB's score wh
 _Avoid_: Reviews, stars
 
 **Auto-play**:
-Staying on a title in the Hero until its Trailer Preview ends, or for 12 seconds when it has none, opens the player and starts it. A title the User is Watching skips its Trailer Preview: after 12 seconds it resumes, or starts the next episode. The last 5 seconds show the Auto-play Countdown. Any key press restarts the wait (during a Trailer Preview's Countdown, it waits the full time again after the trailer ends).
+Off unless "Start a title you stay on" is turned on in Playback & quality. Staying on a title in the Hero until its Trailer Preview ends, or for 12 seconds when it has none, opens the player and starts it. A title the User is Watching skips its Trailer Preview: after 12 seconds it resumes, or starts the next episode. The last 5 seconds show the Auto-play Countdown. Any key press restarts the wait (during a Trailer Preview's Countdown, it waits the full time again after the trailer ends).
 _Avoid_: Autoplay next (that's the next episode, in the player)
 
 **Auto-play Countdown**:
