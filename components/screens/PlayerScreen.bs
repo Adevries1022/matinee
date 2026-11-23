@@ -519,7 +519,10 @@ sub readStreams(ms as object)
             ch = channelText(safeInt(s.Channels))
             if ch <> "" and short <> title then short = short + " " + ch
         end if
-        info = { index: safeInt(s.Index), lang: lang, title: title, short: short, isText: isTrue(s.IsTextSubtitleStream) }
+        forced = isTrue(s.IsForced)
+        ' Forced subtitles only translate the odd foreign line, so say so.
+        if kind = "Subtitle" and forced then short = short + " (Forced)"
+        info = { index: safeInt(s.Index), lang: lang, title: title, short: short, isText: isTrue(s.IsTextSubtitleStream), forced: forced }
         if kind = "Audio" then m.audioStreams.Push(info)
         if kind = "Subtitle" then m.subStreams.Push(info)
     end for
@@ -552,12 +555,7 @@ sub chooseTracks(ms as object)
     if mode = "off"
         m.subIndex = -1
     else if mode = "on"
-        pick = -1
-        for each s in m.subStreams
-            if pick = -1 and s.isText and (lang = "" or s.lang = lang) then pick = s.index
-        end for
-        if pick = -1 and m.subStreams.Count() > 0 then pick = m.subStreams[0].index
-        m.subIndex = pick
+        m.subIndex = bestSub(lang, false)
     end if
     tp = m.global.trackPrefs
     if tp = invalid then return
@@ -573,14 +571,28 @@ sub chooseTracks(ms as object)
     if isTrue(tp.subOff)
         m.subIndex = -1
     else if safeStr(tp.subLang) <> ""
-        for each s in m.subStreams
-            if s.lang = tp.subLang
-                m.subIndex = s.index
-                exit for
-            end if
-        end for
+        m.subIndex = bestSub(tp.subLang, isTrue(tp.subForced))
     end if
 end sub
+
+' The subtitle track to show for a language ("" for any): full subtitles
+' unless forced ones are wanted, text before pictures (pictures need a
+' transcode), and the first track as a last resort.
+function bestSub(lang as string, wantForced as boolean) as integer
+    best = -1
+    bestScore = -1
+    for each s in m.subStreams
+        score = 0
+        if lang = "" or s.lang = lang then score = score + 4
+        if s.forced = wantForced then score = score + 2
+        if s.isText then score = score + 1
+        if score > bestScore
+            best = s.index
+            bestScore = score
+        end if
+    end for
+    return best
+end function
 
 ' Show the chosen text subtitle, or none.
 sub applySubtitle()
@@ -1147,7 +1159,10 @@ sub pickerChoose()
         else
             tp.subOff = false
             s = findStream(m.subStreams, r.index)
-            if s <> invalid then tp.subLang = s.lang
+            if s <> invalid
+                tp.subLang = s.lang
+                tp.subForced = s.forced
+            end if
         end if
         m.global.trackPrefs = tp
         ' Burned-in subtitles need the server to make a new stream.
