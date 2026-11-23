@@ -1,6 +1,6 @@
 ' One Discover category: a streaming service or a genre, laid out like
 ' Discover (a Hero and Rows, from DiscoverHost.bs). A service gets popular,
-' new and top rated Rows for both movies and series; a genre gets popular,
+' newest and top rated Rows for both movies and series; a genre gets popular,
 ' new, top rated and coming soon. Back returns to Discover.
 
 sub init()
@@ -69,11 +69,16 @@ function dateKey(mediaType as string) as string
     return "primaryReleaseDate"
 end function
 
-' Popular titles from the last year.
+' The newest releases up to today, among titles a few people have scored
+' (sorting by popularity would only repeat the Popular Row).
 function recentQuery(mediaType as string) as object
-    q = {}
-    q[dateKey(mediaType) + "Gte"] = isoDay(-365)
+    q = { "voteCountGte": "20" }
     q[dateKey(mediaType) + "Lte"] = isoDay(0)
+    if mediaType = "tv"
+        q["sortBy"] = "first_air_date.desc"
+    else
+        q["sortBy"] = "primary_release_date.desc"
+    end if
     return q
 end function
 
