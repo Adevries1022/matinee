@@ -279,6 +279,7 @@ sub load()
     key = "home"
     if m.kind <> "" then key = m.kind
     setupMenu(key)
+    setupOptions()
     m.status.visible = true
     apiRequest("/UserViews", { "userId": m.global.userId }, "onViews")
 end sub
@@ -488,11 +489,31 @@ sub onItemSelected(event as object)
     if row = invalid then return
     c = row.getChild(idx[1])
     if c = invalid then return
-    ' OK opens Details from every Row, so it's never out of reach; Play on the
-    ' remote plays or resumes the Focused title. Downloads open Activity.
-    action = m.rowActions[idx[0]]
-    if action <> "activity" then action = "details"
-    openItem(c, action)
+    optionsCardPressed(c)
+end sub
+
+' OK opens Details from every Row, so it's never out of reach; Play on the
+' remote plays or resumes the Focused title. Downloads open Activity.
+' Holding OK opens Title Options instead.
+sub cardTapped(c as object)
+    if c.itemType = "download"
+        openItem(c, "activity")
+    else
+        openItem(c, "details")
+    end if
+end sub
+
+sub titleChanged(change as object)
+    if m.heroItem <> invalid and change.what = "favorite"
+        target = m.heroItem.itemId
+        if m.heroItem.itemType = "Episode" and m.heroItem.seriesId <> "" then target = m.heroItem.seriesId
+        if target = change.itemId
+            m.heroFavorite = change.value
+            paintListButton()
+        end if
+    end if
+    m.seenVersion = m.global.watchVersion
+    if m.rowDefs <> invalid then fetchRows(m.rowDefs)
 end sub
 
 ' A Radarr/Sonarr download as a Card on Home.
@@ -647,13 +668,14 @@ end sub
 ' the server pill and avatar have focus.
 sub autoPlayStart()
     c = m.heroItem
-    if c = invalid or menuIsOpen() or m.zone = "badges" then return
+    if c = invalid or menuIsOpen() or optionsOpen() or m.zone = "badges" then return
     if c.itemType = "download" then return
     print "[Matinee] auto-play: starting "; c.heading
     heroButton(0)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if optionsKey(key, press) then return true
     if press then autoPlayNudge()
     if not press or menuIsOpen() then return false
     if key = "play"
@@ -669,7 +691,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             setZone("buttons")
             return true
         else if key = "options"
-            if m.focused <> invalid then openItem(m.focused, "details")
+            if optionsFit(m.focused) then openOptions(m.focused, "row")
             return true
         else if key = "back"
             ' Back from lower Rows jumps to the top instead of exiting.
@@ -704,6 +726,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
             setZone("badges")
         else if key = "OK"
             heroButton(m.btnIndex)
+        else if key = "options"
+            openOptions(m.heroItem, "row")
         end if
         return true
     else if m.zone = "badges"

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Title Options: a panel at the right with the same actions for any
+     title, opened by holding OK on a Card, by *, or by More on Detail.
+     A screen sets card (a MediaContent) and context, then focuses it. -->
+<component name="TitleOptions" extends="Group">
+  <interface>
+    <field id="card" type="node" />
+    <!-- "row" (a Card in a Row, grid or More like this), "details" (the
+         title Detail is showing, which has its own Start over) or "season"
+         (an episode Card on Detail, already on its show). -->
+    <field id="context" type="string" value="row" />
+    <field id="open" type="boolean" onChange="onOpen" />
+    <!-- Set as the panel closes: { action: "close" | "play" | "details", ... } -->
+    <field id="done" type="assocarray" alwaysNotify="true" />
+    <!-- Set once the server has saved a change: { itemId, what: "played" | "favorite", value } -->
+    <field id="changed" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="TitleOptions.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <children>
+    <Group id="layer" visible="false" />
+  </children>
+</component>

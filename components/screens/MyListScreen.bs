@@ -1,6 +1,7 @@
 ' My List (the My List board): saved movies and shows, which are the User's
 ' Jellyfin Favorites, so they show up on every device. Filter pills: All,
-' In progress, Not started. * removes the Focused title.
+' In progress, Not started. Holding OK or * opens Title Options, which
+' can remove the Focused title.
 
 sub init()
     t = th()
@@ -44,6 +45,7 @@ sub init()
     m.shown = []
     m.seenVersion = m.global.watchVersion
     setupMenu("mylist")
+    setupOptions()
     load()
 end sub
 
@@ -89,9 +91,9 @@ end function
 sub render()
     n = m.items.Count()
     if n = 1
-        m.count.text = "1 title saved " + Chr(183) + " Press * to remove"
+        m.count.text = "1 title saved " + Chr(183) + " Hold OK for options"
     else
-        m.count.text = n.ToStr() + " titles saved " + Chr(183) + " Press * to remove"
+        m.count.text = n.ToStr() + " titles saved " + Chr(183) + " Hold OK for options"
     end if
     if n = 0 then m.count.text = "0 titles saved"
     root = CreateObject("roSGNode", "ContentNode")
@@ -105,7 +107,6 @@ sub render()
             c.cardH = 225
             c.textBelow = true
             c.description = cardMeta(it)
-            c.removable = true
             if safeStr(it.Type) = "Series" and isValid(it.UserData)
                 if isValid(it.UserData.PlayedPercentage) then c.progress = it.UserData.PlayedPercentage / 100.0
             end if
@@ -132,14 +133,26 @@ end sub
 sub onSelected(event as object)
     i = event.getData()
     if i < 0 or i >= m.shown.Count() then return
-    m.top.navigate = { action: "details", itemId: m.shown[i].itemId }
+    optionsCardPressed(m.shown[i])
 end sub
 
-sub removeFocused()
+sub cardTapped(c as object)
+    m.top.navigate = { action: "details", itemId: c.itemId }
+end sub
+
+' A title taken off My List leaves the grid at once, keeping the place;
+' anything else (watched changes the filters) reloads the list.
+sub titleChanged(change as object)
+    m.seenVersion = m.global.watchVersion
+    if change.what = "favorite" and not change.value
+        dropTitle(change.itemId)
+    else
+        load()
+    end if
+end sub
+
+sub dropTitle(id as string)
     i = m.grid.itemFocused
-    if i < 0 or i >= m.shown.Count() then return
-    id = m.shown[i].itemId
-    setFavorite(id, false)
     keep = []
     for each it in m.items
         if safeStr(it.Id) <> id then keep.Push(it)
@@ -178,10 +191,12 @@ sub onFocusChanged()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if optionsKey(key, press) then return true
     if not press or menuIsOpen() then return false
     if m.zone = "grid"
         if key = "options"
-            removeFocused()
+            i = m.grid.itemFocused
+            if i >= 0 and i < m.shown.Count() then openOptions(m.shown[i], "row")
             return true
         else if key = "up"
             setZone("pills")

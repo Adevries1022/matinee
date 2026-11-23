@@ -229,6 +229,12 @@ function themeTokens(prefs as object) as object
     t.selectedFill = 0.30
     ' The Player's Up next card.
     t.nextCard = t.panel
+    ' Title Options: the panel at the right, the dim behind it, and how
+    ' long OK is held on a Card before it opens.
+    t.optionsW = 600
+    t.scrim = "0x050609FF"
+    t.scrimOpacity = 0.6
+    t.holdSeconds = 0.6
 
     t.largerText = isTrue(prefs.largerText)
     t.portraitPosters = isTrue(prefs.portraitPosters)

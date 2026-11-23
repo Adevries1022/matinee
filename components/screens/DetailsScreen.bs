@@ -71,6 +71,7 @@ sub init()
     m.itemRatings = invalid
     ratingsInit()
     m.seenVersion = m.global.watchVersion
+    setupOptions()
     paintAll()
 end sub
 
@@ -426,6 +427,19 @@ sub onCardSelected(event as object)
     c = row.getChild(idx[1])
     if c = invalid then return
     m.restoreCard = idx[1]
+    optionsCardPressed(c, cardsContext())
+end sub
+
+' Episode Cards are already on their show, so Title Options leaves out
+' "Go to" for them.
+function cardsContext() as string
+    if m.isSeries then return "season"
+    return "row"
+end function
+
+' A short OK press plays an episode or opens a More like this title.
+' Holding OK opens Title Options instead.
+sub cardTapped(c as object)
     if Left(c.itemType, 6) = "seerr-"
         ' On the server already: its Details. Otherwise its Request Details.
         if c.jellyfinId <> ""
@@ -460,7 +474,7 @@ sub buildButtons()
     if m.favorite then listIcon = "mylist_on"
     addButton({ kind: "secondary", icon: listIcon, text: "My List", size: 22, padX: 30, iconSize: 24 }, "mylist")
     if m.trailerCount > 0 then addButton({ kind: "secondary", icon: "trailer", text: "Trailer", size: 22, padX: 30, iconSize: 24 }, "trailer")
-    addButton({ kind: "square", icon: "check", selected: m.played, iconSize: 28 }, "watched")
+    addButton({ kind: "secondary", icon: "more", text: "More", size: 22, padX: 30, iconSize: 24 }, "more")
 
     ' Sit the buttons under the blurb, above the season pills.
     y = 384
@@ -509,10 +523,8 @@ sub doButton()
         m.seenVersion = m.global.watchVersion
     else if action = "trailer"
         apiRequest("/Items/" + safeStr(m.item.Id) + "/LocalTrailers", { "userId": m.global.userId }, "onTrailerList")
-    else if action = "watched"
-        method = "POST"
-        if m.played then method = "DELETE"
-        apiRequest("/UserPlayedItems/" + safeStr(m.item.Id), { "userId": m.global.userId }, "onPlayedChanged", method)
+    else if action = "more"
+        openOptions(itemToContent(m.item, true), "details")
     end if
 end sub
 
@@ -524,8 +536,8 @@ sub onTrailerList(event as object)
     m.top.navigate = { action: "play", itemId: safeStr(res.data[0].Id), startSeconds: 0, trailer: true }
 end sub
 
-sub onPlayedChanged(_event as object)
-    m.global.watchVersion = m.global.watchVersion + 1
+' Title Options saved a change to this title or one of its Cards.
+sub titleChanged(_change as object)
     m.seenVersion = m.global.watchVersion
     reloadKeepingPlace()
 end sub
@@ -550,6 +562,10 @@ end sub
 
 ' ---------- Focus & keys ----------
 
+sub restoreContentFocus()
+    restoreFocus()
+end sub
+
 sub restoreFocus()
     if m.zone = "cards" and m.cards.visible
         m.cards.setFocus(true)
@@ -569,7 +585,19 @@ sub onFocusChanged()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if optionsKey(key, press) then return true
     if not press then return false
+    if key = "options"
+        if m.zone = "cards"
+            f = m.cards.rowItemFocused
+            if f <> invalid and f.Count() > 1
+                openOptions(m.cards.content.getChild(0).getChild(f[1]), cardsContext())
+            end if
+        else if m.item <> invalid
+            openOptions(itemToContent(m.item, true), "details")
+        end if
+        return true
+    end if
     hasSeasons = m.isSeries and m.seasons.Count() > 0
     if m.zone = "back"
         if key = "OK"

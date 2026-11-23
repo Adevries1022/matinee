@@ -176,6 +176,10 @@ const icons = {
     pause: [P.fillRect(6, 5, 4, 14, 1), P.fillRect(14, 5, 4, 14, 1)],
     info: [P.circle(12, 12, 9, 2), P.line(12, 11, 12, 17, 2), P.line(12, 7.5, 12, 8, 2)],
     plus: [P.line(12, 5, 12, 19, 2), P.line(5, 12, 19, 12, 2)],
+    // More: three dots in a row, for Title Options.
+    more: [P.fillCircle(5.5, 12, 2), P.fillCircle(12, 12, 2), P.fillCircle(18.5, 12, 2)],
+    // Go to show: an arrow pointing right.
+    goto: [P.line(5, 12, 18, 12, 2), P.poly([[12.5, 6], [18.5, 12], [12.5, 18]], 2)],
     check: [P.poly([[5, 12.5], [10, 17], [19, 7.5]], 2)],
     back: [P.poly([[15, 5], [8, 12], [15, 19]], 2)],
     trailer: [P.rect(3, 5, 18, 14, 2, 2), P.fillPoly([[10, 9.5], [10, 14.5], [14, 12]])],

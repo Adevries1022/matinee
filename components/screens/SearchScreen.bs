@@ -90,6 +90,7 @@ sub init()
     m.sugIndex = 0
     m.jumpToResults = false
     setupMenu("search")
+    setupOptions()
     showQuery()
     paintKeys()
     doSearch()
@@ -383,12 +384,20 @@ end sub
 sub onSelected(event as object)
     i = event.getData()
     if i < 0 or i >= m.flat.Count() then return
-    c = m.flat[i]
+    optionsCardPressed(m.flat[i])
+end sub
+
+' A short OK press opens the title; holding OK opens Title Options.
+sub cardTapped(c as object)
     if Left(c.itemType, 6) = "seerr-"
         m.top.navigate = seerrNav(c)
     else
         m.top.navigate = { action: "details", itemId: c.itemId }
     end if
+end sub
+
+' Results don't show watched or My List state, so there's nothing to redraw.
+sub titleChanged(_change as object)
 end sub
 
 ' ---------- Focus ----------
@@ -416,6 +425,7 @@ sub onFocusChanged()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if optionsKey(key, press) then return true
     if not press or menuIsOpen() then return false
     if m.zone = "keys"
         if key = "OK"
@@ -461,7 +471,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
     ' In the results: Left from the first column goes back to the keys.
-    if key = "left"
+    if key = "options"
+        i = m.grid.itemFocused
+        if i >= 0 and i < m.flat.Count() then openOptions(m.flat[i], "row")
+        return true
+    else if key = "left"
         setZone("keys")
         return true
     else if key = "back"

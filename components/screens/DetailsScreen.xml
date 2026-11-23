@@ -12,6 +12,7 @@
   <script type="text/brightscript" uri="DetailsScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/OptionsHost.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ratings.bs" />
   <children>
     <Poster id="art" translation="[640,0]" width="1280" height="1080" loadWidth="1280" loadHeight="1080" loadDisplayMode="scaleToZoom" opacity="0" />

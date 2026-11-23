@@ -1,0 +1,207 @@
+' Title Options: a list of actions for one title, drawn like the Track
+' Picker. Watched and My List changes are saved here; the screen hears
+' about them through "changed". Playing and opening a show go back to the
+' screen through "done", which also fires whenever the panel closes.
+' Marking a whole show or season asks first.
+
+sub init()
+    m.layer = m.top.findNode("layer")
+    m.rows = []
+    m.index = 0
+    m.confirming = false
+end sub
+
+sub onOpen()
+    if m.top.open
+        m.confirming = false
+        m.index = 0
+        buildRows()
+        if m.rows.Count() = 0
+            m.top.open = false
+            return
+        end if
+        draw()
+        m.layer.visible = true
+    else
+        m.layer.visible = false
+    end if
+end sub
+
+' The actions that fit this title, in a fixed order.
+sub buildRows()
+    m.rows = []
+    c = m.top.card
+    if c = invalid then return
+    kind = c.itemType
+    ctx = m.top.context
+    if c.resumeSeconds > 0 and (kind = "Movie" or kind = "Episode") and ctx <> "details"
+        m.rows.Push({ id: "start", icon: "play", label: "Play from the start" })
+    end if
+    if kind = "Movie" or kind = "Episode" or kind = "Series" or kind = "Season"
+        noun = ""
+        if kind = "Series" then noun = "show "
+        if kind = "Season" then noun = "season "
+        if c.played
+            m.rows.Push({ id: "unwatched", icon: "close", label: "Mark " + noun + "unwatched" })
+        else
+            m.rows.Push({ id: "watched", icon: "check", label: "Mark " + noun + "watched" })
+        end if
+    end if
+    if kind = "Movie" or kind = "Series"
+        if c.favorite
+            m.rows.Push({ id: "unlist", icon: "mylist_on", label: "Remove from My List" })
+        else
+            m.rows.Push({ id: "list", icon: "mylist", label: "Add to My List" })
+        end if
+    end if
+    if kind = "Episode" and c.seriesId <> "" and ctx = "row"
+        m.rows.Push({ id: "show", icon: "goto", label: "Go to " + c.heading })
+    end if
+end sub
+
+' Before marking every episode of a show or season.
+sub askFirst(rowId as string)
+    c = m.top.card
+    what = "watched"
+    if rowId = "unwatched" then what = "unwatched"
+    scope = "this season"
+    if c.itemType = "Series" then scope = c.heading
+    m.confirmText = "Mark every episode of " + scope + " " + what + "?"
+    m.rows = [{ id: rowId + "!", icon: "check", label: "Yes, mark them " + what }, { id: "cancel", icon: "back", label: "Cancel" }]
+    m.confirming = true
+    m.index = 0
+    draw()
+end sub
+
+sub draw()
+    t = th()
+    p = m.layer
+    p.removeChildrenIndex(p.getChildCount(), 0)
+    c = m.top.card
+    scrim = p.CreateChild("Rectangle")
+    scrim.width = 1920
+    scrim.height = 1080
+    scrim.color = t.scrim
+    scrim.opacity = t.scrimOpacity
+
+    w = t.optionsW
+    px = 1920 - 80 - w
+    head = c.heading
+    sub2 = ""
+    if c.itemType = "Episode" then sub2 = c.subtitle
+    if m.confirming then sub2 = m.confirmText
+    textW = w - 80
+    titleSize = 34
+    if measureText(head, titleSize, "display") > textW then titleSize = 28
+    title = makeTitle(p, head, titleSize)
+    title.translation = [px + 40, 120]
+    title.width = textW
+    title.maxLines = 1
+    y = 120 + 56
+    if sub2 <> ""
+        s = makeLabel(p, sub2, 22, "regular", t.muted)
+        s.translation = [px + 40, y]
+        s.width = textW
+        s.wrap = true
+        s.maxLines = 2
+        s.lineSpacing = 6
+        y = y + Int(s.boundingRect().height) + 12
+    end if
+    y = y + 24
+    panelH = (y - 80) + m.rows.Count() * 72 + 24
+    bg = makeBox(p, w, panelH, 24, t.panel, 0.96)
+    bg.translation = [px, 80]
+    ' The panel goes under the text drawn above it.
+    p.removeChild(bg)
+    p.insertChild(bg, 1)
+
+    for i = 0 to m.rows.Count() - 1
+        r = m.rows[i]
+        focused = (i = m.index)
+        if focused then makeBox(p, w - 60, 64, 14, t.solid).translation = [px + 30, y]
+        color = t.text
+        if focused then color = t.onSolid
+        makeIcon(p, r.icon, 28, color).translation = [px + 50, y + 18]
+        style = "regular"
+        if focused then style = "semibold"
+        lbl = makeLabel(p, r.label, 22, style, color)
+        lbl.translation = [px + 96, y]
+        lbl.width = w - 136
+        lbl.height = 64
+        lbl.vertAlign = "center"
+        y = y + 72
+    end for
+end sub
+
+sub choose()
+    r = m.rows[m.index]
+    c = m.top.card
+    id = c.itemId
+    if r.id = "cancel"
+        finish({ action: "close" })
+    else if r.id = "start"
+        finish({ action: "play", itemId: id, startSeconds: 0 })
+    else if r.id = "show"
+        finish({ action: "details", itemId: c.seriesId, seasonId: c.seasonId })
+    else if r.id = "watched" or r.id = "unwatched" or r.id = "watched!" or r.id = "unwatched!"
+        whole = c.itemType = "Series" or c.itemType = "Season"
+        if whole and not m.confirming
+            askFirst(r.id)
+            return
+        end if
+        method = "POST"
+        if Left(r.id, 9) = "unwatched" then method = "DELETE"
+        m.pending = { itemId: id, what: "played", value: method = "POST" }
+        apiRequest("/UserPlayedItems/" + id, { "userId": m.global.userId }, "onSaved", method)
+        finish({ action: "close" })
+    else if r.id = "list" or r.id = "unlist"
+        isOn = r.id = "list"
+        m.pending = { itemId: id, what: "favorite", value: isOn }
+        setFavorite(id, isOn, "onSaved")
+        finish({ action: "close" })
+    end if
+end sub
+
+sub onSaved(event as object)
+    res = event.getData()
+    if m.pending = invalid then return
+    if not res.ok
+        print "[Matinee] title options: saving "; m.pending.what; " failed"
+        return
+    end if
+    print "[Matinee] title options: "; m.pending.what; " = "; m.pending.value; " for "; m.pending.itemId
+    m.global.watchVersion = m.global.watchVersion + 1
+    m.top.changed = m.pending
+    m.pending = invalid
+end sub
+
+sub finish(result as object)
+    m.top.open = false
+    m.top.done = result
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    ' The panel takes every key while it's open, including the OK release
+    ' left over from the hold that opened it.
+    if not m.top.open then return false
+    if not press then return true
+    if key = "up"
+        if m.index > 0 then m.index = m.index - 1
+        draw()
+    else if key = "down"
+        if m.index < m.rows.Count() - 1 then m.index = m.index + 1
+        draw()
+    else if key = "OK"
+        choose()
+    else if key = "back" or key = "left" or key = "options"
+        if m.confirming
+            m.confirming = false
+            m.index = 0
+            buildRows()
+            draw()
+        else
+            finish({ action: "close" })
+        end if
+    end if
+    return true
+end function

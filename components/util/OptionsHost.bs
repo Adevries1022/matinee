@@ -1,0 +1,97 @@
+' Title Options for a screen with Cards. Holding OK on a Card opens the
+' panel; a short press does what OK always did. Lists fire their
+' "selected" event as OK goes down, so the screen hands the Card to
+' optionsCardPressed() and the decision waits for the release or the hold
+' timer, whichever comes first. * opens the panel at once.
+'
+' A screen calls setupOptions() in init, optionsKey(key, press) first in
+' onKeyEvent, and defines:
+'   cardTapped(c)           what a short OK press on the Card does
+'   titleChanged(change)    after a saved change: { itemId, what, value }
+'   restoreContentFocus()   puts focus back on its content
+
+sub setupOptions()
+    if m.options <> invalid then return
+    m.options = CreateObject("roSGNode", "TitleOptions")
+    m.options.observeField("done", "onOptionsDone")
+    m.options.observeField("changed", "onOptionsChanged")
+    m.top.appendChild(m.options)
+    m.holdTimer = m.top.CreateChild("Timer")
+    m.holdTimer.duration = th().holdSeconds
+    m.holdTimer.repeat = false
+    m.holdTimer.observeField("fire", "onHoldTimer")
+    m.heldCard = invalid
+    m.heldContext = "row"
+end sub
+
+' Titles from the server have options; downloads and Seerr titles don't.
+function optionsFit(c as object) as boolean
+    if c = invalid then return false
+    k = c.itemType
+    return k = "Movie" or k = "Series" or k = "Episode" or k = "Season"
+end function
+
+function optionsOpen() as boolean
+    if m.options = invalid then return false
+    return m.options.open
+end function
+
+' OK went down on a Card. The context is for TitleOptions (see its XML).
+sub optionsCardPressed(c as object, context = "row" as string)
+    if not optionsFit(c)
+        cardTapped(c)
+        return
+    end if
+    m.heldCard = c
+    m.heldContext = context
+    m.holdTimer.control = "stop"
+    m.holdTimer.control = "start"
+end sub
+
+' Call first in onKeyEvent. True when the key was used here.
+function optionsKey(key as string, press as boolean) as boolean
+    if key = "OK" and not press and m.heldCard <> invalid
+        c = m.heldCard
+        m.heldCard = invalid
+        m.holdTimer.control = "stop"
+        cardTapped(c)
+        return true
+    end if
+    return false
+end function
+
+sub onHoldTimer()
+    c = m.heldCard
+    m.heldCard = invalid
+    if c <> invalid then openOptions(c, m.heldContext)
+end sub
+
+sub openOptions(c as object, context as string)
+    if not optionsFit(c) then return
+    m.options.context = context
+    m.options.card = c
+    m.options.open = true
+    if m.options.open then m.options.setFocus(true)
+end sub
+
+sub onOptionsDone()
+    r = m.options.done
+    restoreContentFocus()
+    if r = invalid then return
+    if r.action = "play"
+        m.top.navigate = { action: "play", itemId: r.itemId, startSeconds: r.startSeconds }
+    else if r.action = "details"
+        m.top.navigate = { action: "details", itemId: r.itemId, seasonId: r.seasonId }
+    end if
+end sub
+
+sub onOptionsChanged()
+    ch = m.options.changed
+    if ch = invalid then return
+    c = m.options.card
+    if c <> invalid and c.itemId = ch.itemId
+        if ch.what = "played" then c.played = ch.value
+        if ch.what = "favorite" then c.favorite = ch.value
+    end if
+    titleChanged(ch)
+end sub

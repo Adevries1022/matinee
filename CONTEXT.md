@@ -91,6 +91,10 @@ _Avoid_: Up next (that name belongs to the following episode during playback)
 The movies and shows a User saved for later. These are that User's Jellyfin Favorites, so they are the same on every device.
 _Avoid_: Watchlist, bookmarks, queue
 
+**Title Options**:
+A short list of actions for one title, in a panel at the right: Play from the start, Mark watched or unwatched, Add to or Remove from My List, and Go to the show for an episode. Holding OK on a Card, or pressing *, opens it; on Detail it is the More button. Marking a whole show or season watched asks first.
+_Avoid_: Context menu, long-press menu, options menu
+
 **Search**:
 The one place to look up a title by name, both in the library and among titles that can be Requested.
 _Avoid_: Discover search, request search

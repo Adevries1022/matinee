@@ -8,6 +8,7 @@
   <script type="text/brightscript" uri="SearchScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/OptionsHost.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
   <children>
     <Group id="layer" />
