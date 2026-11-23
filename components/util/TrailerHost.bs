@@ -1,6 +1,6 @@
 ' Trailer Preview: after a title has been Focused for a few seconds, its
-' trailer fades in beside the title and its details, centered in the space
-' to their right, with its edges fading into the screen. The Hero backdrop
+' trailer fades in behind the Hero text, shifted right so more of it shows,
+' with its edges fading into the screen. The Hero backdrop
 ' fades away while it plays. It has sound unless Trailer sound in Playback
 ' & quality is off, and the screen's header fades out. Only trailer files
 ' stored on the server are used (for example ones downloaded by Trailarr).
@@ -34,19 +34,23 @@ sub setupTrailer(layer as object, insertIndex as integer, area as object, backdr
     ' Soft edges in the background color, so the picture melts into the screen.
     edgeL = makeFade(grp, "h", t.trailerFeatherX, h)
     edgeL.translation = [x, y]
-    edgeT = grp.CreateChild("Poster")
-    edgeT.uri = "pkg:/images/grad_vd.png"
-    edgeT.loadDisplayMode = "scaleToFill"
-    edgeT.blendColor = t.bg
-    edgeT.width = w
-    edgeT.height = t.trailerFeatherY
-    edgeT.translation = [x, y]
+    ' A top edge below the top of the screen fades too.
+    if y > 0
+        edgeT = grp.CreateChild("Poster")
+        edgeT.uri = "pkg:/images/grad_vd.png"
+        edgeT.loadDisplayMode = "scaleToFill"
+        edgeT.blendColor = t.bg
+        edgeT.width = w
+        edgeT.height = t.trailerFeatherY
+        edgeT.translation = [x, y]
+    end if
     edgeB = makeFadeUp(grp, w, t.trailerFeatherY, t.bg)
     edgeB.translation = [x, y + h - t.trailerFeatherY]
 
     ' A quiet hint so people know the sound is one press away.
     m.trailerHint = makeLabel(layer, "Press Play for sound", 24, true, t.muted)
-    m.trailerHint.translation = [x + w - 96 - 400, y + h - t.trailerFeatherY]
+    ' At the right, just above the Rows.
+    m.trailerHint.translation = [x + w - 96 - 400, t.rowsTop - 40]
     m.trailerHint.width = 400
     m.trailerHint.horizAlign = "right"
     m.trailerHint.visible = false

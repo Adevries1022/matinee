@@ -80,8 +80,7 @@ sub buildHero()
     m.heroEyebrow.vertAlign = "center"
     m.heroTitle = makeLabel(layer, "", 104, "display", t.text)
     m.heroTitle.translation = [x, 228]
-    ' Ends where the Trailer Preview's soft left edge gets solid.
-    m.heroTitle.width = t.trailerX + t.trailerFeatherX \ 2 - x
+    m.heroTitle.width = 1200
     m.heroTitle.height = 116
     m.heroTitle.vertAlign = "center"
     m.heroLogoBox = [x, 226, t.heroLogoW, t.heroLogoH]

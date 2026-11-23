@@ -215,13 +215,13 @@ function themeTokens(prefs as object) as object
     ' Title Logos: the box each one is fitted into, bottom left.
     t.heroLogoW = 640
     t.heroLogoH = 124
-    ' Where the Trailer Preview plays on Home, Series and Movies: 16:9, against
-    ' the right edge of the screen and centered on the space right of the Hero
-    ' text. Its other edges fade over trailerFeatherX / trailerFeatherY.
-    t.trailerW = 1120
-    t.trailerH = 630
-    t.trailerX = 800
-    t.trailerY = 78
+    ' Where the Trailer Preview plays on Home, Series and Movies: large and
+    ' behind the Hero text like a backdrop, against the top and right edges and
+    ' shifted right so more of it shows. Its left edge fades over trailerFeatherX.
+    t.trailerW = 1600
+    t.trailerH = 900
+    t.trailerX = 320
+    t.trailerY = 0
     t.trailerFeatherX = 320
     t.trailerFeatherY = 160
     t.detailLogoW = 600
