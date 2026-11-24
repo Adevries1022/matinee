@@ -720,7 +720,7 @@ sub buildOsd()
     m.barBg.translation = [m.barX, barY - 4]
     m.barBg.width = m.barW
     m.barBg.height = 8
-    m.barBg.color = "0xFFFFFF40"
+    m.barBg.color = t.trackOver
     m.barFill = o.CreateChild("Rectangle")
     m.barFill.translation = [m.barX, barY - 4]
     m.barFill.height = 8

@@ -217,7 +217,11 @@ function themeTokens(prefs as object) as object
     t.warn = "0xFBBF24FF"
     t.error = "0xFF8A70FF"
     t.info = "0x60A5FAFF"
-    t.ratingBorder = "0x8D96A6FF"
+    t.hint = "0x8D96A6FF"      ' key hints under fields
+    t.ratingBorder = t.hint
+    t.outline = "0x3A4150FF"   ' outlined "add" buttons
+    t.onSolidMuted = "0x3A4150FF" ' secondary text on a solid fill
+    t.trackOver = "0xFFFFFF40" ' progress tracks over artwork
 
     ' Focus: an Accent ring, a small zoom and a solid light fill with dark
     ' text. Only the Focused control is solid; primary and selected ones
@@ -234,6 +238,7 @@ function themeTokens(prefs as object) as object
     t.optionsW = 600
     t.scrim = "0x050609FF"
     t.scrimOpacity = 0.6
+    t.modalScrimOpacity = 0.78
     t.holdSeconds = 0.6
     ' A Toast stays this long, fades included.
     t.toastSeconds = 2.4

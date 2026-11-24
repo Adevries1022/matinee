@@ -86,7 +86,7 @@ sub paintMethods()
         if on
             mt.bg.blendColor = t.solid
             mt.label.color = t.onSolid
-            mt.hint.color = "0x3A4150FF"
+            mt.hint.color = t.onSolidMuted
         else
             mt.bg.blendColor = t.panel
             mt.label.color = t.text

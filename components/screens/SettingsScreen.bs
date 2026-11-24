@@ -336,7 +336,7 @@ sub renderServices()
     ' "Add another server": connect to a different Jellyfin server.
     add = c.CreateChild("Group")
     add.translation = [listX, y]
-    makeOutline(add, 520, 72, 16, "0x3A4150FF")
+    makeOutline(add, 520, 72, 16, t.outline)
     m.addRing = makeFocusRing(add, 520, 72, 16)
     makeIcon(add, "plus", 24, t.meta).translation = [150, 24]
     al = makeLabel(add, "Add another server", 20, "semibold", t.meta)
@@ -414,7 +414,7 @@ sub renderDetail()
     f2 = makeField(d, 664, 68, { text: keyText, secure: keySecure, placeholder: "Not set" })
     f2.group.translation = [48, 272]
     m.detailItems.Push({ kind: "field", field: f2, key: "key" })
-    hint = makeLabel(d, keyHint, 16, "regular", "0x8D96A6FF")
+    hint = makeLabel(d, keyHint, 16, "regular", t.hint)
     hint.translation = [48, 350]
     hint.width = 664
 

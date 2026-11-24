@@ -626,7 +626,8 @@ function makeModal(parent as object, w as integer, h as integer) as object
     scrim = g.CreateChild("Rectangle")
     scrim.width = 1920
     scrim.height = 1080
-    scrim.color = "0x050609C7"
+    scrim.color = th().scrim
+    scrim.opacity = th().modalScrimOpacity
     x = (1920 - w) \ 2
     y = (1080 - h) \ 2
     p = makePanel(g, w, h, 24)

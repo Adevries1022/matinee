@@ -37,7 +37,7 @@ sub init()
     m.captionSub.font = makeFont(16)
     m.captionSub.color = t.meta
     m.shade.blendColor = t.black
-    m.trackBg.color = "0xFFFFFF40"
+    m.trackBg.color = t.trackOver
     m.track.color = t.accent
     m.ring.uri = "pkg:/images/ring_r18_w4.9.png"
     m.ring.blendColor = t.accent

@@ -168,7 +168,7 @@ sub buildPreview(t as object)
         track.translation = [10, tileH - 12]
         track.width = tw - 20
         track.height = 4
-        track.color = "0xFFFFFF4D"
+        track.color = t.trackOver
         fill = g.CreateChild("Rectangle")
         fill.translation = [10, tileH - 12]
         pcts = [0.62, 0.2, 0.82, 0.45]
