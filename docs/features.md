@@ -116,7 +116,7 @@ Everything Matinee does, screen by screen. For installing and first-time setup, 
 - **Downloads can't be paused**, because Radarr and Sonarr can't pause them. Removing one also removes it from the download client.
 - **Administrator-only settings don't lock the TV:** anyone can change the server from Who's watching.
 - **View only:** which libraries are shown, Radarr and Sonarr's quality profile and root folder, and Seerr's auto-approve.
-- The seek bar doesn't show what's buffered and has no thumbnails.
+- The seek bar doesn't show what's buffered. Thumbnails show while seeking only when Jellyfin has made trickplay images for the library (Jellyfin 10.9 and newer).
 - Subtitle size and style come from the Roku's own captions settings.
 
 ## Not yet
