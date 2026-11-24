@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Settings: a section list on the left (Servers & services, Themes, Users,
+<!-- Settings: a section list on the left (Servers & services, Themes, Home, Users,
      Playback & quality, Subtitles, About this device) and the section on
      the right. With "setup" set it is step 3 of setup: Add services. -->
 <component name="SettingsScreen" extends="Group">
@@ -11,6 +11,7 @@
   <script type="text/brightscript" uri="SettingsScreen.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/HomeRows.bs" />
   <children>
     <Group id="chrome" />
     <Group id="content" />

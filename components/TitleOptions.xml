@@ -10,7 +10,7 @@
          (an episode Card on Detail, already on its show). -->
     <field id="context" type="string" value="row" />
     <field id="open" type="boolean" onChange="onOpen" />
-    <!-- Set as the panel closes: { action: "close" | "play" | "details", ... } -->
+    <!-- Set as the panel closes: { action: "close" | "play" | "details" | "requestDetails", ... } -->
     <field id="done" type="assocarray" alwaysNotify="true" />
     <!-- Set once the server has saved a change: { itemId, what: "played" | "favorite" | "resume", value } -->
     <field id="changed" type="assocarray" alwaysNotify="true" />

@@ -1,0 +1,280 @@
+' A collection, laid out like Detail: the back pill, an eyebrow, the
+' collection's name (or Logo), its years and size, its overview, and its
+' films and shows as a Row of Cards, oldest first. OK on a Card opens its
+' Detail; holding OK or * opens Title Options. Focus zones: back, cards.
+
+sub init()
+    t = th()
+    m.art = m.top.findNode("art")
+    m.layer = m.top.findNode("layer")
+    m.cards = m.top.findNode("cards")
+    m.sink = m.top.findNode("sink")
+    m.fadeIn = m.top.findNode("fadeIn")
+    m.x = 120
+
+    makeFade(m.layer, "detail", 1920, 1080)
+    makeFadeUp(m.layer, 1920, 1080 - t.detailFadeTop, t.bg).translation = [0, t.detailFadeTop]
+    m.back = makeBackPill(m.layer, m.top.backLabel)
+
+    m.eyebrow = makeLabel(m.layer, "", 18, "semibold", t.accent)
+    m.eyebrow.translation = [m.x, 176]
+    m.eyebrow.height = 22
+    m.eyebrow.vertAlign = "center"
+    m.title = makeLabel(m.layer, "", 96, "display", t.text)
+    m.title.translation = [m.x, 206]
+    m.title.width = 1100
+    m.title.height = 110
+    m.title.vertAlign = "center"
+    m.logoBox = [m.x, 204, t.detailLogoW, t.detailLogoH]
+    m.logo = makeLogo(m.layer)
+    m.logo.observeField("loadStatus", "onLogoStatus")
+    m.metaHost = m.layer.CreateChild("Group")
+    m.metaHost.translation = [m.x, 330]
+    m.blurb = makeLabel(m.layer, "", 24, "regular", t.soft)
+    m.blurb.translation = [m.x, 384]
+    m.blurb.width = 760
+    m.blurb.wrap = true
+    m.blurb.maxLines = 4
+    m.blurb.lineSpacing = 10
+    m.rowLabel = makeLabel(m.layer, "In this collection", 26, "semibold", t.heading)
+    m.rowLabel.translation = [m.x, 636]
+    m.rowLabel.visible = false
+    m.status = makeLabel(m.layer, "Loading...", 26, "regular", t.muted)
+    m.status.translation = [m.x, 400]
+
+    m.cards.observeField("rowItemSelected", "onCardSelected")
+    m.art.observeField("loadStatus", "onArtStatus")
+    m.top.observeField("focusedChild", "onFocusChanged")
+    m.top.observeField("backLabel", "onBackLabel")
+
+    m.zone = "cards"
+    m.item = invalid
+    m.children = []
+    m.restoreCard = -1
+    m.gen = 0
+    m.seenVersion = m.global.watchVersion
+    setupOptions()
+    paintBtn(m.back, false)
+end sub
+
+sub onBackLabel()
+    setBtnText(m.back, m.top.backLabel)
+end sub
+
+sub load()
+    id = m.top.itemId
+    if id = "" then return
+    m.gen = m.gen + 1
+    apiRequest("/Items/" + id, { "userId": m.global.userId, "Fields": "Overview,ChildCount" }, "onItem", "GET", invalid, m.gen)
+    q = { "userId": m.global.userId, "ParentId": id, "SortBy": "ProductionYear,SortName", "SortOrder": "Ascending", "Fields": "Overview,Genres,ChildCount,ProviderIds,RecursiveItemCount", "EnableTotalRecordCount": "false" }
+    apiRequest("/Items", q, "onChildren", "GET", invalid, m.gen)
+end sub
+
+sub onItem(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    if not res.ok or not isValid(res.data)
+        m.status.text = "Couldn't load this collection."
+        m.status.visible = true
+        return
+    end if
+    item = res.data
+    m.item = item
+    m.status.visible = false
+    title = safeStr(item.Name)
+    size = 96
+    if measureText(title, 96, "display") > 1100 then size = 76
+    if size = 76 and measureText(title, 76, "display") > 1100 then size = 60
+    m.title.font = makeFont(size, "display")
+    m.title.text = title
+    t = th()
+    showLogo(m.logo, m.title, logoUrl(item, t.detailLogoW, t.detailLogoH), m.logoBox)
+    m.blurb.text = safeStr(item.Overview)
+    if hasBackdrop(item) then showArt(safeStr(item.Id))
+    drawMeta()
+end sub
+
+sub showArt(id as string)
+    uri = m.global.serverUrl + "/Items/" + id + "/Images/Backdrop?fillWidth=1280&quality=85"
+    if uri <> m.art.uri
+        m.art.opacity = 0
+        m.art.uri = uri
+    end if
+end sub
+
+' "Collection · 6 titles" and "1977 – 2019".
+sub drawMeta()
+    n = m.children.Count()
+    eyebrow = "Collection"
+    if n = 1 then eyebrow = eyebrow + " " + Chr(183) + " 1 title"
+    if n > 1 then eyebrow = eyebrow + " " + Chr(183) + " " + n.ToStr() + " titles"
+    m.eyebrow.text = UCase(eyebrow)
+    first = 0
+    last = 0
+    for each it in m.children
+        if isValid(it.ProductionYear)
+            yr = safeInt(it.ProductionYear)
+            if first = 0 or yr < first then first = yr
+            if yr > last then last = yr
+        end if
+    end for
+    years = ""
+    if first > 0 then years = first.ToStr()
+    if last > first then years = years + " " + Chr(8211) + " " + last.ToStr()
+    m.metaHost.removeChildrenIndex(m.metaHost.getChildCount(), 0)
+    makeMeta(m.metaHost, [years], 22)
+end sub
+
+sub onChildren(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    t = th()
+    m.children = []
+    if res.ok and isValid(res.data)
+        if isValid(res.data.Items) then m.children = res.data.Items
+    end if
+    root = CreateObject("roSGNode", "ContentNode")
+    row = root.CreateChild("ContentNode")
+    artId = ""
+    for each it in m.children
+        c = itemToContent(it, true)
+        c.rowTitle = safeStr(it.Name)
+        row.appendChild(c)
+        if artId = "" and hasBackdrop(it) then artId = safeStr(it.Id)
+    end for
+    ' A collection without its own backdrop borrows its first title's.
+    if m.item <> invalid
+        if not hasBackdrop(m.item) and artId <> "" then showArt(artId)
+    else if artId <> "" and m.art.uri = ""
+        showArt(artId)
+    end if
+    drawMeta()
+    count = row.getChildCount()
+    m.rowLabel.visible = count > 0
+    cell = [t.landW + t.cellPadX * 2, t.landH + t.cellPadY * 2]
+    m.cards.translation = [m.x - t.cellPadX, 686 - t.cellPadY]
+    m.cards.itemSize = [1920 - m.x + t.cellPadX, cell[1]]
+    m.cards.rowItemSize = [cell]
+    m.cards.rowItemSpacing = [[0, 0]]
+    m.cards.content = root
+    m.cards.visible = count > 0
+    if count > 0
+        jump = 0
+        if m.restoreCard >= 0
+            jump = m.restoreCard
+            m.restoreCard = -1
+        end if
+        if jump > count - 1 then jump = count - 1
+        m.cards.jumpToRowItem = [0, jump]
+    else
+        m.zone = "back"
+        paintBtn(m.back, true)
+        if m.item <> invalid and m.status.visible = false
+            m.status.text = "Nothing in this collection yet."
+            m.status.translation = [m.x, 686]
+            m.status.visible = true
+        end if
+    end if
+    if m.top.isInFocusChain() then restoreFocus()
+end sub
+
+sub onLogoStatus()
+    placeLogo(m.logo, m.title, m.logoBox)
+end sub
+
+sub onArtStatus()
+    if m.art.loadStatus = "ready" then m.fadeIn.control = "start"
+end sub
+
+' ---------- Cards ----------
+
+sub onCardSelected(event as object)
+    idx = event.getData()
+    if m.cards.content = invalid then return
+    c = m.cards.content.getChild(0).getChild(idx[1])
+    if c = invalid then return
+    m.restoreCard = idx[1]
+    optionsCardPressed(c, "row")
+end sub
+
+' A short OK press opens the title's Detail; holding OK opens Title Options.
+sub cardTapped(c as object)
+    m.top.navigate = { action: "details", itemId: c.itemId }
+end sub
+
+sub titleChanged(_change as object)
+    m.seenVersion = m.global.watchVersion
+    reloadKeepingPlace()
+end sub
+
+sub reloadKeepingPlace()
+    if m.cards.content <> invalid
+        f = m.cards.rowItemFocused
+        if f <> invalid
+            if f.Count() > 1 and f[1] <> invalid then m.restoreCard = f[1]
+        end if
+    end if
+    load()
+end sub
+
+sub onRefresh()
+    if m.global.watchVersion <> m.seenVersion
+        m.seenVersion = m.global.watchVersion
+        reloadKeepingPlace()
+    end if
+end sub
+
+' ---------- Focus & keys ----------
+
+sub restoreContentFocus()
+    restoreFocus()
+end sub
+
+sub restoreFocus()
+    if m.zone = "cards" and m.cards.visible
+        m.cards.setFocus(true)
+    else
+        m.sink.setFocus(true)
+    end if
+end sub
+
+sub setZone(zone as string)
+    m.zone = zone
+    paintBtn(m.back, zone = "back")
+    restoreFocus()
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() then restoreFocus()
+end sub
+
+function focusedCard() as object
+    if m.cards.content = invalid then return invalid
+    f = m.cards.rowItemFocused
+    if f = invalid then return invalid
+    if f.Count() < 2 then return invalid
+    return m.cards.content.getChild(0).getChild(f[1])
+end function
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if optionsKey(key, press) then return true
+    if not press then return false
+    if m.zone = "back"
+        if key = "OK"
+            m.top.navigate = { action: "back" }
+        else if key = "down"
+            if m.cards.visible then setZone("cards")
+        end if
+        return key <> "back"
+    else if m.zone = "cards"
+        if key = "up"
+            setZone("back")
+            return true
+        else if key = "options"
+            c = focusedCard()
+            if c <> invalid then openOptions(c, "row")
+            return true
+        end if
+    end if
+    return false
+end function

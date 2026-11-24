@@ -820,6 +820,11 @@ sub navigateTo(nav as dynamic)
         d.backLabel = screenLabel(m.stack.Peek())
         pushScreen(d)
         d.itemId = nav.itemId
+    else if a = "collection"
+        cs = CreateObject("roSGNode", "CollectionScreen")
+        cs.backLabel = screenLabel(m.stack.Peek())
+        pushScreen(cs)
+        cs.itemId = nav.itemId
     else if a = "play"
         readyPlayed(safeStr(nav.itemId))
         p = CreateObject("roSGNode", "PlayerScreen")

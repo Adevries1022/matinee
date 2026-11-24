@@ -15,17 +15,18 @@ Matinee is a "Free" app in Roku's terms: no ads, no subscription, no purchases. 
 | 5.1 Deep linking | `contentId` is a Jellyfin item id. Movie, episode, tvSpecial and shortFormVideo play from the bookmark; series plays the next episode (the one in progress, the next unwatched, or S1E1); season opens Details on that season; anything unknown lands on Home with a Toast. Works at launch and, through `roInput`, while running. A deep link uses the last User without showing Who's watching. **Not yet tested on the TV** (Jellyfin was down). |
 | Manifest | `rsg_version=1.3` (required since October 1, 2026), `supports_input_launch=1`, `mm_icon_focus_fhd` 540x405, `mm_icon_focus_hd` 290x218, a 1280x720 HD splash. `npm run brand` makes the images. |
 | 6.4 Splash | FHD and HD splash screens, opaque, on the Midnight background. |
+| 4.12 Voice keyboard | Typing uses Roku's `DynamicKeyboard` with voice entry, and the password keyboard for passwords and API keys. Checked on the TV. |
+| 4.9 Instant replay | The replay button jumps back 10 seconds in the Player. |
+| 4.8 Captions (partly) | The Player follows the Roku's captions setting, no longer switches it off, and keeps in step with captions turned on or off from Roku's * menu. Still to check: caption style and language settings, and On instant replay / On mute. |
 
 ## Still to do in the app
 
-1. **4.12 Voice keyboard.** Password, email and PIN entry must use Roku's voice keyboards. `TextEntryPanel` uses the old `Keyboard` node; switch it to `DynamicKeyboard` (and `DynamicPinPad` if a PIN is ever asked for).
-2. **4.9 Instant replay.** The replay button must jump back 10 to 25 seconds. The Player doesn't handle the `replay` key yet; 10 seconds matches the Left press.
-3. **4.8 Closed captions.** If an app shows captions it must follow the Roku-wide caption setting and offer On, Off, On instant replay and On mute in the Options menu (* during playback, which Roku reserves for its own menu, 4.4). Check that the Video node's own captions menu works with Jellyfin's subtitle tracks, and that Matinee's subtitle choice doesn't fight it.
-4. **4.7 Trick play thumbnails** for anything over 15 minutes. Matinee shows Jellyfin's trickplay images when the server has made them. Reviewers' content will have them only if their server generates trickplay, so confirm the demo server below does.
-5. **5.2 Direct to Play.** Voice commands such as "Play Better Call Saul on Matinee" arrive as deep links; test them once deep links work.
-6. **2.2 On-device sign-in.** Sign-in must happen on the TV. Signing in with a username and password on the TV is fine. Quick Connect has you approve the sign-in in Jellyfin on another device, which may count as off-device sign-in. Ask Roku, or hide Quick Connect in the store build.
-7. **3.1 to 3.6 on a slow Roku.** Roku measures launch, screen changes (3 s), key response (250 ms) and video start (8 s) on a Roku Streaming Stick+ (3810X) or Premiere+ (3921X). Test on one of those, or something as slow, before submitting.
-8. **6.1 Version.** Bump `build_version` (or `minor_version`) for every build submitted.
+1. **4.8 Closed captions, the rest.** Test On instant replay and On mute from Roku's * menu with Jellyfin subtitle tracks, and whether the Roku's caption style settings apply to Matinee's subtitles.
+2. **4.7 Trick play thumbnails** for anything over 15 minutes. Matinee shows Jellyfin's trickplay images when the server has made them. Reviewers' content will have them only if their server generates trickplay, so confirm the demo server below does.
+3. **5.2 Direct to Play.** Voice commands such as "Play Better Call Saul on Matinee" arrive as deep links; test them once deep links work.
+4. **2.2 On-device sign-in.** Sign-in must happen on the TV. Signing in with a username and password on the TV is fine. Quick Connect has you approve the sign-in in Jellyfin on another device, which may count as off-device sign-in. Ask Roku, or hide Quick Connect in the store build.
+5. **3.1 to 3.6 on a slow Roku.** Roku measures launch, screen changes (3 s), key response (250 ms) and video start (8 s) on a Roku Streaming Stick+ (3810X) or Premiere+ (3921X). Test on one of those, or something as slow, before submitting.
+6. **6.1 Version.** Bump `build_version` (or `minor_version`) for every build submitted.
 
 ## Reviewers need a server
 

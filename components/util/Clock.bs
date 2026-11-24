@@ -1,0 +1,25 @@
+' Times of day as the TV shows them: "10:42 PM", or "22:42" when the TV's
+' clock is set to 24 hours. Needs Api.bs (pad2) in the same component.
+
+' The time of day in dt, which is already in local time.
+function clockText(dt as object) as string
+    hr = dt.GetHours()
+    mnt = dt.GetMinutes()
+    if CreateObject("roDeviceInfo").GetClockFormat() = "24h" then return pad2(hr) + ":" + pad2(mnt)
+    half = "AM"
+    if hr >= 12 then half = "PM"
+    hr = hr mod 12
+    if hr = 0 then hr = 12
+    return hr.ToStr() + ":" + pad2(mnt) + " " + half
+end function
+
+' "Ends at 10:42 PM" for something starting now and lasting secs, or ""
+' when the length isn't known.
+function endsAtLine(secs as integer) as string
+    if secs <= 0 then return ""
+    now = CreateObject("roDateTime")
+    now.ToLocalTime()
+    ends = CreateObject("roDateTime")
+    ends.FromSeconds(now.AsSeconds() + secs)
+    return "Ends at " + clockText(ends)
+end function

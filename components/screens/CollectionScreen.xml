@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- A Jellyfin collection (a BoxSet), laid out like Detail: artwork on the
+     right, its name and overview on the left, and its films and shows as a
+     Row of Cards. -->
+<component name="CollectionScreen" extends="Group">
+  <interface>
+    <field id="itemId" type="string" onChange="load" />
+    <field id="backLabel" type="string" value="Home" />
+    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="CollectionScreen.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/OptionsHost.bs" />
+  <children>
+    <Poster id="art" translation="[640,0]" width="1280" height="1080" loadWidth="1280" loadHeight="1080" loadDisplayMode="scaleToZoom" opacity="0" />
+    <Group id="layer" />
+    <RowList
+      id="cards"
+      itemComponentName="CardItem"
+      numRows="1"
+      showRowLabel="[false]"
+      drawFocusFeedback="false"
+      rowFocusAnimationStyle="floatingFocus"
+      visible="false" />
+    <Group id="sink" focusable="true" />
+    <Animation id="fadeIn" duration="0.35" easeFunction="outQuad">
+      <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="art.opacity" />
+    </Animation>
+  </children>
+</component>

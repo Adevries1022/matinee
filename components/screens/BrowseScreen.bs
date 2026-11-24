@@ -36,8 +36,19 @@ sub init()
     m.kind = ""
     m.seenVersion = m.global.watchVersion
     m.seenPrefs = m.global.prefsVersion
+    m.seenLook = lookKey()
+    m.seenRows = ""
+    m.seenReady = ""
+    m.homeDirty = false
+    m.touched = false
+    m.readyRow = invalid
+    m.readyLandscape = true
+    m.heroActions = ["play", "details", "list"]
     m.heroRatings = invalid
     ratingsInit()
+    ' Home follows Ready to watch and Seerr signing in (see homeChanged()).
+    m.global.observeField("readyItems", "onReadyChanged")
+    m.global.observeField("seerrState", "onSeerrState")
 end sub
 
 ' ---------- Hero ----------
@@ -151,7 +162,6 @@ end sub
 sub applyHero()
     c = m.heroItem
     if c = invalid then return
-    t = th()
     m.heroEyebrow.text = UCase(c.rowTitle)
     title = c.heading
     size = 104
@@ -168,16 +178,13 @@ sub applyHero()
         kind = "movie"
         if c.itemType = "Series" then kind = "tv"
         m.heroRatings = ratingsFor(kind, c.tmdbId, c.criticRating, c.score)
+    else if isSeerrCard(c)
+        m.heroRatings = ratingsFor(Mid(c.itemType, 7), c.tmdbId, 0, c.score)
     end if
     drawHeroMeta()
     m.heroBlurb.text = c.description
 
-    if c.resumeSeconds > 0
-        setBtnText(m.btnPlay, "Resume")
-    else
-        setBtnText(m.btnPlay, "Play")
-    end if
-    rowBtns(m.buttons, t.leftPad, 516, 20)
+    heroButtonsFor(c)
     m.heroFavorite = c.favorite
     if c.itemType = "Episode" and c.seriesId <> ""
         ' My List holds the show, so ask whether the show is saved.
@@ -189,13 +196,13 @@ sub applyHero()
     ' A title the User is watching skips its trailer: staying on it resumes
     ' it (or starts the next episode) sooner instead.
     m.autoSeconds = th().autoPlaySeconds
-    if c.watching
+    if c.watching or c.itemType = "BoxSet"
         trailerSchedule(invalid)
         m.autoSeconds = th().autoResumeSeconds
     else if trailersOn()
         trailerSchedule(c)
     end if
-    if c.itemType <> "download" then autoPlayArm()
+    if heroPlayable(c) then autoPlayArm()
     if c.backdropUrl <> m.heroArt.uri
         m.heroArt.opacity = 0
         m.heroArt.uri = c.backdropUrl
@@ -209,6 +216,14 @@ sub drawHeroMeta()
     parts = []
     if c.itemType = "Episode"
         parts.Push(c.subtitle)
+    else if isSeerrCard(c)
+        parts.Push(c.year)
+        if c.itemType = "seerr-tv"
+            parts.Push("Series")
+        else
+            parts.Push("Movie")
+        end if
+        parts.Append(ratingParts(m.heroRatings))
     else
         parts.Push(c.year)
         if c.rating <> "" then parts.Push({ text: c.rating, boxed: true })
@@ -241,6 +256,61 @@ sub paintListButton()
     else
         setBtnIcon(m.btnList, "mylist")
     end if
+end sub
+
+function isSeerrCard(c as object) as boolean
+    return Left(c.itemType, 6) = "seerr-"
+end function
+
+' Titles the Hero can play: not downloads, Seerr titles or collections.
+function heroPlayable(c as object) as boolean
+    k = c.itemType
+    return k <> "download" and k <> "BoxSet" and not isSeerrCard(c)
+end function
+
+' The Hero's buttons for this title: Play, Details and My List; Request
+' (until it's requested) and Details for a Seerr title; Details and My
+' List for a collection.
+sub heroButtonsFor(c as object)
+    t = th()
+    showPlay = true
+    showList = true
+    if isSeerrCard(c)
+        showList = false
+        ' Until it's requested; partly there can ask for the rest.
+        showPlay = c.requestStatus < 2 or c.requestStatus = 4
+        setBtnIcon(m.btnPlay, "plus")
+        setBtnText(m.btnPlay, "Request")
+    else if c.itemType = "BoxSet"
+        showPlay = false
+    else
+        setBtnIcon(m.btnPlay, "play")
+        if c.resumeSeconds > 0
+            setBtnText(m.btnPlay, "Resume")
+        else
+            setBtnText(m.btnPlay, "Play")
+        end if
+    end if
+    m.btnPlay.group.visible = showPlay
+    m.btnList.group.visible = showList
+    m.buttons = []
+    m.heroActions = []
+    if showPlay
+        m.buttons.Push(m.btnPlay)
+        m.heroActions.Push("play")
+    end if
+    m.buttons.Push(m.btnDetails)
+    m.heroActions.Push("details")
+    if showList
+        m.buttons.Push(m.btnList)
+        m.heroActions.Push("list")
+    end if
+    if m.btnIndex > m.buttons.Count() - 1 then m.btnIndex = m.buttons.Count() - 1
+    rowBtns(m.buttons, t.leftPad, 516, 20)
+    focusIndex = -1
+    if m.zone = "buttons" then focusIndex = m.btnIndex
+    paintBtns([m.btnPlay, m.btnDetails, m.btnList], -1)
+    paintBtns(m.buttons, focusIndex)
 end sub
 
 sub onHeroLogoStatus()
@@ -314,11 +384,46 @@ function baseQuery(extra as object) as object
     return q
 end function
 
+' Home's Rows in the person's order (HomeRows.bs), skipping hidden ones.
+' The Activity queue Rows keep their place after Continue watching, even
+' when that Row is hidden. Seerr Rows need Seerr signed in.
 sub loadHome()
-    portrait = th().portraitPosters
+    land = not th().portraitPosters
+    seerrOn = m.global.seerrState = "ready"
+    m.seenRows = homeRowsKey()
     defs = []
-    defs.Push({ title: "Continue watching", path: "/UserItems/Resume", landscape: true, kind: "resume", action: "play", query: baseQuery({ "MediaTypes": "Video" }) })
-    ' "Show queue on Home" in Servers & services adds what Radarr/Sonarr are downloading.
+    for each r in homeRowsFor(m.global.prefs)
+        rid = r.id
+        if not r.on
+            ' Hidden.
+        else if rid = "ready"
+            m.readyLandscape = land
+            defs.Push({ title: r.label, path: "/Items", landscape: land, kind: "ready", action: "details", query: baseQuery({}) })
+        else if rid = "resume"
+            defs.Push({ title: r.label, path: "/UserItems/Resume", landscape: true, kind: "resume", action: "play", query: baseQuery({ "MediaTypes": "Video" }) })
+        else if rid = "nextup"
+            defs.Push({ title: r.label, path: "/Shows/NextUp", landscape: true, kind: "", action: "play", query: baseQuery({}) })
+        else if rid = "recent"
+            defs.Push({ title: r.label, path: "/Items/Latest", landscape: land, kind: "", action: "details", query: baseQuery({ "IncludeItemTypes": "Movie,Series" }) })
+        else if rid = "collections"
+            defs.Push({ title: r.label, path: "/Items", landscape: land, kind: "collections", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "BoxSet", "SortBy": "SortName" }) })
+        else if rid = "seerrTrending" and seerrOn
+            defs.Push({ title: r.label, seerr: true, path: "/discover/trending", mediaType: "", landscape: true, kind: "", action: "details", query: { "page": "1" } })
+        else if rid = "seerrUpcoming" and seerrOn
+            defs.Push({ title: r.label, seerr: true, path: "/discover/movies/upcoming", mediaType: "movie", landscape: true, kind: "", action: "details", query: { "page": "1" } })
+        else if rid = "picked"
+            defs.Push({ title: r.label, path: "/Items", landscape: land, kind: "", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "Random" }) })
+        else if rid = "rated"
+            defs.Push({ title: r.label, path: "/Items", landscape: land, kind: "", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "CommunityRating", "SortOrder": "Descending" }) })
+        end if
+        if rid = "resume" then defs.Append(queueDefs())
+    end for
+    fetchRows(defs)
+end sub
+
+' "Show queue on Home" in Servers & services adds what Radarr/Sonarr are downloading.
+function queueDefs() as object
+    defs = []
     for each n in ["radarr", "sonarr"]
         if arrReady(n) and readSetting(n + "ShowQueue", "false") = "true"
             title = "Downloading movies"
@@ -330,11 +435,121 @@ sub loadHome()
             defs.Push({ title: title, arr: n, path: "/queue", landscape: true, kind: "", action: "activity", query: q })
         end if
     end for
-    defs.Push({ title: "Next up", path: "/Shows/NextUp", landscape: true, kind: "", action: "play", query: baseQuery({}) })
-    defs.Push({ title: "Recently added", path: "/Items/Latest", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "IncludeItemTypes": "Movie,Series" }) })
-    defs.Push({ title: "Picked for you", path: "/Items", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "Random" }) })
-    defs.Push({ title: "Highly rated", path: "/Items", landscape: not portrait, kind: "", action: "details", query: baseQuery({ "Recursive": "true", "IncludeItemTypes": "Movie,Series", "SortBy": "CommunityRating", "SortOrder": "Descending" }) })
-    fetchRows(defs)
+    return defs
+end function
+
+' The look prefs: a change to any of them rebuilds every screen.
+function lookKey() as string
+    p = m.global.prefs
+    if p = invalid then return ""
+    return FormatJson([safeStr(p.theme), safeStr(p.accent), isTrue(p.largerText), isTrue(p.portraitPosters)])
+end function
+
+' The Rows Home shows now, in order. Seerr Rows count only while Seerr is
+' signed in.
+function homeRowsKey() as string
+    seerrOn = m.global.seerrState = "ready"
+    ids = []
+    for each r in homeRowsFor(m.global.prefs)
+        if r.on and (seerrOn or Left(r.id, 5) <> "seerr") then ids.Push(r.id)
+    end for
+    return ids.Join(",")
+end function
+
+' Ready to watch titles on the server, newest arrival first, as Jellyfin ids.
+function homeReadyIds() as object
+    list = []
+    items = m.global.readyItems
+    if items <> invalid
+        for each it in items
+            if safeStr(it.jellyfinItemId) <> "" then list.Push(it)
+        end for
+    end if
+    ' Insertion sort by arrival, newest first (at most 10 entries).
+    for i = 1 to list.Count() - 1
+        cur = list[i]
+        j = i - 1
+        while j >= 0 and safeInt(list[j].arrivedAt) < safeInt(cur.arrivedAt)
+            list[j + 1] = list[j]
+            j = j - 1
+        end while
+        list[j + 1] = cur
+    end for
+    ids = []
+    for each it in list
+        ids.Push(it.jellyfinItemId)
+    end for
+    return ids
+end function
+
+' Jellyfin answers Ids in its own order: put them back in Ready to watch's.
+function orderReady(items as object) as object
+    byId = {}
+    for each it in items
+        byId[LCase(safeStr(it.Id)).Replace("-", "")] = it
+    end for
+    out = []
+    for each id in homeReadyIds()
+        key = LCase(id).Replace("-", "")
+        if byId.DoesExist(key) then out.Push(byId[key])
+    end for
+    return out
+end function
+
+' Something on Home changed (Rows, Ready to watch, Seerr). Rebuild now if
+' Home is showing and untouched since it was built, else on return.
+sub homeChanged()
+    if m.kind <> "" then return
+    if m.top.visible and not m.touched and m.rowDefs <> invalid
+        loadHome()
+    else
+        m.homeDirty = true
+    end if
+end sub
+
+sub onSeerrState()
+    if m.kind <> "" or m.rowDefs = invalid then return
+    key = homeRowsKey()
+    if key = m.seenRows then return
+    m.seenRows = key
+    homeChanged()
+end sub
+
+' Ready to watch changed. If its Row is up and stays, swap its Cards in
+' place so the person keeps their spot; otherwise rebuild Home.
+sub onReadyChanged()
+    if m.kind <> "" or m.rowDefs = invalid then return
+    ids = homeReadyIds()
+    key = ids.Join(",")
+    if key = m.seenReady then return
+    m.seenReady = key
+    if not homeRowOn(m.global.prefs, "ready") then return
+    if m.readyRow <> invalid and ids.Count() > 0 and m.top.visible
+        q = baseQuery({ "Ids": key })
+        apiRequest("/Items", q, "onReadyRefresh", "GET", invalid, m.gen)
+    else
+        homeChanged()
+    end if
+end sub
+
+sub onReadyRefresh(event as object)
+    res = event.getData()
+    if res.tag <> m.gen or m.readyRow = invalid then return
+    items = []
+    if res.ok and isValid(res.data)
+        if isValid(res.data.Items) then items = orderReady(res.data.Items)
+    end if
+    if items.Count() = 0
+        homeChanged()
+        return
+    end if
+    row = m.readyRow
+    row.removeChildrenIndex(row.getChildCount(), 0)
+    for each it in items
+        c = itemToContent(it, m.readyLandscape)
+        c.rowTitle = row.title
+        row.appendChild(c)
+    end for
 end sub
 
 sub loadLibrary()
@@ -382,7 +597,20 @@ sub fetchRows(defs as object)
     m.pending = defs.Count()
     for i = 0 to defs.Count() - 1
         d = defs[i]
-        if d.arr <> invalid
+        if d.kind = "ready"
+            ids = homeReadyIds()
+            m.seenReady = ids.Join(",")
+            if ids.Count() = 0
+                ' Nothing ready: an empty Row, which buildRows leaves out.
+                m.rowResults[i] = []
+                m.pending = m.pending - 1
+            else
+                d.query["Ids"] = m.seenReady
+                apiRequest(d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
+            end if
+        else if isTrue(d.seerr)
+            seerrRequest(d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
+        else if d.arr <> invalid
             arrRequest(d.arr, d.path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
         else
             path = d.path
@@ -390,6 +618,8 @@ sub fetchRows(defs as object)
             apiRequest(path, d.query, "onRowData", "GET", invalid, m.gen * 1000 + i)
         end if
     end for
+    ' Every Row hidden or empty without asking.
+    if m.pending <= 0 then buildRows()
 end sub
 
 sub onRowData(event as object)
@@ -416,7 +646,10 @@ sub onRowData(event as object)
             items = res.data.Items
         else if isValid(res.data.records)
             items = res.data.records
+        else if isValid(res.data.results)
+            items = seerrRowItems(res.data.results, safeStr(m.rowDefs[i].mediaType))
         end if
+        if m.rowDefs[i].kind = "ready" then items = orderReady(items)
     end if
     if not res.ok then print "[Matinee] row "; m.rowDefs[i].title; " failed, HTTP "; res.code
     m.rowResults[i] = items
@@ -430,6 +663,9 @@ sub buildRows()
     sizes = []
     heights = []
     m.rowActions = []
+    m.readyRow = invalid
+    m.touched = false
+    m.homeDirty = false
     for i = 0 to m.rowDefs.Count() - 1
         items = m.rowResults[i]
         d = m.rowDefs[i]
@@ -437,11 +673,15 @@ sub buildRows()
             if items.Count() > 0
                 row = root.CreateChild("ContentNode")
                 row.title = d.title
+                if d.kind = "ready" then m.readyRow = row
                 for each it in items
                     if d.arr <> invalid
                         c = queueToContent(arrQueueInfo(it, d.arr))
+                    else if isTrue(d.seerr)
+                        c = seerrCardFor(it)
                     else
                         c = itemToContent(it, d.landscape, d.kind)
+                        if c.itemType = "BoxSet" then c.length = titlesText(safeInt(it.ChildCount))
                     end if
                     c.rowTitle = d.title
                     row.appendChild(c)
@@ -512,6 +752,8 @@ end sub
 sub cardTapped(c as object)
     if c.itemType = "download"
         openItem(c, "activity")
+    else if isSeerrCard(c)
+        m.top.navigate = seerrNav(c)
     else
         openItem(c, "details")
     end if
@@ -532,6 +774,38 @@ sub titleChanged(change as object)
     if change.what = "favorite" then return
     if m.rowDefs <> invalid then fetchRows(m.rowDefs)
 end sub
+
+' Seerr results for a Home Row: movies and shows not already on the server.
+function seerrRowItems(results as object, mediaType as string) as object
+    out = []
+    for each r in results
+        mt = safeStr(r.mediaType)
+        if mt = "" then mt = mediaType
+        if (mt = "movie" or mt = "tv") and seerrStatus(r) <> 5
+            r.mediaType = mt
+            out.Push(r)
+        end if
+    end for
+    return out
+end function
+
+' A Seerr title as a backdrop Card, as Discover draws it.
+function seerrCardFor(r as object) as object
+    c = seerrToContent(r)
+    url = tmdbImage(r.backdropPath, "w780")
+    if url = "" then url = tmdbImage(r.posterPath, "w500")
+    c.HDPosterUrl = url
+    if c.backdropUrl = "" then c.backdropUrl = url
+    setCardSize(c, true)
+    return c
+end function
+
+' "6 titles": a collection's length on the meta line.
+function titlesText(n as integer) as string
+    if n <= 0 then return ""
+    if n = 1 then return "1 title"
+    return n.ToStr() + " titles"
+end function
 
 ' A Radarr/Sonarr download as a Card on Home.
 function queueToContent(q as object) as object
@@ -557,6 +831,10 @@ sub openItem(c as object, action as string)
         m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
     else if action = "play"
         playSeries(c.itemId)
+    else if c.itemType = "BoxSet"
+        m.top.navigate = { action: "collection", itemId: c.itemId }
+    else if isSeerrCard(c)
+        m.top.navigate = seerrNav(c)
     else
         id = c.itemId
         if c.itemType = "Episode" and c.seriesId <> "" then id = c.seriesId
@@ -594,13 +872,18 @@ sub heroButton(index as integer)
         m.top.navigate = { action: "activity" }
         return
     end if
-    if index = 0
+    if index < 0 or index >= m.heroActions.Count() then return
+    action = m.heroActions[index]
+    if isSeerrCard(c)
+        ' Request and Details both go to its Request Details.
+        m.top.navigate = seerrNav(c)
+    else if action = "play"
         if c.itemType = "Series"
             playSeries(c.itemId)
         else
             m.top.navigate = { action: "play", itemId: c.itemId, startSeconds: c.resumeSeconds }
         end if
-    else if index = 1
+    else if action = "details"
         openItem(c, "details")
     else
         target = c.itemId
@@ -674,10 +957,22 @@ sub onFocusChanged()
 end sub
 
 sub onRefresh()
-    ' The look changed on the Themes screen: rebuild with it.
     if m.global.prefsVersion <> m.seenPrefs
         m.seenPrefs = m.global.prefsVersion
-        m.top.navigate = { action: "rebuildHome" }
+        ' The look changed on the Themes screen: rebuild with it.
+        look = lookKey()
+        if look <> m.seenLook
+            m.seenLook = look
+            m.top.navigate = { action: "rebuildHome" }
+            return
+        end if
+        ' Home's Rows were shown, hidden or moved in Settings.
+        if m.kind = "" and m.rowDefs <> invalid and homeRowsKey() <> m.seenRows then m.homeDirty = true
+    end if
+    if m.homeDirty and m.kind = ""
+        m.homeDirty = false
+        m.seenVersion = m.global.watchVersion
+        loadHome()
         return
     end if
     if m.global.watchVersion <> m.seenVersion
@@ -691,14 +986,17 @@ end sub
 sub autoPlayStart()
     c = m.heroItem
     if c = invalid or menuIsOpen() or optionsOpen() or m.zone = "badges" then return
-    if c.itemType = "download" then return
+    if not heroPlayable(c) then return
     print "[Matinee] auto-play: starting "; c.heading
     heroButton(0)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if optionsKey(key, press) then return true
-    if press then autoPlayNudge()
+    if press
+        autoPlayNudge()
+        m.touched = true
+    end if
     if not press or menuIsOpen() then return false
     if key = "play"
         if toggleTrailerSound() then return true

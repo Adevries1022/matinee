@@ -2,7 +2,7 @@
 ' Themes opens its own screen. Servers & services lists Jellyfin, Seerr,
 ' and Radarr and Sonarr once needed (see serviceNames) with a detail panel: address, API key or sign-in, four
 ' option tiles, Test connection and Save. Only an Administrator can change
-' the services; everyone can change their own Playback and Subtitles.
+' the services; everyone can change their own Home Rows, Playback and Subtitles.
 ' Zones: back, nav, list (services), detail (services), rows (other sections).
 
 sub init()
@@ -12,6 +12,7 @@ sub init()
     m.sections = [
         { key: "services", label: "Servers & services" },
         { key: "themes", label: "Themes" },
+        { key: "home", label: "Home" },
         { key: "users", label: "Users" },
         { key: "playback", label: "Playback & quality" },
         { key: "subtitles", label: "Subtitles" },
@@ -845,8 +846,20 @@ function sectionRows(key as string) as object
             { label: "Trailer previews on Home", value: "", kind: "toggle", key: "trailers", on: p.trailers <> false },
             { label: "Trailer sound", value: "", kind: "toggle", key: "trailerSound", on: p.trailerSound <> false },
             { label: "Start a title you stay on", value: "", kind: "toggle", key: "autoPlayTitle", on: isTrue(p.autoPlayTitle) },
-            { label: "Play the next episode automatically", value: "", kind: "toggle", key: "autoplayNext", on: p.autoplayNext <> false }
+            { label: "Play the next episode automatically", value: "", kind: "toggle", key: "autoplayNext", on: p.autoplayNext <> false },
+            { label: "Skip intros automatically", value: "", kind: "toggle", key: "autoSkipIntro", on: isTrue(p.autoSkipIntro), hint: "Needs Intro Skipper on the server. The first episode you start still plays its intro." },
+            { label: "Ask if you" + Chr(8217) + "re still watching", value: "", kind: "toggle", key: "stillWatching", on: p.stillWatching <> false, hint: "After three episodes in a row without a button press" }
         ]
+    else if key = "home"
+        ' Each person's Home Rows in their order, then Reset to default.
+        rows = []
+        for each hr in homeRowsFor(p)
+            note = ""
+            if Left(hr.id, 5) = "seerr" then note = "Needs Seerr"
+            rows.Push({ label: hr.label, value: note, kind: "homeRow", key: hr.id, on: hr.on })
+        end for
+        rows.Push({ label: "Reset to default", value: "The usual Rows in the usual order", kind: "reset", key: "homeReset" })
+        return rows
     else if key = "subtitles"
         mode = "Server default"
         if p.subtitles = "on" then mode = "On"
@@ -909,36 +922,63 @@ sub renderRows()
     h.vertAlign = "center"
     m.rows = sectionRows(key)
     m.rowNodes = []
+    ' Home lists every Row, so its rows are shorter to fit on screen.
+    rowH = 76
+    gap = 12
+    if key = "home"
+        rowH = 62
+        gap = 8
+    end if
     y = 236
     for i = 0 to m.rows.Count() - 1
         r = m.rows[i]
         g = c.CreateChild("Group")
         g.translation = [500, y]
-        makeBox(g, 1340, 76, 14, t.panel)
-        ring = makeFocusRing(g, 1340, 76, 14)
+        makeBox(g, 1340, rowH, 14, t.panel)
+        ring = makeFocusRing(g, 1340, rowH, 14)
         l = makeLabel(g, r.label, 22, "regular", t.text)
-        l.translation = [28, 0]
-        l.height = 76
+        if r.hint <> invalid
+            l.translation = [28, 8]
+            l.height = 36
+            hl = makeLabel(g, r.hint, 16, "regular", t.hint)
+            hl.translation = [28, 44]
+            hl.width = 1200
+        else
+            l.translation = [28, 0]
+            l.height = rowH
+        end if
         l.vertAlign = "center"
-        if r.kind = "toggle"
+        if r.kind = "toggle" or r.kind = "homeRow"
             tg = makeToggle(g)
-            tg.group.translation = [1340 - 28 - 56, 22]
+            tg.group.translation = [1340 - 28 - 56, (rowH - 32) \ 2]
             setToggle(tg, r.on)
+            if r.value <> ""
+                ' A note such as "Needs Seerr", just left of the switch.
+                v = makeLabel(g, r.value, 18, "regular", t.muted)
+                v.translation = [500, 0]
+                v.width = 1340 - 28 - 56 - 24 - 500
+                v.height = rowH
+                v.horizAlign = "right"
+                v.vertAlign = "center"
+            end if
         else
             v = makeLabel(g, r.value, 20, "semibold", t.meta)
             v.translation = [500, 0]
             v.width = 812
-            v.height = 76
+            v.height = rowH
             v.horizAlign = "right"
             v.vertAlign = "center"
-            if r.kind = "info" then v.font = makeFont(20, "regular")
+            if r.kind = "info" or r.kind = "reset" then v.font = makeFont(20, "regular")
         end if
         m.rowNodes.Push(ring)
-        y = y + 88
+        y = y + rowH + gap
     end for
     if key = "subtitles"
         note = makeLabel(c, "Subtitles you pick while watching are remembered for the rest of that session.", 18, "regular", t.muted)
         note.translation = [500, y + 12]
+    else if key = "home"
+        note = makeLabel(c, "Just for you. OK shows or hides a Row. Rewind and Fast-forward move it up or down.", 18, "regular", t.muted)
+        note.translation = [500, y + 8]
     end if
     if m.rowIndex >= m.rows.Count() then m.rowIndex = 0
     paintRows()
@@ -958,7 +998,13 @@ sub rowOk()
         m.top.navigate = { action: r.key }
         return
     end if
-    if r.kind = "toggle" and r.key = "alwaysAsk"
+    if r.kind = "homeRow"
+        list = homeRowsFor(p)
+        list[m.rowIndex].on = not r.on
+        saveHomeRows(list)
+    else if r.kind = "reset"
+        setPref("homeRows", [])
+    else if r.kind = "toggle" and r.key = "alwaysAsk"
         ' For the whole TV, unlike the other rows.
         if r.on then writeSetting(r.key, "false") else writeSetting(r.key, "true")
     else if r.kind = "toggle"
@@ -983,6 +1029,31 @@ sub rowOk()
         end for
         setPref("subtitleLang", codes[(indexOf(codes, safeStr(p.subtitleLang)) + 1) mod codes.Count()])
     end if
+    m.seenPrefs = m.global.prefsVersion
+    render()
+end sub
+
+' Save Home's Rows as { id, on } in the shown order.
+sub saveHomeRows(list as object)
+    saved = []
+    for each hr in list
+        saved.Push({ id: hr.id, on: hr.on })
+    end for
+    setPref("homeRows", saved)
+end sub
+
+' Rewind (-1) or Fast-forward (+1) on a Home Row moves it up or down.
+' Focus stays on the moved Row.
+sub moveHomeRow(delta as integer)
+    if m.rows[m.rowIndex].kind <> "homeRow" then return
+    list = homeRowsFor(m.global.prefs)
+    target = m.rowIndex + delta
+    if target < 0 or target > list.Count() - 1 then return
+    moved = list[m.rowIndex]
+    list[m.rowIndex] = list[target]
+    list[target] = moved
+    saveHomeRows(list)
+    m.rowIndex = target
     m.seenPrefs = m.global.prefsVersion
     render()
 end sub
@@ -1074,6 +1145,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
             paintRows()
         else if key = "OK"
             rowOk()
+        else if (key = "rewind" or key = "fastforward") and m.sections[m.section].key = "home"
+            if key = "rewind" then moveHomeRow(-1) else moveHomeRow(1)
         else if key = "left" or key = "back"
             m.zone = "nav"
             render()

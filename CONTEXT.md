@@ -95,6 +95,10 @@ _Avoid_: Up next (that name belongs to the following episode during playback)
 The movies and shows a User saved for later. These are that User's Jellyfin Favorites, so they are the same on every device.
 _Avoid_: Watchlist, bookmarks, queue
 
+**Collection**:
+A Jellyfin BoxSet, such as a film series. Its Card on the Collections Row opens the Collection screen, laid out like Detail, with its titles in a Row, oldest first.
+_Avoid_: BoxSet (in the interface), franchise
+
 **Title Options**:
 A short list of actions for one title, in a panel at the right: Play from the start, Remove from Continue watching (a Card on that Row), Mark watched or unwatched, Add to or Remove from My List, and Go to the show for an episode. Holding OK on a Card, or pressing *, opens it; on Detail it is the More button. Marking a whole show or season watched asks first.
 _Avoid_: Context menu, long-press menu, options menu
@@ -112,6 +116,10 @@ A title under the Search keys that finishes what's being typed, taken from the c
 _Avoid_: Autocomplete, hint
 
 ### Playback
+
+**Still watching?**:
+The question the Player asks instead of starting the next episode after three episodes in a row with no button pressed.
+_Avoid_: Are you still there, idle prompt
 
 **Player OSD**:
 Matinee's own on-screen playback controls: the title, seek bar, buttons and Up Next Card. Back hides it and playback carries on; Back with it hidden leaves the player.
@@ -156,11 +164,19 @@ The main screen for browsing titles to Request: a Hero and Rows of trending, pop
 _Avoid_: Requests screen, Explore, Discover grid
 
 **Request Details**:
-The screen for one title that can be Requested, laid out like Detail: Request in place of Play, season pills for shows that pick what Request sends, the Request Status once it's requested, Watch when part of it is on the server, and More like this. A second "Request in 4K" button appears only when 4K is really on offer. Titles that are all on the server open their Detail instead.
+The screen for one title that can be Requested, laid out like Detail: Request in place of Play (it opens the Request Sheet), season pills for shows, the Request Status once it's requested, Watch when part of it is on the server, Report a problem, More in this collection for a film in a collection, and More like this. Titles that are all on the server open their Detail instead.
 _Avoid_: Request panel, request dialog
 
+**Request Sheet**:
+The panel at the right that Request opens: seasons for a show, HD or 4K when 4K is on offer, how many Requests the User has left, and for those allowed, the server, quality profile and folder. One Request button at the bottom sends it.
+_Avoid_: Request dialog, request modal
+
+**Ready to watch**:
+A Request of the User's that has arrived on the server and that they haven't played yet. Matinee announces it with a Toast, and it waits in the Ready to watch Row on Home until played (or for 14 days).
+_Avoid_: Available requests, new arrivals
+
 **My requests**:
-The main screen listing a User's own Requests that aren't ready to watch yet (titles that are ready drop off, since they're in the library), with a progress bar for each download. Its Rail icon shows how many are downloading.
+The main screen listing a User's own Requests that aren't ready to watch yet (titles that are ready drop off, since they're in the library), with a progress bar for each download and why it's stuck when it is. People who can manage Requests also see everyone's Requests waiting for approval, with Approve and Decline. Its Rail icon shows how many are downloading and, for them, how many are waiting.
 _Avoid_: Downloads, request queue
 
 **Request Status**:

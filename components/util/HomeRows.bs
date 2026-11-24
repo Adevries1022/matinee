@@ -1,0 +1,53 @@
+' Home's Rows, which each person can show, hide and reorder in Settings.
+' The saved pref "homeRows" is an array of { id, on } in the person's
+' order; an empty or missing value means the defaults below. Rows added in
+' a later version and missing from a saved list are appended with their
+' default. The Activity queue Row is separate ("Show queue on Home").
+
+function homeRowCatalog() as object
+    return [
+        { id: "ready", label: "Ready to watch", on: true },
+        { id: "resume", label: "Continue watching", on: true },
+        { id: "nextup", label: "Next up", on: true },
+        { id: "recent", label: "Recently added", on: true },
+        { id: "collections", label: "Collections", on: false },
+        { id: "seerrTrending", label: "Trending to request", on: false },
+        { id: "seerrUpcoming", label: "Coming soon to request", on: false },
+        { id: "picked", label: "Picked for you", on: true },
+        { id: "rated", label: "Highly rated", on: true }
+    ]
+end function
+
+' The person's Rows in order, as { id, label, on }, including hidden ones.
+function homeRowsFor(prefs as object) as object
+    catalog = homeRowCatalog()
+    byId = {}
+    for each r in catalog
+        byId[r.id] = r
+    end for
+    out = []
+    seen = {}
+    saved = invalid
+    if prefs <> invalid then saved = prefs.homeRows
+    if type(saved) = "roArray"
+        for each s in saved
+            if s <> invalid and byId.DoesExist(safeStr(s.id)) and not seen.DoesExist(safeStr(s.id))
+                r = byId[safeStr(s.id)]
+                out.Push({ id: r.id, label: r.label, on: isTrue(s.on) })
+                seen[r.id] = true
+            end if
+        end for
+    end if
+    for each r in catalog
+        if not seen.DoesExist(r.id) then out.Push({ id: r.id, label: r.label, on: r.on })
+    end for
+    return out
+end function
+
+' True when the Row with this id is shown for this person.
+function homeRowOn(prefs as object, id as string) as boolean
+    for each r in homeRowsFor(prefs)
+        if r.id = id then return r.on
+    end for
+    return false
+end function

@@ -70,6 +70,13 @@ sub init()
     m.simGen = 0
     m.simPending = 0
     m.itemRatings = invalid
+    ' A movie's "Ends at" on the meta line, kept current while it's up.
+    m.endsSecs = 0
+    m.endsText = ""
+    m.endsTimer = m.top.CreateChild("Timer")
+    m.endsTimer.duration = 20
+    m.endsTimer.repeat = true
+    m.endsTimer.observeField("fire", "onEndsTimer")
     ratingsInit()
     m.seenVersion = m.global.watchVersion
     setupOptions()
@@ -128,6 +135,16 @@ sub onItem(event as object)
     if isValid(item.ProductionYear) then parts.Push(item.ProductionYear.ToStr())
     if safeStr(item.OfficialRating) <> "" then parts.Push({ text: safeStr(item.OfficialRating), boxed: true })
     parts.Push(lengthText(item))
+    ' Where "Ends at 10:42 PM" goes (movies), filled in by drawMeta.
+    m.endsSecs = 0
+    if not m.isSeries
+        m.endsSecs = ticksToSeconds(item.RunTimeTicks)
+        if isValid(item.UserData) then m.endsSecs = m.endsSecs - ticksToSeconds(item.UserData.PlaybackPositionTicks)
+        parts.Push({ endsAt: true })
+        m.endsTimer.control = "start"
+    else
+        m.endsTimer.control = "stop"
+    end if
     parts.Push(firstGenre(item))
     access = accessText(item)
     if access <> "" then parts.Push(access)
@@ -171,10 +188,23 @@ end sub
 ' The meta line, then IMDb and Rotten Tomatoes scores after it.
 sub drawMeta()
     m.metaHost.removeChildrenIndex(m.metaHost.getChildCount(), 0)
+    m.endsText = endsAtLine(m.endsSecs)
     parts = []
-    parts.Append(m.metaParts)
+    for each p in m.metaParts
+        if type(p) = "roAssociativeArray" and isTrue(p.endsAt)
+            parts.Push(m.endsText)
+        else
+            parts.Push(p)
+        end if
+    end for
     parts.Append(ratingParts(m.itemRatings))
     makeMeta(m.metaHost, parts, 22)
+end sub
+
+' Redraw the meta line when "Ends at" moves on a minute.
+sub onEndsTimer()
+    if m.endsSecs <= 0 or not m.top.visible then return
+    if endsAtLine(m.endsSecs) <> m.endsText then drawMeta()
 end sub
 
 sub ratingsArrived(key as string)

@@ -188,7 +188,12 @@ function defaultPrefs() as object
         maxBitrate: 0,
         directPlay: "prefer",
         subtitles: "auto",
-        subtitleLang: ""
+        subtitleLang: "",
+        ' Player: skip the Intro without a press, and ask Still watching?
+        autoSkipIntro: false,
+        stillWatching: true,
+        ' Home's Rows, see HomeRows.bs. Empty means the defaults.
+        homeRows: []
     }
 end function
 

@@ -16,6 +16,7 @@
   <script type="text/brightscript" uri="pkg:/components/util/TrailerHost.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ratings.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/HomeRows.bs" />
   <children>
     <Group id="heroLayer" />
     <Label id="status" wrap="true" />

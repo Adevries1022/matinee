@@ -36,6 +36,18 @@ sub buildRows()
     if c = invalid then return
     kind = c.itemType
     ctx = m.top.context
+    if Left(kind, 6) = "seerr-"
+        ' A Seerr title: Request (until it's requested) and its Request
+        ' Details. Both open Request Details, whose Request button opens the
+        ' request sheet with the title's seasons, quality and quota.
+        if c.requestStatus < 2 or c.requestStatus = 4 then m.rows.Push({ id: "request", icon: "plus", label: "Request" })
+        if c.requestStatus = 5 and c.jellyfinId <> ""
+            m.rows.Push({ id: "requestDetails", icon: "info", label: "Details" })
+        else
+            m.rows.Push({ id: "requestDetails", icon: "info", label: "Request details" })
+        end if
+        return
+    end if
     if c.resumeSeconds > 0 and (kind = "Movie" or kind = "Episode") and ctx <> "details"
         m.rows.Push({ id: "start", icon: "play", label: "Play from the start" })
     end if
@@ -104,6 +116,7 @@ sub draw()
     head = c.heading
     sub2 = ""
     if c.itemType = "Episode" then sub2 = c.subtitle
+    if Left(c.itemType, 6) = "seerr-" then sub2 = c.meta
     if m.confirming then sub2 = m.confirmText
     textW = w - 80
     titleSize = 34
@@ -154,6 +167,8 @@ sub choose()
     id = c.itemId
     if r.id = "cancel"
         finish({ action: "close" })
+    else if r.id = "request" or r.id = "requestDetails"
+        finish({ action: "requestDetails", card: c })
     else if r.id = "start"
         finish({ action: "play", itemId: id, startSeconds: 0 })
     else if r.id = "show"

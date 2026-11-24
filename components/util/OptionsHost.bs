@@ -24,11 +24,12 @@ sub setupOptions()
     m.heldContext = "row"
 end sub
 
-' Titles from the server have options; downloads and Seerr titles don't.
+' Titles from the server and Seerr titles have options; downloads and
+' collections don't.
 function optionsFit(c as object) as boolean
     if c = invalid then return false
     k = c.itemType
-    return k = "Movie" or k = "Series" or k = "Episode" or k = "Season"
+    return k = "Movie" or k = "Series" or k = "Episode" or k = "Season" or k = "seerr-movie" or k = "seerr-tv"
 end function
 
 function optionsOpen() as boolean
@@ -82,6 +83,9 @@ sub onOptionsDone()
         m.top.navigate = { action: "play", itemId: r.itemId, startSeconds: r.startSeconds }
     else if r.action = "details"
         m.top.navigate = { action: "details", itemId: r.itemId, seasonId: r.seasonId }
+    else if r.action = "requestDetails"
+        ' Its Request Details, or its Detail when it's all on the server.
+        m.top.navigate = seerrNav(r.card)
     end if
 end sub
 
