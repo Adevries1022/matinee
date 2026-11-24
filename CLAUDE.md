@@ -5,7 +5,8 @@ A Roku app (SceneGraph + BrighterScript, compiled to BrightScript) for Jellyfin,
 ## Read first
 - `CONTEXT.md`: the glossary. Use its terms (Card, Focused, Hero, Row, Theme, Layout Add-on, Trailer Preview, etc.) in code, comments and conversation.
 - `docs/adr/`: decisions already made, including ADR 0003 (BrighterScript).
-- `README.md`: features and remote controls.
+- `README.md`: install and setup for people with a Roku. Keep it about that.
+- `docs/features.md`: every feature and remote button. Update it when behavior changes.
 
 ## Working loop
 - Source is BrighterScript (`.bs`). XML `<script>` tags point at the `.bs` file; `bsc` compiles each to `.brs` and rewrites the URI in the package. Never add `.brs` source files.
