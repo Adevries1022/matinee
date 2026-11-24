@@ -57,6 +57,7 @@ sub onMessage()
 end sub
 
 sub onUsers(event as object)
+    launchComplete()
     res = event.getData()
     users = []
     ids = {}

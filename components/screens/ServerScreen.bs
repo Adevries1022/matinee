@@ -6,6 +6,7 @@
 
 sub init()
     t = th()
+    launchComplete()
     m.layer = m.top.findNode("layer")
     m.panelLayer = m.top.findNode("panelLayer")
     m.poll = m.top.findNode("poll")

@@ -55,7 +55,11 @@ function render(name, w, h, markH, text, stack) {
     console.log(`images/${name} (${w}x${h})`);
 }
 
-render('icon_hd.png', 336, 210, 74, 34, true);
+// Sizes from Roku's manifest spec: the FHD icon doubles as the Streaming
+// Store poster (540x405).
+render('icon_fhd.png', 540, 405, 140, 64, true);
+render('icon_hd.png', 290, 218, 76, 35, true);
 render('icon_sd.png', 248, 140, 50, 24, true);
 render('splash_fhd.png', 1920, 1080, 260, 88, true);
+render('splash_hd.png', 1280, 720, 173, 59, true);
 rmSync(work, { recursive: true, force: true });

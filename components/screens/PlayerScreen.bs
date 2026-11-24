@@ -1426,6 +1426,7 @@ sub onState()
             print "[Matinee] player: playing after "; m.loadStart.TotalMilliseconds(); " ms at "; m.video.position; " s ("; m.playMethod; ")"
             m.loadStart = invalid
             subtitlesTip()
+            launchComplete()
         end if
         if m.osd.visible then paintOsd()
         restartHideTimer()

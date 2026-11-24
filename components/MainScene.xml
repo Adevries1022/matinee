@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="MainScene" extends="Scene">
+  <interface>
+    <!-- Launch arguments or an roInput event from Main: a deep link when it has contentId and mediaType. -->
+    <field id="deepLink" type="assocarray" alwaysNotify="true" onChange="onDeepLink" />
+  </interface>
   <script type="text/brightscript" uri="MainScene.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <children>

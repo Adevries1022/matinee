@@ -49,6 +49,10 @@ _Avoid_: Shelf, carousel, lane
 One title's artwork in a Row or grid, either portrait or landscape.
 _Avoid_: Tile, item, poster (when meaning the general concept)
 
+**Deep link**:
+A request from Roku (Search, voice, a home screen banner) to open Matinee on a title, made of a Jellyfin item id and a Roku media type. Movies and episodes play from where the User stopped, a series plays its next episode, and a season opens Details.
+_Avoid_: launch link, direct link
+
 ### Browsing
 
 **Series**:

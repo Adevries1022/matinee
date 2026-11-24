@@ -35,6 +35,10 @@ sub init()
     g.addField("toast", "assocarray", true)
     ' How Continue watching is fetched: see resumePath() in Api.bs.
     g.addField("resumeVia", "string", false)
+    ' True once Roku has been told the app finished launching.
+    g.addField("launched", "boolean", false)
+    g.observeField("launched", "onLaunched")
+    m.pendingLink = invalid
     g.deviceId = di.GetChannelClientId()
     g.watchVersion = 0
     g.prefsVersion = 0
@@ -141,7 +145,9 @@ sub onPublicUsers(event as object)
     if reg.Exists("alwaysAsk") then alwaysAsk = (reg.Read("alwaysAsk") = "true")
     ' Who's Watching appears when more than one User could be watching,
     ' or every time if an Administrator chose "Always ask".
-    if not alwaysAsk and last <> "" and sessions.DoesExist(last) and everyone.Count() <= 1
+    ' A deep link plays for the last User without asking who's watching.
+    linked = (m.pendingLink <> invalid and last <> "" and sessions.DoesExist(last))
+    if linked or (not alwaysAsk and last <> "" and sessions.DoesExist(last) and everyone.Count() <= 1)
         useSession(last)
     else
         showWho("")
@@ -186,6 +192,11 @@ sub startUser(admin as boolean)
     clearStack()
     showHome()
     initSeerr()
+    if m.pendingLink <> invalid
+        runDeepLink()
+        m.offerServices = false
+        return
+    end if
     ' Step 3 of setup, once per server, for an Administrator who just signed in.
     if admin and m.offerServices and readSetting("servicesOffered_" + sessionsKey(), "") = ""
         writeSetting("servicesOffered_" + sessionsKey(), "true")
@@ -499,7 +510,10 @@ sub stopListening(s as object)
 end sub
 
 sub onNavigate(event as object)
-    nav = event.getData()
+    navigateTo(event.getData())
+end sub
+
+sub navigateTo(nav as dynamic)
     if nav = invalid then return
     a = nav.action
     if a = "details"
@@ -669,3 +683,115 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press and key = "back" then return popScreen()
     return false
 end function
+
+' ---------- Deep links ----------
+' From Roku Search, voice or the Deep Linking Tester. The contentId is a
+' Jellyfin item id. Movies and episodes play from where the User stopped,
+' a series plays its next episode, a season opens on Details, and
+' anything else lands on Home with a Toast.
+
+sub onDeepLink()
+    a = m.top.deepLink
+    if a = invalid then return
+    if not isValid(a.contentId) or not isValid(a.mediaType) then return
+    id = LCase(safeStr(a.contentId)).Replace("-", "")
+    m.pendingLink = { id: id, kind: LCase(safeStr(a.mediaType)) }
+    print "[Matinee] deep link: "; m.pendingLink.kind; " "; id
+    ' Not signed in yet: startUser() picks it up.
+    if m.global.token <> "" and m.global.userId <> "" and m.stack.Count() > 0 then runDeepLink()
+end sub
+
+sub runDeepLink()
+    link = m.pendingLink
+    m.pendingLink = invalid
+    if link = invalid then return
+    popTo(1)
+    rx = CreateObject("roRegex", "^[0-9a-f]{32}$", "")
+    known = { movie: true, episode: true, series: true, season: true, tvspecial: true, shortformvideo: true }
+    if not rx.IsMatch(link.id) or not known.DoesExist(link.kind)
+        deepLinkFailed()
+        return
+    end if
+    apiRequest("/Users/" + m.global.userId + "/Items/" + link.id, {}, "onDeepLinkItem", "GET", invalid, link.kind)
+end sub
+
+sub onDeepLinkItem(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data)
+        deepLinkFailed()
+        return
+    end if
+    item = res.data
+    kind = safeStr(item.Type)
+    if kind = "Series"
+        playNextUp(safeStr(item.Id))
+    else if kind = "Season"
+        navigateTo({ action: "details", itemId: safeStr(item.SeriesId), seasonId: safeStr(item.Id) })
+    else if kind = "Movie" or kind = "Episode" or kind = "Video" or kind = "MusicVideo"
+        playFromBookmark(item)
+    else
+        deepLinkFailed()
+    end if
+end sub
+
+' The series' next episode: the one in progress, or the one after the last
+' watched. A series nobody has started plays from its first episode.
+sub playNextUp(seriesId as string)
+    q = { seriesId: seriesId, userId: m.global.userId, limit: "1", enableResumable: "true", fields: "UserData" }
+    apiRequest("/Shows/NextUp", q, "onDeepLinkNextUp", "GET", invalid, seriesId)
+end sub
+
+sub onDeepLinkNextUp(event as object)
+    res = event.getData()
+    ep = firstItem(res)
+    if ep <> invalid
+        playFromBookmark(ep)
+        return
+    end if
+    q = { userId: m.global.userId, fields: "UserData", limit: "20" }
+    apiRequest("/Shows/" + safeStr(res.tag) + "/Episodes", q, "onDeepLinkEpisodes")
+end sub
+
+sub onDeepLinkEpisodes(event as object)
+    res = event.getData()
+    first = invalid
+    if res.ok and isValid(res.data) and isValid(res.data.Items)
+        ' Skip Specials (season 0) when the series has regular episodes.
+        for each ep in res.data.Items
+            if first = invalid then first = ep
+            if safeInt(ep.ParentIndexNumber) > 0
+                first = ep
+                exit for
+            end if
+        end for
+    end if
+    if first = invalid
+        deepLinkFailed()
+        return
+    end if
+    playFromBookmark(first)
+end sub
+
+function firstItem(res as object) as dynamic
+    if not res.ok or not isValid(res.data) then return invalid
+    if not isValid(res.data.Items) then return invalid
+    if res.data.Items.Count() = 0 then return invalid
+    return res.data.Items[0]
+end function
+
+sub playFromBookmark(item as object)
+    secs = 0
+    if isValid(item.UserData) then secs = ticksToSeconds(item.UserData.PlaybackPositionTicks)
+    navigateTo({ action: "play", itemId: safeStr(item.Id), startSeconds: secs })
+end sub
+
+sub deepLinkFailed()
+    print "[Matinee] deep link: not found"
+    showToast("Couldn't find that title on your server", "info")
+end sub
+
+sub onLaunched()
+    if not m.global.launched then return
+    m.top.signalBeacon("AppLaunchComplete")
+    print "[Matinee] launch complete"
+end sub

@@ -718,6 +718,12 @@ end function
 ' A short message at the bottom of the screen; MainScene draws it (Toast).
 ' seconds: 0 for the Theme's usual time. place: "bottom" (centered), or
 ' "top" (top right) where the bottom is busy, as in the Player.
+' The first screen that can take input calls this; MainScene then tells
+' Roku the app finished launching (certification measures launch time).
+sub launchComplete()
+    if not m.global.launched then m.global.launched = true
+end sub
+
 sub showToast(text as string, icon = "check" as string, seconds = 0 as float, place = "bottom" as string)
     m.global.toast = { text: text, icon: icon, seconds: seconds, place: place }
 end sub

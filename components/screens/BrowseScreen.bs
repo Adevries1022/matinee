@@ -425,6 +425,7 @@ sub onRowData(event as object)
 end sub
 
 sub buildRows()
+    launchComplete()
     root = CreateObject("roSGNode", "ContentNode")
     sizes = []
     heights = []
