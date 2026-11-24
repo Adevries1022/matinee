@@ -14,6 +14,7 @@ Everything Matinee does, screen by screen. For installing and first-time setup, 
 - **My List:** your Jellyfin Favorites (movies and shows), so it's the same on every device. Filter by All, In progress or Not started.
 - **Search:** finds titles by name as you type. Up to three Suggestions under the keys finish the title you're typing, and the top one shows faintly in the search field. Pick one to jump to its results. If you're signed in to Seerr, titles you could request follow the matches from your library.
 - **Player:** Matinee's own controls, with seeking, subtitle and audio choice, the next episode, and a countdown near the end of an episode. Picture-based subtitles (like PGS) are burned in by the server.
+- **Skip intro:** during an episode's intro, a Skip intro button shows at the bottom right; OK jumps past the intro. When the end credits start, the Up next countdown comes up (or 25 seconds before the end when the server doesn't know where the credits are). Both need the [Intro Skipper](https://github.com/intro-skipper/intro-skipper) plugin, or another plugin that fills in Jellyfin's media segments.
 - **Find subtitles:** at the bottom of the Subtitles list, "Find English subtitles…" (in your preferred subtitle language) searches Jellyfin's subtitle plugins for the playing title. Pick a result and Jellyfin saves it next to the video, then playback picks up where it was with the new subtitles on. This needs a subtitle plugin on the server, such as Open Subtitles (Dashboard › Plugins › Catalog, then your opensubtitles.com sign-in in its settings), and a Jellyfin account that is allowed to manage subtitles.
 - **Trailer Preview:** stay on a title for about 3 seconds on Home, Series or Movies and its trailer plays behind the Hero, shifted right so you can see it clearly, with sound (turn Trailer sound off in Playback & quality to start them muted). The header fades out while it plays.
 
@@ -104,6 +105,7 @@ Everything Matinee does, screen by screen. For installing and first-time setup, 
 | Subtitle or audio choices | Back, Left or * | Closes |
 | Find subtitles | OK on a result | Downloads it and turns it on |
 | Find subtitles | Back or Left | Returns to the subtitle choices |
+| Skip intro showing, controls hidden | OK | Jumps past the intro |
 | End-of-episode countdown | OK or Play | Plays the next episode now |
 | End-of-episode countdown | Back | Keeps watching |
 | Anywhere else | Back | Stops and leaves the Player |
