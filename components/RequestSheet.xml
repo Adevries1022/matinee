@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The request sheet: one panel at the right for everything a Request
+     sends (seasons or films, HD or 4K, the remaining quota and, for people
+     who may, the server, quality profile and folder). Request Details sets
+     request, then open, then focuses it. -->
+<component name="RequestSheet" extends="Group">
+  <interface>
+    <!-- request: {
+           mediaType: "movie" | "tv", title,
+           tmdbId (one title), status, status4k (a movie's Request Status),
+           seasons: [{ num, status, status4k }] (a series),
+           pickSeason: the season picked on Request Details, 0 for all,
+           films: [{ tmdbId, title, year, status, status4k }] (a collection),
+           allow4k, want4k, perms (the Seerr permission bits) } -->
+    <field id="request" type="assocarray" />
+    <field id="open" type="boolean" onChange="onOpen" />
+    <!-- Set as it closes: { action: "close" } or { action: "requested", count, is4k } -->
+    <field id="done" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="RequestSheet.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Sheet.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Requests.bs" />
+  <children>
+    <Group id="layer" visible="false" />
+  </children>
+</component>

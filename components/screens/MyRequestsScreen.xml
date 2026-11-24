@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!-- My requests: the signed-in User's Seerr requests that aren't ready yet,
-     with download progress. -->
+     with download progress and why one is stuck; for people who can
+     approve, everyone's requests waiting for approval; and what's ready
+     to watch but not played yet. -->
 <component name="MyRequestsScreen" extends="Group">
   <interface>
     <field id="refresh" type="boolean" alwaysNotify="true" />
@@ -10,10 +12,12 @@
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Requests.bs" />
   <children>
     <Group id="layer" />
     <Group id="list" />
     <Group id="sink" focusable="true" />
+    <Group id="modal" visible="false" />
     <Timer id="poll" repeat="true" duration="30" />
   </children>
 </component>

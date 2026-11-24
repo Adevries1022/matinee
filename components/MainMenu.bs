@@ -1,13 +1,17 @@
 ' The Rail: an always-visible 112 px column of icons down the left edge.
 ' The current screen's icon sits on a soft square in the Accent; while the
 ' Rail has focus, the Focused icon turns solid with its name beside it.
-' My requests carries a count of downloading requests while there are any.
+' My requests carries a count of downloading requests while there are any
+' (top right, in the Accent) and, for people who can approve, a count of
+' Requests waiting for approval (bottom right, in the warning color).
 sub init()
     m.layer = m.top.findNode("layer")
     m.index = 0
     m.nodes = []
     m.badge = invalid
+    m.pendingBadge = invalid
     m.global.observeField("requestsDownloading", "paintBadge")
+    m.global.observeField("requestsPending", "paintBadge")
 end sub
 
 sub build()
@@ -15,6 +19,7 @@ sub build()
     m.layer.removeChildrenIndex(m.layer.getChildCount(), 0)
     m.nodes = []
     m.badge = invalid
+    m.pendingBadge = invalid
     items = m.top.items
     if items = invalid then items = []
     y = 240
@@ -36,7 +41,10 @@ sub build()
         tl.height = 44
         tl.vertAlign = "center"
         tip.visible = false
-        if it.key = "myrequests" then m.badge = makeCountBadge(g)
+        if it.key = "myrequests"
+            m.badge = makeCountBadge(g, t.accent, 42, -4)
+            m.pendingBadge = makeCountBadge(g, t.warn, 42, 40)
+        end if
         m.nodes.Push({ square: sq, icon: ic, tip: tip })
         y = y + 76
     end for
@@ -44,12 +52,12 @@ sub build()
     paintBadge()
 end sub
 
-' A small Accent dot with a number, on the icon's top right corner.
-function makeCountBadge(parent as object) as object
+' A small colored dot with a number, on a corner of the icon.
+function makeCountBadge(parent as object, color as string, x as integer, y as integer) as object
     t = th()
     g = parent.CreateChild("Group")
-    g.translation = [42, -4]
-    disc = makeShape(g, "pkg:/images/circle_fill.png", 28, 28, t.accent)
+    g.translation = [x, y]
+    disc = makeShape(g, "pkg:/images/circle_fill.png", 28, 28, color)
     l = makeLabel(g, "", 16, "semibold", t.onAccent)
     l.width = 28
     l.height = 28
@@ -59,13 +67,17 @@ function makeCountBadge(parent as object) as object
 end function
 
 sub paintBadge()
-    if m.badge = invalid then return
-    n = m.global.requestsDownloading
+    setCount(m.badge, m.global.requestsDownloading)
+    setCount(m.pendingBadge, m.global.requestsPending)
+end sub
+
+sub setCount(b as dynamic, n as dynamic)
+    if b = invalid then return
     if n = invalid then n = 0
-    m.badge.group.visible = n > 0
+    b.group.visible = n > 0
     text = n.ToStr()
     if n > 9 then text = "9+"
-    m.badge.label.text = text
+    b.label.text = text
 end sub
 
 function keyIndex(key as string) as integer

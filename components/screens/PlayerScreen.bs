@@ -3,10 +3,14 @@
 ' pause badge, the Up next card, the seek bar, and a row of controls with
 ' -10 s, play/pause, +10 s, Subtitles, Audio and Next episode.
 ' Keys: OK or Play/Pause toggles; Left/Right seek 10 s on the seek bar
-' (presses add up before the jump); Rewind/Fast-forward seek 30 s;
+' (presses add up before the jump), as does Instant Replay (back 10 s);
+' Rewind/Fast-forward scrub at 2x, 4x, 15x and 60x;
 ' Up/Down move between the header, seek bar and controls; * opens subtitles.
 ' Back hides the OSD and keeps playing; with it hidden, Back leaves.
-' Skip intro shows during the Intro segment; OK on it jumps past it.
+' Skip intro shows during the Intro segment; OK on it jumps past it, and the
+' autoSkipIntro setting skips it on its own from the second title on.
+' After three episodes in a row with no key press, Still watching? asks
+' before the next one (the stillWatching setting).
 
 sub init()
     m.video = m.top.findNode("video")
@@ -28,9 +32,14 @@ sub init()
     m.video.observeField("state", "onState")
     m.video.observeField("position", "onPosition")
     m.video.observeField("availableAudioTracks", "onAudioTracks")
+    ' Captions turned on or off from Roku's own menu (* on a Roku TV).
+    m.video.observeField("globalCaptionMode", "onCaptionMode")
     m.countdown.observeField("fire", "onTick")
     m.hideTimer.observeField("fire", "hideOsd")
     m.seekTimer.observeField("fire", "applySeek")
+    ' "Ends at" moves on while paused, so it's redrawn while the OSD is up.
+    m.clockTimer = m.top.findNode("clockTimer")
+    m.clockTimer.observeField("fire", "updateBar")
     m.scrubTimer = m.top.findNode("scrubTimer")
     m.holdTimer = m.top.findNode("holdTimer")
     m.scrubTimer.observeField("fire", "scrubStep")
@@ -67,6 +76,21 @@ sub init()
     m.zone = "seek"
     m.ctlIndex = 1
     m.seekTarget = -1
+    ' Titles started in this Player: the first never skips its intro on its own.
+    m.titlesStarted = 0
+    ' Episodes in a row that ended with no key press, for Still watching?.
+    m.quietEpisodes = 0
+    m.keyThisEp = false
+    m.stillOpen = false
+    m.stillIndex = 0
+    ' Subtitle timing, in seconds (later is positive), for this title.
+    m.subOffset = 0.0
+    m.pendingOffset = 0.0
+    ' The furthest point this transcode has played to (see seekTo).
+    m.streamStart = 0
+    m.highWater = 0
+    m.encodingStopped = ""
+    m.endsFormat = m.di.GetClockFormat()
     clearSegments()
     buildSpinner()
     buildOsd()
@@ -132,6 +156,7 @@ sub clearSegments()
     m.outroStart = -1
     m.inIntro = false
     m.skipDismissed = false
+    m.autoSkipped = false
 end sub
 
 ' ---------- Starting playback ----------
@@ -161,7 +186,11 @@ sub start()
     if not m.isRestart
         m.nextEp = invalid
         clearSegments()
+        m.titlesStarted = m.titlesStarted + 1
+        m.keyThisEp = false
+        m.subOffset = 0.0
     end if
+    closeStillWatching()
     m.upNextShown = false
     m.upNextCancelled = false
     m.upNext.visible = false
@@ -331,26 +360,131 @@ sub onSegments(event as object)
     print "[Matinee] segments: intro " + m.introStart.ToStr() + "-" + m.introEnd.ToStr() + ", outro " + m.outroStart.ToStr()
 end sub
 
-' Tell Jellyfin what this Roku can play, so it direct-plays when possible
-' and only transcodes when it has to.
-function deviceProfile() as object
-    vc = "h264"
-    if m.di.CanDecodeVideo({ codec: "hevc" }).result = true then vc = vc + ",hevc"
-    if m.di.CanDecodeVideo({ codec: "vp9" }).result = true then vc = vc + ",vp9"
-    ac = "aac,mp3"
-    hasAc3 = false
-    for each a in ["ac3", "eac3", "flac", "opus"]
-        if m.di.CanDecodeAudio({ codec: a }).result = true
-            ac = ac + "," + a
-            if a = "ac3" then hasAc3 = true
-        end if
+' ---------- What this Roku can play ----------
+
+function canVideo(opts as object) as boolean
+    r = m.di.CanDecodeVideo(opts)
+    if r = invalid then return false
+    return isTrue(r.result)
+end function
+
+' A codec counts when the Roku decodes it, or passes it through to a sound
+' bar or receiver (CanDecodeAudio with PassThru).
+function canAudio(codec as string) as boolean
+    r = m.di.CanDecodeAudio({ codec: codec })
+    if r <> invalid and isTrue(r.result) then return true
+    r = m.di.CanDecodeAudio({ codec: codec, passthru: 1 })
+    if r = invalid then return false
+    if isTrue(r.result) then return true
+    pt = r.passthru
+    if isTrue(pt) then return true
+    if type(pt) = "Integer" or type(pt) = "roInt" then return pt <> 0
+    return false
+end function
+
+' Read once per Player: decoding doesn't change mid-binge.
+function decodeCaps() as object
+    if m.caps <> invalid then return m.caps
+    c = { audio: {} }
+    c.hevc = canVideo({ codec: "hevc" })
+    c.hevc10 = c.hevc and canVideo({ codec: "hevc", profile: "main 10" })
+    c.vp9 = canVideo({ codec: "vp9" })
+    c.av1 = canVideo({ codec: "av1" })
+    ' H.264 level, as Jellyfin writes it (4.1 is 41). Every Roku does 4.1.
+    c.h264Level = "41"
+    if canVideo({ codec: "mpeg4 avc", profile: "high", level: "5.1" })
+        c.h264Level = "51"
+    else if canVideo({ codec: "mpeg4 avc", profile: "high", level: "4.2" })
+        c.h264Level = "42"
+    end if
+    for each a in ["ac3", "eac3", "flac", "opus", "dts", "truehd"]
+        c.audio[a] = canAudio(a)
     end for
+    ' No bigger than the TV shows: a 4K file on a 1080p TV is scaled down
+    ' by the server.
+    vm = LCase(safeStr(m.di.GetVideoMode()))
+    c.maxW = 1920
+    c.maxH = 1080
+    if Left(vm, 4) = "2160" or Left(vm, 2) = "4k"
+        c.maxW = 3840
+        c.maxH = 2160
+    else if Left(vm, 3) = "720" or Left(vm, 3) = "480" or Left(vm, 3) = "576"
+        c.maxW = 1280
+        c.maxH = 720
+    end if
+    c.videoMode = vm
+    m.caps = c
+    return c
+end function
+
+' One condition in a CodecProfile. Not required: a file that doesn't say
+' (no level, say) still direct plays.
+function profileRule(prop as string, op as string, value as string) as object
+    return { "Condition": op, "Property": prop, "Value": value, "IsRequired": false }
+end function
+
+' Tell Jellyfin what this Roku can play, so it direct-plays when it can,
+' copies the video and only converts the sound when just the sound is the
+' problem, and transcodes the rest.
+function deviceProfile() as object
+    c = decodeCaps()
+
+    ' Direct play: H.264 always; HEVC, VP9 and AV1 when this Roku decodes them.
+    vc = ["h264"]
+    if c.hevc then vc.Push("hevc")
+    if c.vp9 then vc.Push("vp9")
+    if c.av1 then vc.Push("av1")
+    ' Sound: AAC and MP3 always; Dolby, DTS, TrueHD, FLAC and Opus only when
+    ' the Roku (or the receiver it passes sound to) handles them. Anything
+    ' else is converted by the server, so it never plays silent.
+    ac = ["aac", "mp3"]
+    for each a in ["ac3", "eac3", "flac", "opus", "dts", "truehd"]
+        if c.audio[a] = true then ac.Push(a)
+    end for
+    if c.audio.dts = true then ac.Push("dca")
+
+    ' Transcoding (HLS): the server copies the video when its codec is in
+    ' this list and only converts the sound, so HEVC goes in when decoded.
+    tVideo = "h264"
+    if c.hevc then tVideo = "h264,hevc"
+    ' Converted sound: Dolby Digital 5.1 when it plays, else stereo AAC.
     tAudio = "aac"
     tChannels = "2"
-    if hasAc3
+    if c.audio.ac3 = true
         tAudio = "ac3,aac"
         tChannels = "6"
     end if
+
+    maxW = c.maxW.ToStr()
+    maxH = c.maxH.ToStr()
+    size = [profileRule("Width", "LessThanEqual", maxW), profileRule("Height", "LessThanEqual", maxH)]
+    ' No Roku plays 10-bit or 4:2:2 H.264 (High 10, High 4:2:2).
+    h264 = [profileRule("VideoBitDepth", "LessThanEqual", "8"), profileRule("VideoProfile", "EqualsAny", "high|main|baseline|constrained baseline"), profileRule("VideoLevel", "LessThanEqual", c.h264Level)]
+    h264.Append(size)
+    codecs = [{ "Type": "Video", "Codec": "h264", "Conditions": h264 }]
+    if c.hevc
+        hevcDepth = "8"
+        hevcProfiles = "main"
+        if c.hevc10
+            hevcDepth = "10"
+            hevcProfiles = "main|main 10"
+        end if
+        hevc = [profileRule("VideoBitDepth", "LessThanEqual", hevcDepth), profileRule("VideoProfile", "EqualsAny", hevcProfiles)]
+        hevc.Append(size)
+        codecs.Push({ "Type": "Video", "Codec": "hevc", "Conditions": hevc })
+    end if
+    if c.av1
+        av1 = [profileRule("VideoBitDepth", "LessThanEqual", "10")]
+        av1.Append(size)
+        codecs.Push({ "Type": "Video", "Codec": "av1", "Conditions": av1 })
+    end if
+    if c.vp9 then codecs.Push({ "Type": "Video", "Codec": "vp9", "Conditions": size })
+    ' Rokus decode AAC and Opus in stereo only: 5.1 AAC would play silent.
+    codecs.Push({ "Type": "VideoAudio", "Codec": "aac", "Conditions": [profileRule("AudioChannels", "LessThanEqual", "2")] })
+    codecs.Push({ "Type": "VideoAudio", "Codec": "opus", "Conditions": [profileRule("AudioChannels", "LessThanEqual", "2")] })
+
+    ' Text subtitles come from the server as separate files (WebVTT, see
+    ' subUrl), never from inside the container, so they work in any file.
     subs = []
     for each f in ["vtt", "srt", "subrip", "ass", "ssa", "mov_text"]
         subs.Push({ "Format": f, "Method": "External" })
@@ -359,14 +493,20 @@ function deviceProfile() as object
     for each f in ["pgssub", "pgs", "dvdsub", "dvbsub", "vobsub"]
         subs.Push({ "Format": f, "Method": "Encode" })
     end for
+
+    if not isTrue(m.profileLogged)
+        m.profileLogged = true
+        summary = { video: vc, hevc10: c.hevc10, h264Level: c.h264Level, maxSize: [maxW, maxH], videoMode: c.videoMode, audio: ac, transcode: [tVideo, tAudio, tChannels] }
+        print "[Matinee] player: profile " + FormatJson(summary)
+    end if
     return {
         "MaxStreamingBitrate": maxBitrate(),
         "MaxStaticBitrate": 100000000,
         "MusicStreamingTranscodingBitrate": 192000,
-        "DirectPlayProfiles": [{ "Container": "mp4,m4v,mov,mkv", "Type": "Video", "VideoCodec": vc, "AudioCodec": ac }],
-        "TranscodingProfiles": [{ "Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": tAudio, "Context": "Streaming", "Protocol": "hls", "MaxAudioChannels": tChannels, "MinSegments": 1, "BreakOnNonKeyFrames": true }],
+        "DirectPlayProfiles": [{ "Container": "mp4,m4v,mov,mkv", "Type": "Video", "VideoCodec": vc.Join(","), "AudioCodec": ac.Join(",") }],
+        "TranscodingProfiles": [{ "Container": "ts", "Type": "Video", "VideoCodec": tVideo, "AudioCodec": tAudio, "Context": "Streaming", "Protocol": "hls", "MaxAudioChannels": tChannels, "MinSegments": 1, "BreakOnNonKeyFrames": true }],
         "ContainerProfiles": [],
-        "CodecProfiles": [],
+        "CodecProfiles": codecs,
         "SubtitleProfiles": subs
     }
 end function
@@ -489,6 +629,8 @@ sub beginVideo()
     if content = invalid then return
     m.video.content = content
     m.video.control = "play"
+    m.streamStart = m.startSeconds
+    m.highWater = m.startSeconds
     applySubtitle()
     refreshTrackPills()
     m.status.visible = false
@@ -498,9 +640,24 @@ sub beginVideo()
     showOsd()
 end sub
 
+' The server converts every text format (SRT, ASS, SSA, embedded or not) to
+' WebVTT. The ticks in the path shift the cues: the server subtracts them,
+' so a later Subtitle timing (positive) sends negative ticks. Files that are
+' already WebVTT come back unchanged, without the shift.
 function subUrl(index as integer) as string
-    return m.global.serverUrl + "/Videos/" + m.itemId + "/" + m.mediaSourceId + "/Subtitles/" + index.ToStr() + "/0/Stream.vtt?api_key=" + m.global.token
+    ticks = 0&
+    if m.subOffset <> 0 then ticks = -CInt(m.subOffset * 10) * 1000000&
+    return m.global.serverUrl + "/Videos/" + m.itemId + "/" + m.mediaSourceId + "/Subtitles/" + index.ToStr() + "/" + ticks.ToStr() + "/Stream.vtt?api_key=" + m.global.token
 end function
+
+' Ends this play session's transcode on the server (once), before a new
+' one starts somewhere else in the file or the Player closes.
+sub stopTranscode()
+    if m.playMethod <> "Transcode" or m.playSessionId = "" then return
+    if m.encodingStopped = m.playSessionId then return
+    m.encodingStopped = m.playSessionId
+    apiRequest("/Videos/ActiveEncodings", { "deviceId": m.global.deviceId, "playSessionId": m.playSessionId }, "onIgnore", "DELETE")
+end sub
 
 function playTitle(item as object) as string
     if item = invalid then return ""
@@ -578,10 +735,16 @@ sub chooseTracks(ms as object)
         m.subIndex = -1
     else if mode = "on"
         m.subIndex = bestSub(lang, false)
+    else if m.subIndex < 0 and m.di.GetCaptionsMode() = "On"
+        ' Captions are on in the TV's own settings: show text ones.
+        tvSub = bestSub(lang, false)
+        if not isImageSub(tvSub) then m.subIndex = tvSub
     end if
     tp = m.global.trackPrefs
-    if tp = invalid then return
-    if not isTrue(tp.set) then return
+    if tp = invalid or not isTrue(tp.set)
+        forcedFallback(mode)
+        return
+    end if
     if safeStr(tp.audioLang) <> ""
         for each s in m.audioStreams
             if s.lang = tp.audioLang
@@ -591,9 +754,34 @@ sub chooseTracks(ms as object)
         end for
     end if
     if isTrue(tp.subOff)
+        ' Off was chosen in the Player: not even forced subtitles.
         m.subIndex = -1
     else if safeStr(tp.subLang) <> ""
         m.subIndex = bestSub(tp.subLang, isTrue(tp.subForced))
+    else
+        forcedFallback(mode)
+    end if
+end sub
+
+' With no subtitles chosen (the setting is Off or Automatic), a forced track
+' in the sound's language still shows: it only translates the odd line in
+' another language, which the viewer would otherwise miss.
+sub forcedFallback(mode as string)
+    if m.subIndex >= 0 or mode = "on" then return
+    a = findStream(m.audioStreams, m.audioIndex)
+    if a = invalid then return
+    if a.lang = "" or a.lang = "und" then return
+    best = -1
+    for each s in m.subStreams
+        if s.forced and s.lang = a.lang
+            ' Text before pictures (pictures need a transcode).
+            if best < 0 or s.isText then best = s.index
+            if s.isText then exit for
+        end if
+    end for
+    if best >= 0
+        m.subIndex = best
+        print "[Matinee] player: forced subtitles "; best; " for "; a.lang; " sound"
     end if
 end sub
 
@@ -617,6 +805,8 @@ function bestSub(lang as string, wantForced as boolean) as integer
 end function
 
 ' Show the chosen text subtitle, or none.
+' globalCaptionMode is the TV's own captions setting, so it's only turned
+' Off when it was On: "Instant replay" and "When mute" stay as they are.
 sub applySubtitle()
     s = findStream(m.subStreams, m.subIndex)
     if s <> invalid
@@ -626,7 +816,28 @@ sub applySubtitle()
             return
         end if
     end if
-    m.video.globalCaptionMode = "Off"
+    if m.video.globalCaptionMode = "On" then m.video.globalCaptionMode = "Off"
+end sub
+
+' Captions turned on or off in Roku's own menu: follow it, so the
+' Subtitles button tells the truth. Matinee's own changes already match.
+sub onCaptionMode()
+    if not m.started or m.subBusy then return
+    mode = m.video.globalCaptionMode
+    s = findStream(m.subStreams, m.subIndex)
+    showing = s <> invalid
+    if showing then showing = s.isText
+    if mode = "On" and not showing and not isImageSub(m.subIndex)
+        idx = bestSub(safeStr(prefValue("subtitleLang", "")), false)
+        if not isImageSub(idx) and idx >= 0
+            m.subIndex = idx
+            m.video.subtitleTrack = subUrl(idx)
+            refreshTrackPills()
+        end if
+    else if mode = "Off" and showing
+        m.subIndex = -1
+        refreshTrackPills()
+    end if
 end sub
 
 ' For direct play the Roku switches audio itself, matched by order.
@@ -716,6 +927,11 @@ sub buildOsd()
     m.remaining.height = 30
     m.remaining.horizAlign = "right"
     m.remaining.vertAlign = "center"
+    ' "Ends at 10:42 PM" under the remaining time, in the TV's clock format.
+    m.endsAt = makeLabel(o, "", 18, "regular", t.muted)
+    m.endsAt.translation = [1920 - 80 - 320, barY + 18]
+    m.endsAt.width = 320
+    m.endsAt.horizAlign = "right"
     m.barBg = o.CreateChild("Rectangle")
     m.barBg.translation = [m.barX, barY - 4]
     m.barBg.width = m.barW
@@ -783,7 +999,7 @@ end sub
 
 sub skipIntro()
     if m.introEnd <= 0 then return
-    m.video.seek = m.introEnd
+    seekTo(m.introEnd)
     m.skipDismissed = true
     m.zone = "seek"
     paintSkip()
@@ -909,11 +1125,31 @@ sub updateBar()
     remain = Int(dur - curPos)
     if remain < 0 then remain = 0
     m.remaining.text = Chr(8722) + formatClock(remain)
+    m.endsAt.text = endsAtText(remain, dur > 0)
 end sub
 
+' When the title ends if it plays on from here (from the seek target while
+' seeking), in the TV's local time and 12- or 24-hour clock.
+function endsAtText(remain as integer, known as boolean) as string
+    if not known then return ""
+    now = CreateObject("roDateTime")
+    now.ToLocalTime()
+    ends = CreateObject("roDateTime")
+    ends.FromSeconds(now.AsSeconds() + remain)
+    hr = ends.GetHours()
+    mnt = ends.GetMinutes()
+    if m.endsFormat = "24h" then return "Ends at " + pad2(hr) + ":" + pad2(mnt)
+    half = "AM"
+    if hr >= 12 then half = "PM"
+    hr = hr mod 12
+    if hr = 0 then hr = 12
+    return "Ends at " + hr.ToStr() + ":" + pad2(mnt) + " " + half
+end function
+
 sub showOsd()
-    if not m.started then return
+    if not m.started or m.stillOpen then return
     m.osd.visible = true
+    m.clockTimer.control = "start"
     paintOsd()
     restartHideTimer()
 end sub
@@ -931,6 +1167,7 @@ end sub
 ' Back hides the OSD whatever the state; playback carries on.
 sub closeOsd()
     m.hideTimer.control = "stop"
+    m.clockTimer.control = "stop"
     m.osd.visible = false
     m.zone = "seek"
     paintSkip()
@@ -962,23 +1199,38 @@ end sub
 
 sub applySeek()
     if m.seekTarget < 0 then return
-    m.video.seek = m.seekTarget
+    target = m.seekTarget
     m.seekTarget = -1
+    seekTo(target)
     restartHideTimer()
+end sub
+
+' Every jump goes through here. During a transcode the server has only made
+' the stream from where it started up to a little past what has played; a
+' jump before that start, or well past it, starts a new transcode at the
+' new spot (and stops the old one) instead of asking the Roku to wait for
+' segments that don't exist yet.
+sub seekTo(target as float)
+    if m.playMethod = "Transcode" and (target < m.streamStart - 2 or target > m.highWater + 120)
+        print "[Matinee] player: restarting the transcode at "; Int(target); " s (played "; Int(m.streamStart); "-"; Int(m.highWater); " s)"
+        restartAt(Int(target))
+        return
+    end if
+    m.video.seek = target
 end sub
 
 ' ---------- Fast-forward and rewind ----------
 ' Fast-forward or Rewind starts scrubbing; pressing it again goes faster
-' (three speeds), the other one turns around. Holding Left or Right scrubs
-' until it's let go. OK or Play jumps there; Back cancels.
+' (2x, 4x, 15x, 60x), the other one turns around. Holding Left or Right
+' scrubs until it's let go. OK or Play jumps there; Back cancels.
 
 function scrubSpeeds() as object
-    ' Seconds of video per second of scrubbing, for 1x, 2x and 3x.
-    return [30, 90, 240]
+    ' Seconds of video per second of scrubbing: 60x moves a minute a second.
+    return [2, 4, 15, 60]
 end function
 
-' byHold: started by holding Left or Right, so it speeds up on its own the
-' longer the key is held (2x after 2 s, 3x after 5 s).
+' byHold: started by holding Left or Right, so it starts at 15x and goes to
+' 60x after 3 s of holding.
 sub startScrub(dirn as integer, byHold = false as boolean)
     if not m.started then return
     if m.scrubLevel = 0
@@ -992,6 +1244,7 @@ sub startScrub(dirn as integer, byHold = false as boolean)
         if m.scrubLevel < scrubSpeeds().Count() then m.scrubLevel = m.scrubLevel + 1
     else
         m.scrubLevel = 1
+        if byHold then m.scrubLevel = 3
         m.scrubDir = dirn
     end if
     m.seekTimer.control = "stop"
@@ -1007,9 +1260,8 @@ sub scrubStep()
     if m.scrubByHold
         m.scrubTicks = m.scrubTicks + 1
         was = m.scrubLevel
-        m.scrubLevel = 1
-        if m.scrubTicks >= 8 then m.scrubLevel = 2
-        if m.scrubTicks >= 20 then m.scrubLevel = 3
+        m.scrubLevel = 3
+        if m.scrubTicks >= 12 then m.scrubLevel = 4
         if m.scrubLevel <> was then paintScrub()
     end if
     rate = scrubSpeeds()[m.scrubLevel - 1] * 0.25
@@ -1031,7 +1283,8 @@ sub stopScrub(commit as boolean)
     m.scrubDir = 0
     if commit
         applySeek()
-        if m.video.state = "paused" then m.video.control = "resume"
+        ' Not after a jump that restarted the transcode (start() clears started).
+        if m.started and m.video.state = "paused" then m.video.control = "resume"
     else
         m.seekTarget = -1
         if m.scrubWasPlaying then m.video.control = "resume"
@@ -1051,7 +1304,7 @@ sub paintScrub()
     if m.scrubLevel = 0 then return
     word = "Fast-forward"
     if m.scrubDir < 0 then word = "Rewind"
-    m.scrubLabel.text = word + " " + m.scrubLevel.ToStr() + Chr(215)
+    m.scrubLabel.text = word + " " + scrubSpeeds()[m.scrubLevel - 1].ToStr() + Chr(215)
 end sub
 
 sub doControl(index as integer)
@@ -1097,6 +1350,10 @@ sub openPicker(kind as string)
             if not s.isText then lbl = lbl + " (burned in)"
             m.pickerRows.Push({ kind: "sub", index: s.index, label: lbl })
         end for
+        cur = findStream(m.subStreams, m.subIndex)
+        if cur <> invalid
+            if cur.isText then m.pickerRows.Push({ kind: "timing", index: -4, label: "Subtitle timing " + Chr(183) + " " + offsetText(m.subOffset) })
+        end if
         lang = findLang()
         m.pickerRows.Push({ kind: "find", index: -2, label: "Find " + languageName(lang) + " subtitles" + Chr(8230) })
     end if
@@ -1129,6 +1386,7 @@ sub drawPicker()
     head = "Subtitles"
     if m.pickKind = "audio" then head = "Audio"
     if m.pickKind = "find" then head = "Find " + languageName(m.findLang) + " subtitles"
+    if m.pickKind = "timing" then head = "Subtitle timing"
     makeTitle(p, head, 34).translation = [px + 40, 120]
     maxRows = 9
     first = 0
@@ -1163,6 +1421,12 @@ sub pickerChoose()
     r = m.pickerRows[m.pickIndex]
     if r.kind = "find"
         findSubtitles()
+        return
+    else if r.kind = "timing"
+        openTiming()
+        return
+    else if r.kind = "offset"
+        applyTiming()
         return
     else if r.kind = "remote"
         downloadSubtitle(r.id)
@@ -1212,11 +1476,60 @@ sub pickerChoose()
 end sub
 
 sub restartWithTracks()
-    curPos = Int(m.video.position)
+    restartAt(Int(m.video.position))
+end sub
+
+' Plays this title again from startAt, with the same tracks.
+sub restartAt(startAt as integer)
     reportStopped()
     m.video.control = "stop"
     closePicker()
-    m.top.playItem = { itemId: m.itemId, startSeconds: curPos, audioIndex: m.audioIndex, subIndex: m.subIndex, restart: true }
+    m.top.playItem = { itemId: m.itemId, startSeconds: startAt, audioIndex: m.audioIndex, subIndex: m.subIndex, restart: true }
+end sub
+
+' ---------- Subtitle timing ----------
+' Left and Right move the subtitles 0.5 s earlier or later; OK applies it.
+' The Roku's Video node has no subtitle delay, so the server shifts the
+' cues (see subUrl) and the title restarts where it was to load them.
+
+function offsetText(secs as float) as string
+    if secs = 0 then return "In sync"
+    tenths = CInt(secs * 10)
+    if tenths < 0 then tenths = -tenths
+    txt = (tenths \ 10).ToStr()
+    if tenths mod 10 <> 0 then txt = txt + "." + (tenths mod 10).ToStr()
+    if secs > 0 then return txt + " s later"
+    return txt + " s earlier"
+end function
+
+sub openTiming()
+    m.pickKind = "timing"
+    m.pendingOffset = m.subOffset
+    drawTiming()
+end sub
+
+sub drawTiming()
+    m.pickerRows = [{ kind: "offset", index: -4, label: Chr(8592) + "  " + offsetText(m.pendingOffset) + "  " + Chr(8594) }, { kind: "note", index: -3, label: "Left: earlier " + Chr(183) + " Right: later" }, { kind: "note", index: -3, label: "OK applies it" }]
+    m.pickIndex = 0
+    drawPicker()
+end sub
+
+sub stepTiming(key as string)
+    if key = "left" then m.pendingOffset = m.pendingOffset - 0.5
+    if key = "right" then m.pendingOffset = m.pendingOffset + 0.5
+    if m.pendingOffset < -30 then m.pendingOffset = -30
+    if m.pendingOffset > 30 then m.pendingOffset = 30
+    drawTiming()
+end sub
+
+sub applyTiming()
+    if m.pendingOffset = m.subOffset
+        openPicker("sub")
+        return
+    end if
+    m.subOffset = m.pendingOffset
+    print "[Matinee] player: subtitle timing "; m.subOffset; " s"
+    restartWithTracks()
 end sub
 
 ' ---------- Finding subtitles ----------
@@ -1389,6 +1702,7 @@ sub onPosition()
     if not m.started then return
     curPos = m.video.position
     if m.osd.visible then updateBar()
+    if curPos > m.highWater then m.highWater = curPos
     if Abs(curPos - m.lastReport) >= 10
         m.lastReport = curPos
         apiRequest("/Sessions/Playing/Progress", {}, "onIgnore", "POST", progressBody(false))
@@ -1398,6 +1712,14 @@ sub onPosition()
         m.inIntro = inIntro
         ' Leaving the Intro (or seeking back before it) offers the skip again next time.
         if not inIntro and curPos < m.introStart then m.skipDismissed = false
+        if inIntro and autoSkipIntro()
+            ' Once per episode, so going back to watch the intro works.
+            m.autoSkipped = true
+            print "[Matinee] player: skipped the intro on its own"
+            skipIntro()
+            showToast("Skipped intro", "next", 0, "top")
+            return
+        end if
         paintSkip()
     end if
     dur = m.video.duration
@@ -1408,6 +1730,14 @@ sub onPosition()
         if dur > 120 and (atOutro or (dur - curPos) <= 25) then showUpNext()
     end if
 end sub
+
+' Skip intro automatically (a per-person setting, off unless turned on),
+' but never in the first title started in this Player: the viewer may want
+' to hear the theme once.
+function autoSkipIntro() as boolean
+    if m.autoSkipped or m.skipDismissed or m.titlesStarted < 2 then return false
+    return isTrue(prefValue("autoSkipIntro", false))
+end function
 
 function autoplayNext() as boolean
     return prefValue("autoplayNext", true) <> false
@@ -1433,8 +1763,10 @@ sub onState()
     else if st = "buffering"
         showSpinner(true)
     else if st = "finished"
-        if m.nextEp <> invalid and not m.upNextCancelled and autoplayNext()
-            playNext()
+        if m.stillOpen
+            ' Still watching? is already up.
+        else if m.nextEp <> invalid and not m.upNextCancelled and autoplayNext()
+            autoAdvance()
         else
             reportStopped()
             m.top.navigate = { action: "back" }
@@ -1454,6 +1786,7 @@ sub subtitlesTip()
 end sub
 
 sub reportStopped()
+    stopTranscode()
     if not m.started or m.stopped then return
     m.stopped = true
     apiRequest("/Sessions/Playing/Stopped", {}, "onIgnore", "POST", progressBody(false))
@@ -1522,7 +1855,65 @@ end sub
 
 sub onTick()
     m.countLeft = m.countLeft - 1
-    if m.countLeft <= 0 then playNext()
+    if m.countLeft <= 0 then autoAdvance()
+end sub
+
+' The next episode starting on its own (the Up next countdown ran out, or
+' the episode finished). After three episodes in a row with no key press,
+' ask Still watching? instead.
+sub autoAdvance()
+    m.countdown.control = "stop"
+    if m.nextEp = invalid then return
+    if not m.keyThisEp then m.quietEpisodes = m.quietEpisodes + 1
+    if m.quietEpisodes >= 3 and prefValue("stillWatching", true) <> false
+        showStillWatching()
+        return
+    end if
+    playNext()
+end sub
+
+' ---------- Still watching? ----------
+
+sub showStillWatching()
+    t = th()
+    m.stillOpen = true
+    m.stillIndex = 0
+    m.upNext.visible = false
+    closeOsd()
+    if m.video.state = "playing" then m.video.control = "pause"
+    print "[Matinee] player: still watching? after "; m.quietEpisodes; " episodes"
+    g = m.top.findNode("stillLayer")
+    g.removeChildrenIndex(g.getChildCount(), 0)
+    md = makeModal(g, t.stillW, t.stillH)
+    makeTitle(md.body, "Still watching?", 36).translation = [48, 44]
+    l = makeLabel(md.body, "Up next: " + m.nextTitle.text, 22, "regular", t.muted)
+    l.translation = [48, 104]
+    l.width = t.stillW - 96
+    l.wrap = true
+    l.maxLines = 2
+    m.stillBtns = [makeBtn(md.body, { kind: "primary", text: "Continue watching", size: 22, padX: 36 }), makeBtn(md.body, { kind: "secondary", text: "Stop", size: 22, padX: 32 })]
+    rowBtns(m.stillBtns, 48, t.stillH - 72 - 48, 16)
+    paintBtns(m.stillBtns, m.stillIndex)
+    g.visible = true
+    m.sink.setFocus(true)
+end sub
+
+sub closeStillWatching()
+    if not m.stillOpen then return
+    m.stillOpen = false
+    m.top.findNode("stillLayer").visible = false
+end sub
+
+sub stillChoose()
+    if m.stillIndex = 0
+        m.quietEpisodes = 0
+        closeStillWatching()
+        playNext()
+    else
+        closeStillWatching()
+        reportStopped()
+        m.top.navigate = { action: "back" }
+    end if
 end sub
 
 sub playNext()
@@ -1549,6 +1940,11 @@ sub onFocusChanged()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    ' Any key press means someone is watching.
+    if press
+        m.quietEpisodes = 0
+        m.keyThisEp = true
+    end if
     if not press
         ' Letting go of a held Left or Right ends its scrub there.
         if key = m.holdKey
@@ -1559,6 +1955,18 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return held
         end if
         return false
+    end if
+    if m.stillOpen
+        if key = "left" or key = "right"
+            m.stillIndex = 1 - m.stillIndex
+            paintBtns(m.stillBtns, m.stillIndex)
+        else if key = "OK" or key = "play"
+            stillChoose()
+        else if key = "back"
+            m.stillIndex = 1
+            stillChoose()
+        end if
+        return true
     end if
     ' A held key repeats its press; the hold (and its scrub) carries on.
     if (key = "left" or key = "right") and key = m.holdKey and not m.pickerOpen then return true
@@ -1583,6 +1991,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
             drawPicker()
         else if key = "OK"
             pickerChoose()
+        else if m.pickKind = "timing" and (key = "left" or key = "right")
+            stepTiming(key)
+        else if key = "back" and m.pickKind = "timing"
+            ' Back leaves the timing as it was.
+            openPicker("sub")
         else if (key = "back" or key = "left") and m.pickKind = "find"
             ' Back from a search returns to the Subtitles list.
             m.subBusy = false
@@ -1600,6 +2013,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
             cancelUpNext()
             return true
         end if
+    end if
+    ' Instant Replay: back 10 seconds (presses add up, as with Left).
+    if key = "replay"
+        seekBy(-10)
+        return true
     end if
     if key = "back"
         ' First Back hides the OSD (or Skip intro); the next leaves.
@@ -1707,6 +2125,7 @@ sub onClosed()
     m.hideTimer.control = "stop"
     m.scrubTimer.control = "stop"
     m.holdTimer.control = "stop"
+    m.clockTimer.control = "stop"
     ' A warm-up still running must not start the video after leaving.
     m.pendingContent = invalid
     m.warmToken = ""

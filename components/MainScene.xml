@@ -6,6 +6,7 @@
   </interface>
   <script type="text/brightscript" uri="MainScene.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Requests.bs" />
   <children>
     <Rectangle id="bg" width="1920" height="1080" color="0x0B0D12FF" />
     <Group id="screens" />

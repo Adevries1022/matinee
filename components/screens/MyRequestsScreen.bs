@@ -2,33 +2,55 @@
 ' watch yet (waiting for approval, searching or downloading), newest first,
 ' with a progress bar for each download. Progress comes from the Radarr and
 ' Sonarr status Seerr attaches to each request, so it works without Radarr
-' or Sonarr being set up on this TV. Refreshes every 30 seconds while shown.
-' Ready titles drop off: they're in the library.
+' or Sonarr being set up on this TV; when they are, a stuck download says
+' why ("Stalled: no connections", "Waiting to import"...). Refreshes every
+' 30 seconds while shown. Ready titles drop off the list (they're in the
+' library) and show under Ready to watch until they're played, with
+' Report a problem.
+' For people whose Seerr account can approve (ADMIN or MANAGE_REQUESTS),
+' everyone's requests waiting for approval come first, with Approve and
+' Decline (which asks first).
+' Focus: a row, or Right to its buttons. OK on a row opens its Request
+' Details (or Detail when it's ready to watch).
 
 sub init()
     t = th()
     m.layer = m.top.findNode("layer")
     m.list = m.top.findNode("list")
     m.sink = m.top.findNode("sink")
+    m.modal = m.top.findNode("modal")
     m.poll = m.top.findNode("poll")
 
     makeTitle(m.layer, "My requests", 64).translation = [160, 80]
     m.summary = makeLabel(m.layer, "Loading...", 20, "regular", t.muted)
     m.summary.translation = [160, 166]
-    m.summary.width = 1200
+    m.summary.width = 1600
 
+    ' The raw Seerr requests: the User's own, and (for approvers) everyone's
+    ' waiting for approval.
+    m.mine = []
+    m.pendingAll = []
     m.items = []
-    ' Title and artwork per request, kept across refreshes.
+    ' Title and artwork per title, kept across refreshes.
     m.details = {}
+    ' Why a download is stuck, per title, from Radarr and Sonarr.
+    m.arrReasons = {}
     m.index = 0
+    m.col = -1
     m.first = 0
     m.rows = []
     m.gen = 0
+    m.modalOpen = false
+    m.confirmItem = invalid
+    m.report = invalid
+    m.busy = false
 
     m.poll.observeField("fire", "load")
     m.top.observeField("focusedChild", "onFocusChanged")
     m.top.observeField("visible", "onVisible")
     m.global.observeField("seerrState", "onSeerrState")
+    m.global.observeField("seerrPerms", "onPerms")
+    m.global.observeField("readyItems", "onReadyItems")
     setupMenu("myrequests")
     onVisible()
 end sub
@@ -47,6 +69,18 @@ sub onSeerrState()
     onVisible()
 end sub
 
+sub onPerms()
+    if m.top.visible and m.global.seerrState = "ready" then load()
+end sub
+
+sub onReadyItems()
+    rebuild()
+end sub
+
+function canManage() as boolean
+    return seerrCanManage(safeInt(m.global.seerrPerms))
+end function
+
 ' ---------- Loading ----------
 
 sub load()
@@ -55,13 +89,26 @@ sub load()
         return
     end if
     m.gen = m.gen + 1
-    seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": "all", "requestedBy": m.global.seerrUserId }, "onRequests", "GET", invalid, m.gen)
+    seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": "all", "requestedBy": m.global.seerrUserId }, "onRequests", "GET", invalid, { gen: m.gen, part: "mine" })
+    if canManage()
+        seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": "pending" }, "onRequests", "GET", invalid, { gen: m.gen, part: "pending" })
+    else
+        m.pendingAll = []
+    end if
+    for each n in ["radarr", "sonarr"]
+        if arrReady(n)
+            q = { "pageSize": "100" }
+            if n = "radarr" then q.includeMovie = "true" else q.includeSeries = "true"
+            arrRequest(n, "/queue", q, "onArrQueue", "GET", invalid, n)
+        end if
+    end for
 end sub
 
 sub onMe(event as object)
     res = event.getData()
     if res.ok and isValid(res.data)
         m.global.seerrUserId = safeStr(res.data.id)
+        m.global.seerrPerms = safeInt(res.data.permissions)
         load()
     else if res.code = 401 or res.code = 403
         m.top.navigate = { action: "seerrSignedOut" }
@@ -70,63 +117,168 @@ end sub
 
 sub onRequests(event as object)
     res = event.getData()
-    if res.tag <> m.gen then return
+    tag = res.tag
+    if tag = invalid then return
+    if tag.gen <> m.gen then return
     if not res.ok or not isValid(res.data)
         if res.code = 401 or res.code = 403 then m.top.navigate = { action: "seerrSignedOut" }
-        m.summary.text = "Couldn" + Chr(8217) + "t reach Seerr."
+        if tag.part = "mine" then m.summary.text = "Couldn" + Chr(8217) + "t reach Seerr."
         return
     end if
     list = []
-    downloading = 0
-    if isValid(res.data.results)
-        for each rq in res.data.results
-            md = rq.media
-            if isValid(md)
-                ms = safeInt(md.status)
-                ' Declined requests and ready titles aren't shown.
-                if safeInt(rq.status) <> 3 and (ms = 2 or ms = 3 or safeInt(rq.status) = 1)
-                    it = requestRow(rq, md)
-                    if it.downloading then downloading = downloading + 1
-                    list.Push(it)
+    if type(res.data.results) = "roArray" then list = res.data.results
+    if tag.part = "pending"
+        m.pendingAll = list
+        n = list.Count()
+        if isValid(res.data.pageInfo) then n = safeInt(res.data.pageInfo.results)
+        m.global.requestsPending = n
+    else
+        m.mine = list
+    end if
+    rebuild()
+end sub
+
+' Why each title's download is stuck, from Radarr's or Sonarr's own queue.
+' A title with any download still moving has no reason.
+sub onArrQueue(event as object)
+    res = event.getData()
+    n = safeStr(res.tag)
+    recs = invalid
+    if res.ok and isValid(res.data)
+        recs = res.data.records
+        if not isValid(recs) and type(res.data) = "roArray" then recs = res.data
+    end if
+    found = {}
+    if type(recs) = "roArray"
+        for each rec in recs
+            key = ""
+            if n = "radarr" and isValid(rec.movie) then key = "movie/" + safeStr(rec.movie.tmdbId)
+            if n = "sonarr" and isValid(rec.series) then key = "tv/" + safeStr(rec.series.tvdbId)
+            if key <> ""
+                why = arrStuckReason(rec)
+                if why = "" or found[key] = invalid
+                    found[key] = why
+                else if found[key] <> "" and reasonRank(why) > reasonRank(found[key])
+                    found[key] = why
                 end if
             end if
         end for
     end if
+    ' Keep the other app's reasons.
+    for each k in m.arrReasons
+        mt = Left(k, Instr(1, k, "/") - 1)
+        if (n = "radarr" and mt <> "movie") or (n = "sonarr" and mt <> "tv") then found[k] = m.arrReasons[k]
+    end for
+    m.arrReasons = found
+    rebuild()
+end sub
+
+function reasonRank(why as string) as integer
+    if why = "Download failed" then return 5
+    if Left(why, 7) = "Stalled" or Left(why, 3) = "Can" then return 4
+    if why = "Waiting to import" then return 3
+    if why = "Paused" then return 2
+    if why = "Queued" then return 1
+    return 0
+end function
+
+' ---------- Rows ----------
+
+' Approvals first, then the User's own open requests, then Ready to watch.
+sub rebuild()
+    t = th()
+    list = []
+    seen = {}
+    downloading = 0
+    for each rq in m.pendingAll
+        if isValid(rq.media)
+            it = requestRow(rq, rq.media)
+            it.actions = [{ id: "approve", label: "Approve" }, { id: "decline", label: "Decline" }]
+            by = ""
+            if isValid(rq.requestedBy) then by = safeStr(rq.requestedBy.displayName)
+            if by <> "" then it.detail = "Requested by " + by
+            seen[safeStr(rq.id)] = true
+            list.Push(it)
+        end if
+    end for
+    for each rq in m.mine
+        md = rq.media
+        if isValid(md) and not seen.DoesExist(safeStr(rq.id))
+            ms = safeInt(md.status)
+            if isTrue(rq.is4k) then ms = safeInt(md.status4k)
+            ' Declined requests and ready titles aren't shown.
+            if safeInt(rq.status) <> 3 and (ms = 2 or ms = 3 or safeInt(rq.status) = 1)
+                it = requestRow(rq, md)
+                if it.downloading then downloading = downloading + 1
+                list.Push(it)
+            end if
+        end if
+    end for
+    m.downloadingCount = downloading
+    m.openCount = list.Count()
+    canReport = seerrCanReport(safeInt(m.global.seerrPerms))
+    ready = m.global.readyItems
+    if ready = invalid then ready = []
+    for each r in ready
+        key = r.mediaType + "/" + r.tmdbId.ToStr()
+        d = titleDetail(key)
+        kind = "Movie"
+        if r.mediaType = "tv" then kind = "Series"
+        it = { key: key, kind: "ready", title: r.title, image: d.image, source: kind, quality: "", pct: 1.0, barColor: t.ok, stateLabel: "Ready to watch", stateColor: t.ok, detail: "", downloading: false, tmdbId: r.tmdbId, mediaType: r.mediaType, jellyfinItemId: r.jellyfinItemId, mediaId: r.seerrMediaId, actions: [] }
+        if canReport and r.seerrMediaId > 0 then it.actions = [{ id: "report", label: "Report a problem" }]
+        list.Push(it)
+    end for
     m.items = list
     m.global.requestsDownloading = downloading
-    print "[Matinee] my requests: "; list.Count(); " open, "; downloading; " downloading"
     render()
 end sub
 
-' One request as a row for makeQueueRow. Its title and artwork come from
-' the title's Seerr details, fetched once.
-function requestRow(rq as object, md as object) as object
-    t = th()
-    mt = safeStr(md.mediaType)
-    key = mt + "/" + safeStr(md.tmdbId)
+' Title and artwork for "movie/123" or "tv/456", fetched once.
+function titleDetail(key as string) as object
     d = m.details[key]
     if d = invalid
         d = { title: "", image: "" }
         m.details[key] = d
         seerrRequest("/" + key, {}, "onDetail", "GET", invalid, { key: key })
     end if
+    return d
+end function
+
+' One request as a row for makeQueueRow.
+function requestRow(rq as object, md as object) as object
+    t = th()
+    mt = safeStr(md.mediaType)
+    key = mt + "/" + safeStr(md.tmdbId)
+    d = titleDetail(key)
     dl = seerrDownloads(md)
     kind = "Movie"
     if mt = "tv" then kind = "Series"
     quality = ""
     if isTrue(rq.is4k) then quality = "4K"
-    it = { key: key, title: d.title, image: d.image, source: kind, quality: quality, pct: 0.0, barColor: t.dashed, stateColor: t.muted, detail: "", downloading: dl.count > 0 }
+    it = { key: key, kind: "request", reqId: safeInt(rq.id), tmdbId: safeInt(md.tmdbId), mediaType: mt, title: d.title, image: d.image, source: kind, quality: quality, pct: 0.0, barColor: t.dashed, stateColor: t.muted, detail: "", downloading: dl.count > 0, actions: [] }
     if safeInt(rq.status) = 1
         it.stateLabel = "Waiting for approval"
         it.stateColor = t.warn
-    else if dl.count > 0
-        it.stateLabel = "Downloading " + Int(dl.pct * 100).ToStr() + "%"
-        it.stateColor = t.info
-        it.barColor = t.accent
-        it.pct = dl.pct
-        it.detail = dl.detail
     else
-        it.stateLabel = "Approved " + Chr(183) + " looking for a download"
+        if dl.count > 0
+            it.stateLabel = "Downloading " + Int(dl.pct * 100).ToStr() + "%"
+            it.stateColor = t.info
+            it.barColor = t.accent
+            it.pct = dl.pct
+            it.detail = dl.detail
+        else
+            it.stateLabel = "Approved " + Chr(183) + " looking for a download"
+        end if
+        ' Why it's stuck: Radarr or Sonarr say best; Seerr's copy otherwise.
+        arrKey = "movie/" + safeStr(md.tmdbId)
+        if mt = "tv" then arrKey = "tv/" + safeStr(md.tvdbId)
+        why = ""
+        if m.arrReasons.DoesExist(arrKey) then why = m.arrReasons[arrKey] else why = seerrStuckReason(md)
+        if why <> ""
+            it.stateLabel = why
+            it.stateColor = stuckColor(why)
+            if it.stateColor = t.error then it.barColor = t.error
+        end if
     end if
     if it.title = "" then it.title = "Loading..."
     return it
@@ -144,7 +296,7 @@ sub onDetail(event as object)
     m.details[tag.key] = { title: name, image: img }
     for each it in m.items
         if it.key = tag.key
-            it.title = name
+            if it.kind <> "ready" then it.title = name
             it.image = img
         end if
     end for
@@ -166,22 +318,43 @@ sub render()
         emptyPanel(msg)
         return
     end if
-    downloading = 0
+    parts = [safeInt(m.downloadingCount).ToStr() + " downloading", safeInt(m.openCount).ToStr() + " not ready yet"]
+    approvals = 0
     for each it in m.items
-        if it.downloading then downloading = downloading + 1
+        if it.actions.Count() > 0 and it.actions[0].id = "approve" then approvals = approvals + 1
     end for
-    m.summary.text = downloading.ToStr() + " downloading " + Chr(183) + " " + m.items.Count().ToStr() + " not ready yet " + Chr(183) + " from Seerr"
+    if approvals > 0 then parts.Push(approvals.ToStr() + " to approve")
+    parts.Push("from Seerr")
+    m.summary.text = parts.Join(" " + Chr(183) + " ")
     if m.items.Count() = 0
         emptyPanel("Nothing waiting. Titles you request in Discover or Search show up here until they" + Chr(8217) + "re ready to watch.")
         return
     end if
     if m.index > m.items.Count() - 1 then m.index = m.items.Count() - 1
+    if m.index < 0 then m.index = 0
     if m.index < m.first then m.first = m.index
     if m.index > m.first + 4 then m.first = m.index - 4
+    clampCol()
+    ' With any buttons, rows narrow to make a column for them on the right.
+    withActions = false
+    for each it in m.items
+        if it.actions.Count() > 0 then withActions = true
+    end for
+    rowW = 1600
+    if withActions then rowW = 1236
     y = 260
     for i = m.first to m.items.Count() - 1
         if i <= m.first + 4
-            m.rows.Push(makeQueueRow(h, m.items[i], y, false, 1600))
+            it = m.items[i]
+            r = makeQueueRow(h, it, y, false, rowW)
+            r.btns = []
+            if it.actions.Count() > 0
+                for each a in it.actions
+                    r.btns.Push(makeBtn(h, { kind: "secondary", text: a.label, h: 60, size: 20, padX: 26 }))
+                end for
+                rowBtns(r.btns, 160 + rowW + 24, y + 35, 12)
+            end if
+            m.rows.Push(r)
             y = y + 144
         end if
     end for
@@ -203,8 +376,109 @@ end sub
 
 sub paint()
     for i = 0 to m.rows.Count() - 1
-        m.rows[i].ring.visible = (m.first + i = m.index)
+        isCur = (m.first + i = m.index)
+        m.rows[i].ring.visible = isCur and m.col < 0
+        focusBtn = -1
+        if isCur then focusBtn = m.col
+        paintBtns(m.rows[i].btns, focusBtn)
     end for
+end sub
+
+' The button column stays put moving between rows, when the row has one.
+sub clampCol()
+    if m.items.Count() = 0
+        m.col = -1
+        return
+    end if
+    n = m.items[m.index].actions.Count()
+    if m.col > n - 1 then m.col = n - 1
+end sub
+
+' ---------- Actions ----------
+
+sub openRow()
+    if m.items.Count() = 0 then return
+    it = m.items[m.index]
+    if it.kind = "ready" and it.jellyfinItemId <> ""
+        m.top.navigate = { action: "details", itemId: it.jellyfinItemId }
+        return
+    end if
+    m.top.navigate = { action: "requestDetails", tmdbId: it.tmdbId.ToStr(), mediaType: it.mediaType }
+end sub
+
+sub doAction()
+    it = m.items[m.index]
+    a = it.actions[m.col].id
+    if a = "approve"
+        answerRequest(it, "approve")
+    else if a = "decline"
+        openConfirm(it)
+    else if a = "report"
+        openReport(it)
+    end if
+end sub
+
+' Approve or decline one request in Seerr.
+sub answerRequest(it as object, what as string)
+    if m.busy then return
+    m.busy = true
+    seerrRequest("/request/" + it.reqId.ToStr() + "/" + what, {}, "onStatusSet", "POST", {}, { what: what, title: it.title })
+end sub
+
+sub onStatusSet(event as object)
+    res = event.getData()
+    m.busy = false
+    tag = res.tag
+    print "[Matinee] my requests: "; tag.what; " HTTP "; res.code
+    if res.ok
+        if tag.what = "approve" then showToast("Approved", "check") else showToast("Declined", "close")
+        n = m.global.requestsPending
+        if n > 0 then m.global.requestsPending = n - 1
+    else if res.code = 403
+        showToast("Your Seerr account can" + Chr(8217) + "t do that", "close")
+    else
+        showToast("That didn" + Chr(8217) + "t go through. Try again.", "close")
+    end if
+    load()
+end sub
+
+sub openConfirm(it as object)
+    t = th()
+    m.confirmItem = it
+    m.modalOpen = true
+    m.confirmCol = 1
+    m.modal.removeChildrenIndex(m.modal.getChildCount(), 0)
+    md = makeModal(m.modal, 760, 300)
+    makeTitle(md.body, "Decline this request?", 36).translation = [48, 44]
+    l = makeLabel(md.body, it.title + " won" + Chr(8217) + "t be downloaded. Seerr tells whoever asked.", 22, "regular", t.muted)
+    l.translation = [48, 104]
+    l.width = 664
+    l.wrap = true
+    m.confirmBtns = [makeBtn(md.body, { kind: "primary", text: "Decline", size: 22, padX: 36 }), makeBtn(md.body, { kind: "secondary", text: "Keep it", size: 22, padX: 32 })]
+    rowBtns(m.confirmBtns, 48, 196, 16)
+    paintBtns(m.confirmBtns, m.confirmCol)
+    m.modal.visible = true
+end sub
+
+sub closeConfirm()
+    m.modalOpen = false
+    m.modal.visible = false
+    m.confirmItem = invalid
+end sub
+
+sub openReport(it as object)
+    if m.report = invalid
+        m.report = CreateObject("roSGNode", "ReportProblem")
+        m.report.observeField("done", "onReportDone")
+        m.top.appendChild(m.report)
+    end if
+    m.report.report = { mediaType: it.mediaType, tmdbId: it.tmdbId, title: it.title, mediaId: it.mediaId }
+    m.report.open = true
+    m.report.setFocus(true)
+end sub
+
+sub onReportDone()
+    restoreContentFocus()
 end sub
 
 ' ---------- Focus & keys ----------
@@ -218,9 +492,41 @@ sub onFocusChanged()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    if not press or menuIsOpen() then return false
+    if not press then return false
+    if m.modalOpen
+        if key = "left"
+            m.confirmCol = 0
+        else if key = "right"
+            m.confirmCol = 1
+        else if key = "OK"
+            it = m.confirmItem
+            keep = m.confirmCol = 1
+            closeConfirm()
+            if not keep and it <> invalid then answerRequest(it, "decline")
+            return true
+        else if key = "back"
+            closeConfirm()
+            return true
+        end if
+        paintBtns(m.confirmBtns, m.confirmCol)
+        return true
+    end if
+    if menuIsOpen() then return false
     if key = "left"
-        openMenu()
+        if m.col >= 0
+            m.col = m.col - 1
+            paint()
+        else
+            openMenu()
+        end if
+        return true
+    else if key = "right"
+        if m.items.Count() > 0
+            if m.col < m.items[m.index].actions.Count() - 1
+                m.col = m.col + 1
+                paint()
+            end if
+        end if
         return true
     else if key = "up"
         if m.index > 0
@@ -233,6 +539,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.index = m.index + 1
             render()
         end if
+        return true
+    else if key = "OK"
+        if m.col >= 0 then doAction() else openRow()
         return true
     end if
     return false

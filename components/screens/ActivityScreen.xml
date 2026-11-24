@@ -10,6 +10,7 @@
   <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
   <script type="text/brightscript" uri="pkg:/components/util/MenuHost.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Requests.bs" />
   <children>
     <Group id="layer" />
     <Group id="queue" />

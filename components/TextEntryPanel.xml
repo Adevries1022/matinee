@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Full-screen typing panel: title, the Roku keyboard, and a button under it. -->
+<!-- Full-screen typing panel: title, the Roku voice keyboard (DynamicKeyboard), and a button under it. -->
 <component name="TextEntryPanel" extends="Group">
   <interface>
     <field id="title" type="string" onChange="applyLabels" />
@@ -16,7 +16,7 @@
   <children>
     <Rectangle id="veil" width="1920" height="1080" />
     <Group id="layer" />
-    <Keyboard id="kb" translation="[400,260]" />
+    <DynamicKeyboard id="kb" translation="[400,260]" />
     <Group id="sink" focusable="true" />
   </children>
 </component>

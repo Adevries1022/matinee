@@ -1,0 +1,248 @@
+' Report a problem (see ReportProblem.xml): pick Video, Audio, Subtitles or
+' Other, for a series a season and episode (or all of them), add a message
+' if wanted, then Send report. It goes to Seerr's issues in the signed-in
+' User's name (POST /issue), where whoever runs the server sees it.
+
+sub init()
+    m.layer = m.top.findNode("layer")
+    m.rows = []
+    m.index = 0
+    m.first = 0
+    m.gen = 0
+    m.entry = invalid
+end sub
+
+sub onOpen()
+    if m.top.open
+        begin()
+        m.layer.visible = true
+    else
+        m.layer.visible = false
+        m.gen = m.gen + 1
+    end if
+end sub
+
+sub begin()
+    rp = m.top.report
+    if rp = invalid then rp = {}
+    m.rp = rp
+    m.isTv = safeStr(rp.mediaType) = "tv"
+    m.mediaId = safeInt(rp.mediaId)
+    m.seasons = []
+    if type(rp.seasons) = "roArray" then m.seasons = rp.seasons
+    m.kind = 0
+    m.seasonIdx = 0
+    m.episodeIdx = 0
+    m.text = ""
+    m.sending = false
+    m.message = ""
+    m.messageColor = th().meta
+    m.gen = m.gen + 1
+    m.index = 1
+    m.first = 0
+    redraw()
+    ' Seerr's media id and the season list come from the title's details.
+    if m.mediaId = 0 or (m.isTv and m.seasons.Count() = 0)
+        kindPath = "movie"
+        if m.isTv then kindPath = "tv"
+        seerrRequest("/" + kindPath + "/" + safeStr(rp.tmdbId), {}, "onTitle", "GET", invalid, m.gen)
+    end if
+end sub
+
+sub onTitle(event as object)
+    res = event.getData()
+    if res.tag <> m.gen or not res.ok or not isValid(res.data) then return
+    d = res.data
+    if isValid(d.mediaInfo) and m.mediaId = 0 then m.mediaId = safeInt(d.mediaInfo.id)
+    if m.isTv and m.seasons.Count() = 0 and type(d.seasons) = "roArray"
+        for each s in d.seasons
+            if safeInt(s.seasonNumber) > 0 then m.seasons.Push({ num: safeInt(s.seasonNumber), episodes: safeInt(s.episodeCount) })
+        end for
+    end if
+    redraw()
+end sub
+
+function kindNames() as object
+    return ["Video", "Audio", "Subtitles", "Other"]
+end function
+
+' The number of episodes in the picked season, 0 for all seasons.
+function episodeCount() as integer
+    if m.seasonIdx = 0 or m.seasonIdx > m.seasons.Count() then return 0
+    return safeInt(m.seasons[m.seasonIdx - 1].episodes)
+end function
+
+sub buildRows()
+    rows = [{ id: "what", kind: "heading", label: "What" + Chr(8217) + "s wrong" }]
+    names = kindNames()
+    for i = 0 to names.Count() - 1
+        rows.Push({ id: "kind" + i.ToStr(), kind: "check", label: names[i], checked: m.kind = i, enabled: not m.sending })
+    end for
+    if m.isTv and m.seasons.Count() > 0
+        rows.Push({ id: "where", kind: "heading", label: "Where" })
+        sv = "All seasons"
+        if m.seasonIdx > 0 then sv = "Season " + safeInt(m.seasons[m.seasonIdx - 1].num).ToStr()
+        rows.Push({ id: "season", kind: "choice", label: "Season", value: sv, enabled: not m.sending })
+        if episodeCount() > 0
+            ev = "All episodes"
+            if m.episodeIdx > 0 then ev = "Episode " + m.episodeIdx.ToStr()
+            rows.Push({ id: "episode", kind: "choice", label: "Episode", value: ev, enabled: not m.sending })
+        end if
+    end if
+    note = "Optional"
+    if m.text <> "" then note = m.text
+    rows.Push({ id: "message", kind: "field", label: "Message", value: note, enabled: not m.sending })
+    label = "Send report"
+    if m.sending then label = "Sending..."
+    rows.Push({ id: "send", kind: "button", label: label, enabled: not m.sending and m.mediaId > 0 })
+    oldId = ""
+    if m.index >= 0 and m.index < m.rows.Count() then oldId = m.rows[m.index].id
+    m.rows = rows
+    if m.index >= rows.Count() then m.index = rows.Count() - 1
+    for i = 0 to rows.Count() - 1
+        if rows[i].id = oldId then m.index = i
+    end for
+end sub
+
+sub redraw()
+    buildRows()
+    lines = []
+    if m.message <> ""
+        lines.Push({ text: m.message, color: m.messageColor })
+    else if m.mediaId = 0
+        lines.Push({ text: "Loading...", color: th().muted })
+    else
+        lines.Push({ text: "Goes to whoever runs your server, through Seerr.", color: th().meta })
+    end if
+    m.first = drawSheet(m.layer, "Report a problem", lines, m.rows, m.index, m.first)
+end sub
+
+sub changeChoice(rowId as string, dirn as integer)
+    if rowId = "season"
+        m.seasonIdx = wrapIndex(m.seasonIdx + dirn, m.seasons.Count() + 1)
+        m.episodeIdx = 0
+    else if rowId = "episode"
+        m.episodeIdx = wrapIndex(m.episodeIdx + dirn, episodeCount() + 1)
+    end if
+    redraw()
+end sub
+
+function wrapIndex(i as integer, count as integer) as integer
+    if count <= 0 then return 0
+    if i < 0 then return count - 1
+    if i >= count then return 0
+    return i
+end function
+
+' ---------- The message ----------
+
+sub openEntry()
+    p = CreateObject("roSGNode", "TextEntryPanel")
+    p.title = "What happened?"
+    p.hint = "A few words help, like where it starts or which language."
+    p.text = m.text
+    p.buttonText = "Done"
+    p.observeField("submitted", "onEntry")
+    p.observeField("cancelled", "closeEntry")
+    m.top.appendChild(p)
+    m.entry = p
+    p.setFocus(true)
+end sub
+
+sub onEntry()
+    if m.entry = invalid then return
+    m.text = m.entry.submitted.Trim()
+    closeEntry()
+end sub
+
+sub closeEntry()
+    if m.entry <> invalid
+        m.top.removeChild(m.entry)
+        m.entry = invalid
+    end if
+    redraw()
+    m.top.setFocus(true)
+end sub
+
+' ---------- Sending ----------
+
+sub send()
+    if m.sending or m.mediaId = 0 then return
+    seasonNum = 0
+    if m.seasonIdx > 0 then seasonNum = safeInt(m.seasons[m.seasonIdx - 1].num)
+    body = { "issueType": m.kind + 1, "message": m.text, "mediaId": m.mediaId, "problemSeason": seasonNum, "problemEpisode": m.episodeIdx }
+    m.sending = true
+    m.message = ""
+    redraw()
+    seerrRequest("/issue", {}, "onReported", "POST", body, m.gen)
+end sub
+
+sub onReported(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    m.sending = false
+    print "[Matinee] report a problem: HTTP "; res.code
+    if res.ok
+        showToast("Reported. Thanks!", "check")
+        finish({ action: "reported" })
+        return
+    end if
+    if res.code = 403
+        m.message = "Your Seerr account can" + Chr(8217) + "t report problems. Ask an Administrator."
+    else
+        m.message = "The report didn" + Chr(8217) + "t go through (error " + res.code.ToStr() + ")."
+    end if
+    m.messageColor = th().error
+    redraw()
+end sub
+
+sub finish(result as object)
+    m.top.open = false
+    m.top.done = result
+end sub
+
+' ---------- Keys ----------
+
+sub choose()
+    r = m.rows[m.index]
+    if not sheetRowOn(r) then return
+    if r.id = "send"
+        send()
+    else if r.id = "message"
+        openEntry()
+    else if Left(r.id, 4) = "kind"
+        m.kind = Mid(r.id, 5).ToInt()
+        redraw()
+    else if r.kind = "choice"
+        changeChoice(r.id, 1)
+    end if
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not m.top.open then return false
+    ' The typing panel handles its own keys.
+    if m.entry <> invalid then return true
+    if not press then return true
+    r = m.rows[m.index]
+    if key = "up" or key = "down"
+        dirn = 1
+        if key = "up" then dirn = -1
+        n = sheetStep(m.rows, m.index, dirn)
+        if n = m.index and dirn < 0 then m.first = 0
+        m.index = n
+        redraw()
+    else if key = "OK"
+        choose()
+    else if key = "left" or key = "right"
+        if r.kind = "choice" and sheetRowOn(r)
+            dirn = 1
+            if key = "left" then dirn = -1
+            changeChoice(r.id, dirn)
+        else if key = "left"
+            finish({ action: "close" })
+        end if
+    else if key = "back" or key = "options"
+        finish({ action: "close" })
+    end if
+    return true
+end function

@@ -1,0 +1,170 @@
+' A side panel of rows at the right, drawn like Title Options, shared by
+' the request sheet and Report a problem. Each row is
+' { id, kind, label, value, checked, enabled }, where kind is:
+'   "check"    a box with a label, and an optional note on the right
+'   "choice"   a label with a value on the right that Left and Right change
+'   "field"    a label with a value on the right; OK opens something to change it
+'   "heading"  a small Accent label over a group of rows, never Focused
+'   "button"   the action at the bottom
+' Only the Focused row is solid. Needs Api.bs and Ui.bs.
+
+' Draw the panel into p: a title, lines of text under it ({ text, color }),
+' then the rows from first, as many as fit. Returns the first row shown,
+' moved so the Focused row (index) stays in view.
+function drawSheet(p as object, head as string, lines as object, rows as object, index as integer, first as integer) as integer
+    t = th()
+    p.removeChildrenIndex(p.getChildCount(), 0)
+    scrim = p.CreateChild("Rectangle")
+    scrim.width = 1920
+    scrim.height = 1080
+    scrim.color = t.scrim
+    scrim.opacity = t.scrimOpacity
+
+    w = t.sheetW
+    px = 1920 - 80 - w
+    textW = w - 80
+    titleSize = 34
+    if measureText(head, titleSize, "display") > textW then titleSize = 28
+    title = makeTitle(p, head, titleSize)
+    title.translation = [px + 40, 120]
+    title.width = textW
+    title.maxLines = 1
+    y = 120 + 56
+    for each ln in lines
+        if safeStr(ln.text) <> ""
+            l = makeLabel(p, ln.text, 20, "regular", ln.color)
+            l.translation = [px + 40, y]
+            l.width = textW
+            l.wrap = true
+            l.maxLines = 2
+            l.lineSpacing = 6
+            y = y + Int(l.boundingRect().height) + 8
+        end if
+    end for
+    y = y + 20
+
+    rowH = t.sheetRowH
+    room = (1000 - 24 - y) \ rowH
+    if room < 1 then room = 1
+    if index < first then first = index
+    if index > first + room - 1 then first = index - room + 1
+    if first > rows.Count() - room then first = rows.Count() - room
+    if first < 0 then first = 0
+    shown = rows.Count() - first
+    if shown > room then shown = room
+
+    panelH = (y - 80) + shown * rowH + 24
+    bg = makeBox(p, w, panelH, 24, t.panel, 0.96)
+    bg.translation = [px, 80]
+    ' The panel goes under the text drawn above it.
+    p.removeChild(bg)
+    p.insertChild(bg, 1)
+
+    for i = first to first + shown - 1
+        drawSheetRow(p, rows[i], px, y, w, i = index)
+        y = y + rowH
+    end for
+    ' A hint that more rows are below.
+    if first + shown < rows.Count()
+        more = makeLabel(p, "More below", 16, "regular", t.faint)
+        more.translation = [px + 40, 80 + panelH - 22]
+    end if
+    return first
+end function
+
+sub drawSheetRow(p as object, r as object, px as integer, y as integer, w as integer, focused as boolean)
+    t = th()
+    h = t.sheetRowH - 8
+    enabled = sheetRowOn(r)
+    if r.kind = "heading"
+        hl = makeLabel(p, UCase(safeStr(r.label)), 16, "semibold", t.accent)
+        hl.translation = [px + 40, y]
+        hl.height = h
+        hl.vertAlign = "bottom"
+        return
+    end if
+    if r.kind = "button"
+        fill = makeBox(p, w - 60, h, 14, t.white, t.primaryFill)
+        fill.translation = [px + 30, y]
+        fg = t.text
+        if focused
+            fill.blendColor = t.solid
+            fill.opacity = 1.0
+            fg = t.onSolid
+            ring = makeRing(p, w - 60, h, 14, t.accent)
+            ring.translation = [px + 26, y - 4]
+        end if
+        if not enabled then fg = t.faint
+        bl = makeLabel(p, safeStr(r.label), 22, "semibold", fg)
+        bl.translation = [px + 30, y]
+        bl.width = w - 60
+        bl.height = h
+        bl.horizAlign = "center"
+        bl.vertAlign = "center"
+        return
+    end if
+    if focused then makeBox(p, w - 60, h, 14, t.solid).translation = [px + 30, y]
+    color = t.text
+    if focused then color = t.onSolid
+    if not enabled
+        color = t.faint
+        if focused then color = t.onSolidMuted
+    end if
+    x = px + 50
+    if r.kind = "check"
+        by = y + (h - 28) \ 2
+        if isTrue(r.checked)
+            boxColor = t.accent
+            if not enabled then boxColor = t.dashed
+            makeBox(p, 28, 28, 6, boxColor).translation = [x, by]
+            makeIcon(p, "check", 22, t.onAccent).translation = [x + 3, by + 3]
+        else
+            edge = t.dashed
+            if focused then edge = t.onSolidMuted
+            makeOutline(p, 28, 28, 6, edge).translation = [x, by]
+        end if
+        x = x + 28 + 18
+    end if
+    value = safeStr(r.value)
+    if r.kind = "choice" and focused and value <> "" then value = Chr(8249) + "  " + value + "  " + Chr(8250)
+    valueW = 0
+    if value <> ""
+        valueW = measureText(value, 20, "regular")
+        maxW = (w - 100) \ 2
+        if valueW > maxW then valueW = maxW
+        valueColor = t.muted
+        if focused then valueColor = t.onSolidMuted
+        if r.kind = "choice" then valueColor = color
+        vl = makeLabel(p, value, 20, "regular", valueColor)
+        vl.translation = [px + w - 50 - valueW, y]
+        vl.width = valueW
+        vl.height = h
+        vl.horizAlign = "right"
+        vl.vertAlign = "center"
+    end if
+    style = "regular"
+    if focused then style = "semibold"
+    ll = makeLabel(p, safeStr(r.label), 22, style, color)
+    ll.translation = [x, y]
+    ll.width = (px + w - 50 - valueW - 16) - x
+    ll.height = h
+    ll.vertAlign = "center"
+end sub
+
+' The next row from index in dirn (1 or -1) that can be Focused, or index
+' when there's none.
+function sheetStep(rows as object, index as integer, dirn as integer) as integer
+    i = index + dirn
+    while i >= 0 and i < rows.Count()
+        r = rows[i]
+        if r.kind <> "heading" and sheetRowOn(r) then return i
+        i = i + dirn
+    end while
+    return index
+end function
+
+' Rows can be Focused and used unless enabled is false.
+function sheetRowOn(r as object) as boolean
+    if isValid(r.enabled) then return isTrue(r.enabled)
+    return true
+end function

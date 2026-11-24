@@ -1,0 +1,111 @@
+' Shared helpers for Requests: what a person's Seerr account may do, the
+' quota line, and why a download is stuck (from Radarr, Sonarr or Seerr).
+' Needs Api.bs in the same component.
+
+' ---------- Seerr permissions ----------
+' Bits from Seerr's Permission enum (server/lib/permissions.ts): ADMIN 2,
+' MANAGE_REQUESTS 16, REQUEST_ADVANCED 8192, MANAGE_ISSUES 1048576 and
+' CREATE_ISSUES 4194304. ADMIN passes every check.
+
+' Can approve and decline everyone's Requests.
+function seerrCanManage(perms as integer) as boolean
+    return (perms and (2 + 16)) <> 0
+end function
+
+' Can pick the server, quality profile and folder for a Request.
+function seerrCanAdvanced(perms as integer) as boolean
+    return (perms and (2 + 16 + 8192)) <> 0
+end function
+
+' Can report a problem (a Seerr issue).
+function seerrCanReport(perms as integer) as boolean
+    return (perms and (2 + 1048576 + 4194304)) <> 0
+end function
+
+' ---------- Quota ----------
+
+' "3 of 10 movie requests left this week" from one half of Seerr's
+' /user/{id}/quota answer ({ limit, remaining, days }), or "" when unlimited.
+' Series quotas count seasons.
+function quotaText(q as dynamic, isTv as boolean) as string
+    if not isValid(q) then return ""
+    limit = safeInt(q.limit)
+    if limit <= 0 then return ""
+    remain = safeInt(q.remaining)
+    days = safeInt(q.days)
+    when = "in the next " + days.ToStr() + " days"
+    if days = 1 then when = "today"
+    if days = 7 then when = "this week"
+    if days = 30 or days = 31 then when = "this month"
+    noun = "movie"
+    if isTv then noun = "season"
+    if remain <= 0 then return "No " + noun + " requests left " + when
+    return remain.ToStr() + " of " + limit.ToStr() + " " + noun + " requests left " + when
+end function
+
+' ---------- Why a download is stuck ----------
+
+' A short reason from one Radarr or Sonarr queue record, or "" when it's
+' simply downloading: "Stalled: no connections", "Download failed",
+' "Waiting to import", "Paused" or "Queued".
+function arrStuckReason(rec as object) as string
+    st = LCase(safeStr(rec.status))
+    tracked = LCase(safeStr(rec.trackedDownloadState))
+    health = LCase(safeStr(rec.trackedDownloadStatus))
+    words = LCase(safeStr(rec.errorMessage))
+    if type(rec.statusMessages) = "roArray"
+        for each sm in rec.statusMessages
+            words = words + " " + LCase(safeStr(sm.title))
+            if type(sm.messages) = "roArray"
+                for each msgText in sm.messages
+                    words = words + " " + LCase(safeStr(msgText))
+                end for
+            end if
+        end for
+    end if
+    if tracked = "failedpending" or tracked = "failed" or st = "failed" then return "Download failed"
+    if tracked = "importpending" or tracked = "importblocked"
+        if (health = "warning" or health = "error") and Instr(1, words, "no files") > 0 then return "Can" + Chr(8217) + "t import: no usable file"
+        return "Waiting to import"
+    end if
+    if health = "warning" or health = "error" or st = "warning" or st = "stalled"
+        if Instr(1, words, "no connections") > 0 or Instr(1, words, "stalled") > 0 then return "Stalled: no connections"
+        if Instr(1, words, "unavailable") > 0 or Instr(1, words, "unable to connect") > 0 then return "Stalled: download app offline"
+        if Instr(1, words, "metadata") > 0 then return "Stalled: getting file details"
+        return "Stalled"
+    end if
+    if st = "paused" then return "Paused"
+    if st = "queued" or st = "delay" then return "Queued"
+    return ""
+end function
+
+' The same from the download status Seerr attaches to a title's media
+' (no messages there, just each download's state). "" while any of them
+' is moving.
+function seerrStuckReason(media as object) as string
+    worst = 0
+    reasons = ["", "Queued", "Paused", "Stalled", "Download failed"]
+    for each key in ["downloadStatus", "downloadStatus4k"]
+        list = media[key]
+        if type(list) = "roArray"
+            for each d in list
+                st = LCase(safeStr(d.status))
+                rank = 0
+                if st = "downloading" then return ""
+                if st = "queued" or st = "delay" then rank = 1
+                if st = "paused" then rank = 2
+                if st = "warning" or st = "stalled" then rank = 3
+                if st = "failed" then rank = 4
+                if rank > worst then worst = rank
+            end for
+        end if
+    end for
+    return reasons[worst]
+end function
+
+' A stuck reason's color: failures in the error color, the rest as warnings.
+function stuckColor(reason as string) as string
+    t = th()
+    if Left(reason, 7) = "Stalled" or reason = "Download failed" or Left(reason, 3) = "Can" then return t.error
+    return t.warn
+end function

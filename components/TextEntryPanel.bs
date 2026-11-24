@@ -1,4 +1,5 @@
-' Typing on the TV: a title, the Roku keyboard and a solid button under it.
+' Typing on the TV: a title, the Roku voice keyboard (DynamicKeyboard, so
+' certification 4.12 is met for passwords and keys) and a solid button under it.
 ' Play on the remote submits from anywhere; Back cancels.
 sub init()
     t = th()
@@ -20,6 +21,8 @@ sub init()
     tip.horizAlign = "center"
 
     m.kb.textEditBox.maxTextLength = 200
+    m.kb.textEditBox.voiceEnabled = true
+    applyDomain()
     m.onButton = false
 
     ' Place the keyboard in the middle and the button under it, using the
@@ -61,6 +64,17 @@ sub applyText()
 end sub
 
 sub applySecure()
+    applyDomain()
+end sub
+
+' Passwords and API keys get the password keyboard (masked, voice spelled);
+' everything else (addresses, URLs, usernames) gets the generic one.
+sub applyDomain()
+    if m.top.secure
+        m.kb.keyboardDomain = "password"
+    else
+        m.kb.keyboardDomain = "generic"
+    end if
     m.kb.textEditBox.secureMode = m.top.secure
 end sub
 

@@ -18,11 +18,13 @@
     <Group id="skipLayer" visible="false" />
     <Group id="upNext" visible="false" />
     <Group id="picker" visible="false" />
+    <Group id="stillLayer" visible="false" />
     <Group id="sink" focusable="true" />
     <Timer id="countdown" duration="1" repeat="true" />
     <Timer id="hideTimer" duration="5" repeat="false" />
     <Timer id="seekTimer" duration="0.6" repeat="false" />
     <Timer id="scrubTimer" duration="0.25" repeat="true" />
     <Timer id="holdTimer" duration="0.5" repeat="false" />
+    <Timer id="clockTimer" duration="10" repeat="true" />
   </children>
 </component>

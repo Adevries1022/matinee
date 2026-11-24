@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Report a problem: a panel at the right that sends a Seerr issue for a
+     title on the server (video, audio, subtitles or other, which season and
+     episode for a series, and an optional message). A screen sets report,
+     then open, then focuses it. -->
+<component name="ReportProblem" extends="Group">
+  <interface>
+    <!-- report: { mediaType: "movie" | "tv", tmdbId, title,
+           mediaId (Seerr's media id, looked up when missing),
+           seasons: [{ num, episodes }] (looked up when missing) } -->
+    <field id="report" type="assocarray" />
+    <field id="open" type="boolean" onChange="onOpen" />
+    <!-- Set as it closes: { action: "close" | "reported" } -->
+    <field id="done" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="ReportProblem.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Api.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Ui.bs" />
+  <script type="text/brightscript" uri="pkg:/components/util/Sheet.bs" />
+  <children>
+    <Group id="layer" visible="false" />
+  </children>
+</component>

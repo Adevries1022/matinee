@@ -30,6 +30,21 @@ sub init()
     ' are downloading (the number on My requests in the Rail).
     g.addField("seerrUserId", "string", false)
     g.addField("requestsDownloading", "integer", false)
+    ' The signed-in User's Seerr permission bits (see Requests.bs), and,
+    ' for people who can approve, how many Requests from everyone wait for
+    ' approval (the second number on My requests in the Rail).
+    g.addField("seerrPerms", "integer", false)
+    g.addField("requestsPending", "integer", false)
+    ' Ready to watch: the signed-in User's Requests that arrived on the
+    ' server and that they haven't played yet, newest first. Each entry is
+    '   { tmdbId: integer, mediaType: "movie" | "tv", title: string,
+    '     jellyfinItemId: string ("" when Seerr doesn't know it),
+    '     requestedAt: Seerr's ISO date, arrivedAt: seconds since 1970,
+    '     seerrMediaId: Seerr's media id (for Report a problem) }
+    ' Saved per User and server (see readyKey()). An entry goes once its
+    ' title (or an episode of it) is played here, or after 14 days.
+    ' Replace the whole array to change it; observers see each change.
+    g.addField("readyItems", "array", false)
     g.addField("servicesVersion", "integer", false)
     ' { text, icon } for the Toast; set it with showToast().
     g.addField("toast", "assocarray", true)
@@ -44,6 +59,12 @@ sub init()
     g.prefsVersion = 0
     g.seerrState = "none"
     g.requestsDownloading = 0
+    g.requestsPending = 0
+    g.seerrPerms = 0
+    g.readyItems = []
+    m.readyState = invalid
+    m.readyToasts = []
+    m.readyWaiting = 0
     g.views = []
     g.previewItems = []
     g.trackPrefs = {}
@@ -189,6 +210,7 @@ sub startUser(admin as boolean)
     m.global.resumeVia = ""
     rememberLast(m.global.userId)
     applyPrefs(readPrefs(m.global.userId))
+    loadReady()
     clearStack()
     showHome()
     initSeerr()
@@ -217,6 +239,7 @@ end sub
 
 sub initSeerr()
     m.global.seerrUserId = ""
+    m.global.seerrPerms = 0
     m.global.seerrState = "none"
     if readSetting("seerrEnabled", "true") <> "true" then return
     reg = CreateObject("roRegistrySection", "Marquee")
@@ -334,7 +357,10 @@ end sub
 sub onSeerrMe(event as object)
     res = event.getData()
     if res.ok
-        if isValid(res.data) then m.global.seerrUserId = safeStr(res.data.id)
+        if isValid(res.data)
+            m.global.seerrUserId = safeStr(res.data.id)
+            m.global.seerrPerms = safeInt(res.data.permissions)
+        end if
         m.global.seerrState = "ready"
     else if res.code = 401 or res.code = 403
         forgetSeerrSession()
@@ -349,12 +375,15 @@ sub forgetSeerrSession()
     reg.Flush()
     m.global.seerrCookie = ""
     m.global.seerrUserId = ""
+    m.global.seerrPerms = 0
     m.global.seerrState = "signedOut"
 end sub
 
-' ---------- Downloading requests (the Rail's count) ----------
+' ---------- Watching requests (the Rail's counts, Ready to watch) ----------
 
-' While Seerr is ready, count the User's downloading requests every minute.
+' While Seerr is ready, look at the User's Requests every minute: how many
+' are downloading, which have arrived on the server, and, for people who
+' can approve, how many from everyone wait for approval.
 sub onSeerrStateForWatch()
     if m.global.seerrState = "ready"
         checkDownloads()
@@ -362,6 +391,7 @@ sub onSeerrStateForWatch()
     else
         m.downloadWatch.control = "stop"
         m.global.requestsDownloading = 0
+        m.global.requestsPending = 0
     end if
 end sub
 
@@ -371,30 +401,293 @@ sub checkDownloads()
         seerrRequest("/auth/me", {}, "onWatchMe")
         return
     end if
-    seerrRequest("/request", { "take": "40", "skip": "0", "sort": "added", "filter": "processing", "requestedBy": m.global.seerrUserId }, "onWatchRequests")
+    seerrRequest("/request", { "take": "50", "skip": "0", "sort": "added", "filter": "all", "requestedBy": m.global.seerrUserId }, "onWatchRequests", "GET", invalid, m.global.userId)
+    checkPending()
 end sub
 
 sub onWatchMe(event as object)
     res = event.getData()
     if not res.ok or not isValid(res.data) then return
     m.global.seerrUserId = safeStr(res.data.id)
+    m.global.seerrPerms = safeInt(res.data.permissions)
     checkDownloads()
 end sub
 
 sub onWatchRequests(event as object)
     res = event.getData()
+    if safeStr(res.tag) <> m.global.userId then return
     if not res.ok or not isValid(res.data) then return
+    results = []
+    if type(res.data.results) = "roArray" then results = res.data.results
     n = 0
-    if isValid(res.data.results)
-        for each rq in res.data.results
-            if isValid(rq.media)
-                if seerrDownloads(rq.media).count > 0 then n = n + 1
+    for each rq in results
+        md = rq.media
+        if isValid(md)
+            ms = safeInt(md.status)
+            if safeInt(rq.status) = 2 and ms >= 1 and ms <= 3
+                if seerrDownloads(md).count > 0 then n = n + 1
             end if
-        end for
-    end if
+        end if
+    end for
     if n <> m.global.requestsDownloading then print "[Matinee] requests downloading: "; n
     m.global.requestsDownloading = n
+    checkReady(results)
 end sub
+
+' Everyone's Requests waiting for approval, for people who can approve.
+sub checkPending()
+    if not seerrCanManage(m.global.seerrPerms)
+        m.global.requestsPending = 0
+        return
+    end if
+    seerrRequest("/request", { "take": "1", "skip": "0", "filter": "pending" }, "onWatchPending", "GET", invalid, m.global.userId)
+end sub
+
+sub onWatchPending(event as object)
+    res = event.getData()
+    if safeStr(res.tag) <> m.global.userId then return
+    if not res.ok or not isValid(res.data) then return
+    n = 0
+    if isValid(res.data.pageInfo) then n = safeInt(res.data.pageInfo.results)
+    if n <> m.global.requestsPending then print "[Matinee] requests waiting for approval: "; n
+    m.global.requestsPending = n
+end sub
+
+' ---------- Ready to watch ----------
+' Each Request's progress is a score: Seerr's media status (for its
+' quality) times 100, plus how many of its seasons are on the server. The
+' registry keeps the highest Request id seen and the scores of Requests
+' that aren't all there yet, so only a change announces anything: nothing
+' already on the server the first time Matinee looks is announced.
+
+' The registry key, per User and server.
+function readyKey() as string
+    return "ready_" + m.global.userId + "_" + Mid(sessionsKey(), 10)
+end function
+
+sub loadReady()
+    m.readyState = invalid
+    m.readyToasts = []
+    m.readyWaiting = 0
+    items = []
+    raw = readSetting(readyKey(), "")
+    if raw <> ""
+        st = ParseJson(raw)
+        if type(st) = "roAssociativeArray"
+            m.readyState = st
+            if type(st.items) = "roArray"
+                for each e in st.items
+                    items.Push({ tmdbId: safeInt(e.t), mediaType: safeStr(e.k), title: safeStr(e.n), jellyfinItemId: safeStr(e.j), requestedAt: safeStr(e.r), arrivedAt: safeInt(e.a), seerrMediaId: safeInt(e.s) })
+                end for
+            end if
+        end if
+    end if
+    m.global.readyItems = items
+    pruneReady()
+end sub
+
+' Saved with short names: the registry is small and shared by every User.
+sub saveReady()
+    st = m.readyState
+    if st = invalid then return
+    short = []
+    for each it in m.global.readyItems
+        short.Push({ t: it.tmdbId, k: it.mediaType, n: it.title, j: it.jellyfinItemId, r: it.requestedAt, a: it.arrivedAt, s: it.seerrMediaId })
+    end for
+    st.items = short
+    writeSetting(readyKey(), FormatJson(st))
+end sub
+
+function nowSeconds() as integer
+    return CreateObject("roDateTime").AsSeconds()
+end function
+
+' Entries go after 14 days.
+sub pruneReady()
+    items = m.global.readyItems
+    if items = invalid then return
+    cutoff = nowSeconds() - 14 * 86400
+    keep = []
+    for each it in items
+        if it.arrivedAt >= cutoff then keep.Push(it)
+    end for
+    if keep.Count() <> items.Count()
+        m.global.readyItems = keep
+        saveReady()
+    end if
+end sub
+
+function readyScore(rq as object, md as object) as integer
+    is4k = isTrue(rq.is4k)
+    ms = safeInt(md.status)
+    if is4k then ms = safeInt(md.status4k)
+    if ms = 1 or ms > 5 then ms = 0
+    wanted = {}
+    if type(rq.seasons) = "roArray"
+        for each rs in rq.seasons
+            wanted[safeInt(rs.seasonNumber).ToStr()] = true
+        end for
+    end if
+    here = 0
+    if type(md.seasons) = "roArray"
+        for each ss in md.seasons
+            sst = safeInt(ss.status)
+            if is4k then sst = safeInt(ss.status4k)
+            if sst = 5 and wanted.DoesExist(safeInt(ss.seasonNumber).ToStr()) then here = here + 1
+        end for
+    end if
+    ' Some Seerr versions mark a requested season finished (5) instead.
+    if here = 0 and type(rq.seasons) = "roArray"
+        for each rs in rq.seasons
+            if safeInt(rs.status) = 5 then here = here + 1
+        end for
+    end if
+    if here > 99 then here = 99
+    return ms * 100 + here
+end function
+
+' All of it is on the server, or (a series) some of the seasons it asked for.
+function scoreReady(sc as integer) as boolean
+    ms = sc \ 100
+    if ms = 5 then return true
+    return ms = 4 and (sc mod 100) > 0
+end function
+
+sub checkReady(results as object)
+    st = m.readyState
+    firstLook = (st = invalid)
+    if firstLook then st = { maxId: 0, open: {} }
+    if type(st.open) <> "roAssociativeArray" then st.open = {}
+    maxId = safeInt(st.maxId)
+    newMax = maxId
+    newOpen = {}
+    arrived = []
+    for each rq in results
+        md = rq.media
+        id = safeInt(rq.id)
+        if isValid(md) and id > 0 and safeInt(rq.status) <> 3
+            if id > newMax then newMax = id
+            sc = readyScore(rq, md)
+            key = id.ToStr()
+            old = -1
+            if st.open.DoesExist(key) then old = safeInt(st.open[key])
+            ' Keep watching what isn't all there yet.
+            if sc < 500 then newOpen[key] = sc
+            if not firstLook and scoreReady(sc)
+                ' New since the last look and already here, or further along.
+                if id > maxId or (old >= 0 and sc > old) then arrived.Push(rq)
+            end if
+        end if
+    end for
+    before = FormatJson({ maxId: maxId, open: st.open })
+    st.maxId = newMax
+    st.open = newOpen
+    m.readyState = st
+    if firstLook or FormatJson({ maxId: newMax, open: newOpen }) <> before then saveReady()
+    pruneReady()
+    for each rq in arrived
+        readyArrived(rq)
+    end for
+end sub
+
+' Look up the title's name, then add it and announce it.
+sub readyArrived(rq as object)
+    md = rq.media
+    mt = safeStr(md.mediaType)
+    tmdb = safeInt(md.tmdbId)
+    jf = safeStr(md.jellyfinMediaId)
+    if isTrue(rq.is4k) and safeStr(md.jellyfinMediaId4k) <> "" then jf = safeStr(md.jellyfinMediaId4k)
+    entry = { tmdbId: tmdb, mediaType: mt, title: "", jellyfinItemId: normId(jf), requestedAt: safeStr(rq.createdAt), arrivedAt: nowSeconds(), seerrMediaId: safeInt(md.id), userId: m.global.userId }
+    print "[Matinee] ready to watch: "; mt; " "; tmdb
+    m.readyWaiting = m.readyWaiting + 1
+    seerrRequest("/" + mt + "/" + tmdb.ToStr(), {}, "onReadyTitle", "GET", invalid, entry)
+end sub
+
+sub onReadyTitle(event as object)
+    res = event.getData()
+    entry = res.tag
+    if entry = invalid then return
+    if m.readyWaiting > 0 then m.readyWaiting = m.readyWaiting - 1
+    if entry.userId <> m.global.userId then return
+    entry.Delete("userId")
+    if res.ok and isValid(res.data)
+        d = res.data
+        entry.title = safeStr(d.title)
+        if entry.title = "" then entry.title = safeStr(d.name)
+        if entry.jellyfinItemId = "" and isValid(d.mediaInfo) then entry.jellyfinItemId = normId(safeStr(d.mediaInfo.jellyfinMediaId))
+    end if
+    if entry.title = "" then entry.title = "A title you asked for"
+    ' Newest first, once per title, at most 10.
+    items = [entry]
+    for each it in m.global.readyItems
+        same = (it.tmdbId = entry.tmdbId and it.mediaType = entry.mediaType)
+        if not same and items.Count() < 10 then items.Push(it)
+    end for
+    m.global.readyItems = items
+    saveReady()
+    m.readyToasts.Push(entry.title)
+    if m.readyWaiting = 0 then announceReady()
+end sub
+
+' One Toast for everything that arrived, unless the Player is up: then it
+' waits until the Player closes (popScreen calls this again).
+sub announceReady()
+    if m.readyToasts.Count() = 0 or m.readyWaiting > 0 then return
+    if playerShowing() then return
+    names = m.readyToasts
+    m.readyToasts = []
+    text = names[0] + " is ready to watch"
+    if names.Count() = 2 then text = names[0] + " and " + names[1] + " are ready to watch"
+    if names.Count() > 2 then text = names[0] + " and " + (names.Count() - 1).ToStr() + " more are ready to watch"
+    showToast(text, "check", 4)
+end sub
+
+function playerShowing() as boolean
+    if m.stack.Count() = 0 then return false
+    return m.stack.Peek().subtype() = "PlayerScreen"
+end function
+
+function normId(id as string) as string
+    return LCase(id).Replace("-", "")
+end function
+
+' Playing a title (or an episode of a show) takes it off Ready to watch.
+sub readyPlayed(itemId as string)
+    items = m.global.readyItems
+    if items = invalid or itemId = "" then return
+    if items.Count() = 0 then return
+    if dropReady(normId(itemId)) then return
+    hasShow = false
+    for each it in items
+        if it.mediaType = "tv" and it.jellyfinItemId <> "" then hasShow = true
+    end for
+    if hasShow then apiRequest("/Users/" + m.global.userId + "/Items/" + itemId, {}, "onReadyPlayedItem")
+end sub
+
+sub onReadyPlayedItem(event as object)
+    res = event.getData()
+    if not res.ok or not isValid(res.data) then return
+    dropReady(normId(safeStr(res.data.SeriesId)))
+end sub
+
+function dropReady(id as string) as boolean
+    if id = "" then return false
+    keep = []
+    found = false
+    for each it in m.global.readyItems
+        if it.jellyfinItemId = id
+            found = true
+        else
+            keep.Push(it)
+        end if
+    end for
+    if found
+        print "[Matinee] ready to watch: played "; id
+        m.global.readyItems = keep
+        saveReady()
+    end if
+    return found
+end function
 
 sub onSeerrAuthenticated(cookie as string)
     reg = CreateObject("roRegistrySection", "Marquee")
@@ -426,7 +719,10 @@ sub showWho(msg as string)
     clearStack()
     m.global.token = ""
     m.global.seerrUserId = ""
+    m.global.seerrPerms = 0
     m.global.seerrState = "none"
+    m.global.readyItems = []
+    m.readyState = invalid
     w = CreateObject("roSGNode", "WhoScreen")
     w.message = msg
     pushScreen(w)
@@ -478,6 +774,8 @@ function popScreen(refreshTop = true as boolean) as boolean
         top.setFocus(true)
         if top.hasField("refresh") then top.refresh = true
     end if
+    ' Ready to watch Toasts wait while the Player is up.
+    announceReady()
     return true
 end function
 
@@ -523,6 +821,7 @@ sub navigateTo(nav as dynamic)
         pushScreen(d)
         d.itemId = nav.itemId
     else if a = "play"
+        readyPlayed(safeStr(nav.itemId))
         p = CreateObject("roSGNode", "PlayerScreen")
         pushScreen(p)
         p.playItem = { itemId: nav.itemId, startSeconds: nav.startSeconds }

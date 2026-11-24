@@ -233,6 +233,9 @@ function themeTokens(prefs as object) as object
     t.selectedFill = 0.30
     ' The Player's Up next card.
     t.nextCard = t.panel
+    ' The Player's Still watching? prompt.
+    t.stillW = 760
+    t.stillH = 300
     ' Title Options: the panel at the right, the dim behind it, and how
     ' long OK is held on a Card before it opens.
     t.optionsW = 600
@@ -240,6 +243,10 @@ function themeTokens(prefs as object) as object
     t.scrimOpacity = 0.6
     t.modalScrimOpacity = 0.78
     t.holdSeconds = 0.6
+    ' The request sheet and Report a problem: wider panels at the right,
+    ' with rows this tall (gap included).
+    t.sheetW = 720
+    t.sheetRowH = 68
     ' A Toast stays this long, fades included.
     t.toastSeconds = 2.4
     t.tipSeconds = 6

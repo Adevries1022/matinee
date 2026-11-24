@@ -1,23 +1,27 @@
 ' Request Details: a Seerr title laid out like Detail. Artwork on the right,
 ' a back pill, eyebrow, title (or the Logo when part of it is on the
-' server), meta, blurb, then Request in place of Play. Shows get season
-' pills that pick what Request sends, with a line about the picked season.
-' Quality (1080p or 4K) only shows as a second "Request in 4K" button when
-' 4K is really on offer. Once requested, the Request Status shows in place
-' of the button. "More like this" holds Seerr's recommendations.
-' Focus zones: back, buttons, seasons, cards. Requests go out as the
-' signed-in User's own Seerr account.
+' server), meta, blurb, then Request in place of Play, which opens the
+' request sheet (RequestSheet: seasons, HD or 4K, quota, Advanced). Shows
+' get season pills with a line about the picked season; the picked one is
+' what the sheet starts with. Once requested, the Request Status shows in
+' place of the button. A title on the server offers Report a problem
+' (ReportProblem). A movie in a collection gets "More in this collection"
+' and "Request the collection". "More like this" holds Seerr's
+' recommendations. Focus zones: back, buttons, seasons, collection, cards.
+' Requests go out as the signed-in User's own Seerr account.
 
 sub init()
     t = th()
     m.art = m.top.findNode("art")
     m.layer = m.top.findNode("layer")
+    m.page = m.top.findNode("page")
     m.cards = m.top.findNode("cards")
+    m.collCards = m.top.findNode("collectionCards")
     m.sink = m.top.findNode("sink")
     m.fadeIn = m.top.findNode("fadeIn")
     m.x = 120
 
-    makeFade(m.layer, "detail", 1920, 1080)
+    makeFade(m.top.findNode("shade"), "detail", 1920, 1080)
     m.back = makeBackPill(m.layer, m.top.backLabel)
 
     m.eyebrow = makeLabel(m.layer, "", 18, "semibold", t.accent)
@@ -52,10 +56,13 @@ sub init()
     m.seasonLine.translation = [m.x, 702]
     m.rowLabel = makeLabel(m.layer, "More like this", 26, "semibold", t.heading)
     m.rowLabel.visible = false
+    m.collLabel = makeLabel(m.layer, "More in this collection", 26, "semibold", t.heading)
+    m.collLabel.visible = false
     m.status = makeLabel(m.layer, "Loading...", 26, "regular", t.muted)
     m.status.translation = [m.x, 400]
 
     m.cards.observeField("rowItemSelected", "onCardSelected")
+    m.collCards.observeField("rowItemSelected", "onCollectionSelected")
     m.art.observeField("loadStatus", "onArtStatus")
     m.top.observeField("focusedChild", "onFocusChanged")
     m.top.observeField("backLabel", "onBackLabel")
@@ -71,11 +78,16 @@ sub init()
     m.isTv = false
     m.perms = 0
     m.settings = invalid
-    m.sending = false
     m.noteText = ""
     m.itemRatings = invalid
     m.metaParts = []
     m.simItems = invalid
+    ' The movie's collection: { id, name } and its films for the sheet.
+    m.collectionId = 0
+    m.collectionName = ""
+    m.collectionFilms = []
+    m.sheet = invalid
+    m.report = invalid
     ratingsInit()
     paintAll()
 end sub
@@ -156,6 +168,7 @@ sub onTitle(event as object)
 
     if m.isTv then buildSeasons()
     buildButtons()
+    if not m.isTv then loadCollection()
     if m.top.isInFocusChain() then restoreFocus()
 end sub
 
@@ -510,6 +523,7 @@ sub buildButtons()
     show4k = can4k()
     uhd = invalid
     if show4k then uhd = requestState(true)
+    want4k = show4k and readSetting("seerrQuality", "1080p") = "4K"
 
     ' Sit the buttons under the blurb, above the season pills.
     y = 384
@@ -526,29 +540,20 @@ sub buildButtons()
         st.group.translation = [x, y + (72 - Int(24 * 1.4)) \ 2]
         x = x + st.w + 40
     end if
-    ' With 4K on offer there are two buttons; the "Default request quality"
-    ' setting picks which comes first. The first says what it requests, the
-    ' second only its quality (the season pills already say which seasons).
-    want4k = readSetting("seerrQuality", "1080p") = "4K"
-    reqs = []
-    if hd.ok then reqs.Push({ label: hd.label, quality: "1080p", action: "request" })
-    if uhd <> invalid
-        if uhd.ok
-            r4 = { label: uhd.label, quality: "4K", action: "request4k" }
-            if want4k then reqs.Unshift(r4) else reqs.Push(r4)
-        end if
+    ' One Request button opens the sheet, which holds HD or 4K. It says
+    ' what the "Default request quality" would request.
+    canHd = hd.ok
+    can4 = (uhd <> invalid)
+    if can4 then can4 = uhd.ok
+    first4k = (want4k and can4) or not canHd
+    if canHd or can4
+        lbl = hd.label
+        if first4k then lbl = uhd.label
+        addButton({ kind: "primary", icon: "plus", text: lbl }, "request")
     end if
-    for i = 0 to reqs.Count() - 1
-        r = reqs[i]
-        if i = 0
-            lbl = r.label
-            if show4k then lbl = lbl + " in " + r.quality
-            addButton({ kind: "primary", icon: "plus", text: lbl }, r.action)
-        else
-            addButton({ kind: "secondary", text: "In " + r.quality, size: 22, padX: 30 }, r.action)
-        end if
-    end for
     if jellyfinId() <> "" then addButton({ kind: "secondary", icon: "play", text: "Watch", size: 22, padX: 30, iconSize: 24 }, "watch")
+    if collectionOpen() then addButton({ kind: "secondary", text: "Request the collection", size: 22, padX: 30 }, "collection")
+    if canReport() then addButton({ kind: "secondary", icon: "info", text: "Report a problem", size: 22, padX: 30, iconSize: 24 }, "report")
     endX = rowBtns(m.buttons, x, y, 20)
     if m.buttons.Count() = 0 then endX = x - 40
 
@@ -556,13 +561,10 @@ sub buildButtons()
     if m.noteText <> ""
         m.note.text = m.noteText
         m.note.color = t.accent
-    else if hd.ok or (uhd <> invalid and uhd.ok = true)
+    else if canHd or can4
         dest = "Radarr"
         if m.isTv then dest = "Sonarr"
         approval = "needs an admin to approve"
-        ' Approval can differ for 4K: go by the first button.
-        first4k = false
-        if reqs.Count() > 0 then first4k = (reqs[0].quality = "4K")
         if seerrAutoApproves(m.perms, m.isTv, first4k) then approval = "approved automatically"
         m.note.text = "Goes to " + dest + " " + Chr(183) + " " + approval
         m.note.color = t.meta
@@ -571,11 +573,15 @@ sub buildButtons()
     end if
     m.note.translation = [endX + 32, y]
     m.note.width = 1800 - (endX + 32)
+    ' No room beside many buttons.
+    m.note.visible = m.note.width >= 280
 
     if m.btnIndex >= m.buttons.Count() then m.btnIndex = 0
     if m.zone = "buttons" and m.buttons.Count() = 0
         if m.pills.Count() > 0
             m.zone = "seasons"
+        else if m.collCards.visible
+            m.zone = "collection"
         else if m.cards.visible
             m.zone = "cards"
         else
@@ -595,53 +601,197 @@ sub doButton()
     if m.actions.Count() = 0 then return
     action = m.actions[m.btnIndex]
     if action = "request"
-        sendRequest(false)
-    else if action = "request4k"
-        sendRequest(true)
+        openSheet(false)
+    else if action = "collection"
+        openSheet(true)
+    else if action = "report"
+        openReport()
     else if action = "watch"
         m.top.navigate = { action: "details", itemId: jellyfinId() }
     end if
 end sub
 
-sub sendRequest(is4k as boolean)
-    if m.sending or m.data = invalid then return
-    body = { "mediaType": mediaKind(), "mediaId": safeInt(m.data.id), "is4k": is4k }
-    if m.isTv
-        wanted = openSeasons(is4k)
-        if wanted.Count() = 0 then return
-        body.seasons = wanted
+' ---------- The request sheet ----------
+
+function titleName() as string
+    if m.data = invalid then return ""
+    name = safeStr(m.data.title)
+    if name = "" then name = safeStr(m.data.name)
+    return name
+end function
+
+sub openSheet(forCollection as boolean)
+    if m.data = invalid then return
+    rq = {
+        mediaType: mediaKind(),
+        title: titleName(),
+        tmdbId: safeInt(m.data.id),
+        allow4k: can4k(),
+        want4k: readSetting("seerrQuality", "1080p") = "4K",
+        perms: m.perms,
+        pickSeason: 0,
+        status: titleStatus(false),
+        status4k: titleStatus(true)
+    }
+    if forCollection
+        rq.mediaType = "movie"
+        rq.title = m.collectionName
+        rq.films = m.collectionFilms
+    else if m.isTv
+        list = []
+        for each s in m.seasonList
+            list.Push({ num: s.num, status: s.status, status4k: s.status4k })
+        end for
+        rq.seasons = list
+        if m.pick > 0 then rq.pickSeason = m.seasonList[m.pick - 1].num
     end if
-    m.sending = true
-    m.noteText = "Sending your request..."
-    buildButtons()
-    seerrRequest("/request", {}, "onRequested", "POST", body)
+    if m.sheet = invalid
+        m.sheet = CreateObject("roSGNode", "RequestSheet")
+        m.sheet.observeField("done", "onSheetDone")
+        m.top.appendChild(m.sheet)
+    end if
+    m.sheet.request = rq
+    m.sheet.open = true
+    m.sheet.setFocus(true)
 end sub
 
-sub onRequested(event as object)
-    res = event.getData()
-    m.sending = false
-    if res.ok
-        m.noteText = "Requested. It" + Chr(8217) + "s in My requests until it" + Chr(8217) + "s ready to watch."
-        c = m.top.card
-        if c <> invalid
-            if c.requestStatus < 2
-                c.requestStatus = 2
-                c.badge = requestStatusLabel(2)
-            end if
+sub onSheetDone()
+    r = m.sheet.done
+    restoreFocus()
+    if r = invalid then return
+    if r.action <> "requested" then return
+    m.noteText = "Requested. It" + Chr(8217) + "s in My requests until it" + Chr(8217) + "s ready to watch."
+    c = m.top.card
+    if c <> invalid
+        if c.requestStatus < 2
+            c.requestStatus = 2
+            c.badge = requestStatusLabel(2)
         end if
-        ' Fetch the title again for its new Request Status.
-        seerrRequest(m.path, {}, "onTitle")
-    else if res.code = 403
-        m.noteText = "Your Seerr account isn" + Chr(8217) + "t allowed to request this. Ask an Administrator."
-    else if res.code = 409
-        m.noteText = "Someone has already requested this."
-    else if res.code = 401
-        m.top.navigate = { action: "seerrSignedOut" }
-    else
-        m.noteText = "The request didn" + Chr(8217) + "t go through (error " + res.code.ToStr() + ")."
     end if
-    print "[Matinee] request: HTTP "; res.code
+    ' Fetch the title again for its new Request Status (and its collection).
+    seerrRequest(m.path, {}, "onTitle")
     buildButtons()
+end sub
+
+' ---------- Report a problem ----------
+
+' For a title that's on the server, when the Seerr account may report.
+function canReport() as boolean
+    if m.data = invalid then return false
+    if not seerrCanReport(m.perms) then return false
+    if not isValid(m.data.mediaInfo) then return false
+    if safeInt(m.data.mediaInfo.id) <= 0 then return false
+    s = titleStatus(false)
+    s4 = titleStatus(true)
+    return s = 4 or s = 5 or s4 = 4 or s4 = 5
+end function
+
+sub openReport()
+    rp = { mediaType: mediaKind(), tmdbId: safeInt(m.data.id), title: titleName(), mediaId: safeInt(m.data.mediaInfo.id) }
+    if m.isTv
+        ' The seasons on the server, or all of them when Seerr doesn't say.
+        list = []
+        for each s in m.seasonList
+            if s.status >= 4 or s.status4k >= 4 then list.Push({ num: s.num, episodes: s.episodes })
+        end for
+        if list.Count() = 0
+            for each s in m.seasonList
+                list.Push({ num: s.num, episodes: s.episodes })
+            end for
+        end if
+        rp.seasons = list
+    end if
+    if m.report = invalid
+        m.report = CreateObject("roSGNode", "ReportProblem")
+        m.report.observeField("done", "onReportDone")
+        m.top.appendChild(m.report)
+    end if
+    m.report.report = rp
+    m.report.open = true
+    m.report.setFocus(true)
+end sub
+
+sub onReportDone()
+    restoreFocus()
+end sub
+
+' ---------- More in this collection ----------
+
+sub loadCollection()
+    c = m.data.collection
+    if not isValid(c) then return
+    id = safeInt(c.id)
+    if id <= 0 then return
+    m.collectionId = id
+    m.collectionName = safeStr(c.name)
+    seerrRequest("/collection/" + id.ToStr(), {}, "onCollection", "GET", invalid, id)
+end sub
+
+sub onCollection(event as object)
+    res = event.getData()
+    if res.tag <> m.collectionId then return
+    if not res.ok or not isValid(res.data)
+        print "[Matinee] request details: collection failed, HTTP "; res.code
+        return
+    end if
+    d = res.data
+    if safeStr(d.name) <> "" then m.collectionName = safeStr(d.name)
+    parts = []
+    if type(d.parts) = "roArray" then parts = d.parts
+    parts.SortBy("releaseDate")
+    films = []
+    root = CreateObject("roSGNode", "ContentNode")
+    row = root.CreateChild("ContentNode")
+    for each r in parts
+        r.mediaType = "movie"
+        yr = ""
+        rel = safeStr(r.releaseDate)
+        if Len(rel) >= 4 then yr = Left(rel, 4)
+        st4 = 0
+        if isValid(r.mediaInfo) then st4 = safeInt(r.mediaInfo.status4k)
+        films.Push({ tmdbId: safeInt(r.id), title: safeStr(r.title), year: yr, status: seerrStatus(r), status4k: st4 })
+        if safeStr(r.id) <> safeStr(m.data.id) and row.getChildCount() < 16
+            c = seerrToContent(r)
+            img = tmdbImage(r.backdropPath, "w780")
+            if img = "" then img = tmdbImage(r.posterPath, "w500")
+            c.HDPosterUrl = img
+            setCardSize(c, true)
+            if c.badge = "" then c.badge = "Request"
+            row.appendChild(c)
+        end if
+    end for
+    m.collectionFilms = films
+    t = th()
+    count = row.getChildCount()
+    m.collCards.itemSize = [1920 - m.x + t.cellPadX, t.landH + t.cellPadY * 2]
+    m.collCards.rowItemSize = [[t.landW + t.cellPadX * 2, t.landH + t.cellPadY * 2]]
+    m.collCards.rowItemSpacing = [[0, 0]]
+    m.collCards.content = root
+    m.collCards.visible = count > 0
+    m.collLabel.visible = count > 0
+    if m.zone = "collection" and count = 0 then m.zone = "buttons"
+    buildButtons()
+    placeLower()
+    if m.top.isInFocusChain() then restoreFocus()
+end sub
+
+' A collection of two or more films with one that can still be requested.
+function collectionOpen() as boolean
+    if m.collectionFilms.Count() < 2 then return false
+    with4k = can4k()
+    for each f in m.collectionFilms
+        s = f.status
+        if s = 0 or s = 1 then return true
+        if with4k and (f.status4k = 0 or f.status4k = 1) then return true
+    end for
+    return false
+end function
+
+sub onCollectionSelected(event as object)
+    idx = event.getData()
+    c = m.collCards.content.getChild(0).getChild(idx[1])
+    if c = invalid then return
+    m.top.navigate = seerrNav(c)
 end sub
 
 sub onLogoStatus()
@@ -689,13 +839,29 @@ sub onSimilar(event as object)
     if m.top.isInFocusChain() then restoreFocus()
 end sub
 
-' The season pills and line take the space above "More like this" for shows.
+' The season pills and line take the space above "More like this" for
+' shows; "More in this collection" sits above it for movies in one.
 sub placeLower()
     t = th()
     y = 636
     if m.pills.Count() > 0 then y = 756
+    m.collLabel.translation = [m.x, y]
+    m.collCards.translation = [m.x - t.cellPadX, y + 50 - t.cellPadY]
+    m.lowerStep = 0
+    if m.collCards.visible
+        m.lowerStep = 50 + t.landH + 44
+        y = y + m.lowerStep
+    end if
     m.rowLabel.translation = [m.x, y]
     m.cards.translation = [m.x - t.cellPadX, y + 50 - t.cellPadY]
+    placePage()
+end sub
+
+' Under a collection, "More like this" moves up into view while Focused.
+sub placePage()
+    shift = 0
+    if m.zone = "cards" and m.collCards.visible then shift = -safeInt(m.lowerStep)
+    m.page.translation = [0, shift]
 end sub
 
 sub onCardSelected(event as object)
@@ -720,6 +886,7 @@ sub paintAll()
     if m.zone = "seasons" then focusPill = m.pick
     selectPill(m.pills, m.pick, focusPill)
     scrollPills()
+    placePage()
 end sub
 
 ' Keep the picked pill on screen when a show has many seasons.
@@ -736,6 +903,8 @@ end sub
 sub restoreFocus()
     if m.zone = "cards" and m.cards.visible
         m.cards.setFocus(true)
+    else if m.zone = "collection" and m.collCards.visible
+        m.collCards.setFocus(true)
     else
         m.sink.setFocus(true)
     end if
@@ -753,7 +922,7 @@ end sub
 
 ' The zone above or below the current one that has something to focus.
 function zoneAbove() as string
-    order = ["back", "buttons", "seasons", "cards"]
+    order = ["back", "buttons", "seasons", "collection", "cards"]
     i = 0
     for k = 0 to order.Count() - 1
         if order[k] = m.zone then i = k
@@ -766,7 +935,7 @@ function zoneAbove() as string
 end function
 
 function zoneBelow() as string
-    order = ["back", "buttons", "seasons", "cards"]
+    order = ["back", "buttons", "seasons", "collection", "cards"]
     i = 0
     for k = 0 to order.Count() - 1
         if order[k] = m.zone then i = k
@@ -782,6 +951,7 @@ function zoneHas(zone as string) as boolean
     if zone = "back" then return true
     if zone = "buttons" then return m.buttons.Count() > 0
     if zone = "seasons" then return m.pills.Count() > 0
+    if zone = "collection" then return m.collCards.visible
     return m.cards.visible
 end function
 

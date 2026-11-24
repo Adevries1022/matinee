@@ -1,5 +1,6 @@
 ' Activity (the Activity board): Radarr and Sonarr's download queue with
-' progress, "Coming up this week" from their calendars, and Storage from
+' progress (and why one is stuck, from their own status messages),
+' "Coming up this week" from their calendars, and Storage from
 ' their disk space. For an Administrator the round button on a row removes it
 ' from the queue (Radarr and Sonarr can't pause a download). Refreshes on the
 ' interval set in Settings > Servers & services.
@@ -102,7 +103,15 @@ sub onQueue(event as object)
         if not isValid(recs) and type(res.data) = "roArray" then recs = res.data
         if isValid(recs)
             for each r in recs
-                list.Push(arrQueueInfo(r, n))
+                info = arrQueueInfo(r, n)
+                ' Why it's stuck, in place of the bare state.
+                why = arrStuckReason(r)
+                if why <> ""
+                    info.stateLabel = why
+                    info.stateColor = stuckColor(why)
+                    if info.stateColor = th().error then info.barColor = info.stateColor
+                end if
+                list.Push(info)
             end for
         end if
     end if

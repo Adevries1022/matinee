@@ -1,0 +1,483 @@
+' The request sheet (see RequestSheet.xml). Rows, top to bottom: the
+' seasons of a series or the films of a collection, each with a check
+' (what's on the server or already requested is checked and can't be
+' changed), Quality (HD or 4K, only when 4K is on offer), an Advanced group
+' for people whose Seerr account may pick the server, quality profile and
+' folder, and Request. The quota line under the title comes from Seerr.
+' A collection sends one Request per film. Requests go out in the
+' signed-in User's own Seerr name.
+
+sub init()
+    m.layer = m.top.findNode("layer")
+    m.rows = []
+    m.index = 0
+    m.first = 0
+    m.gen = 0
+    m.detailGen = 0
+end sub
+
+sub onOpen()
+    if m.top.open
+        begin()
+        m.layer.visible = true
+    else
+        m.layer.visible = false
+        m.gen = m.gen + 1
+    end if
+end sub
+
+sub begin()
+    rq = m.top.request
+    if rq = invalid then rq = {}
+    m.req = rq
+    m.isTv = safeStr(rq.mediaType) = "tv"
+    m.films = invalid
+    if type(rq.films) = "roArray" then m.films = rq.films
+    m.seasons = []
+    if type(rq.seasons) = "roArray" then m.seasons = rq.seasons
+    m.allow4k = isTrue(rq.allow4k)
+    m.is4k = m.allow4k and isTrue(rq.want4k)
+    m.perms = safeInt(rq.perms)
+    m.sending = false
+    m.message = ""
+    m.messageColor = th().meta
+    m.quotaLine = ""
+    m.quotaColor = th().muted
+    m.quota = invalid
+    m.allServers = []
+    m.servers = []
+    m.serverIdx = 0
+    m.profiles = []
+    m.profileIdx = 0
+    m.folders = []
+    m.folderIdx = 0
+    m.advChanged = false
+    m.queue = []
+    m.okCount = 0
+    m.failCode = 0
+    m.gen = m.gen + 1
+    m.svc = "radarr"
+    if m.isTv then m.svc = "sonarr"
+    defaultChecks()
+    buildRows()
+    ' Start on Request, so OK twice sends it as it stands.
+    m.index = m.rows.Count() - 1
+    m.first = 0
+    draw()
+    uid = m.global.seerrUserId
+    if uid <> invalid and uid <> "" then seerrRequest("/user/" + uid + "/quota", {}, "onQuota", "GET", invalid, m.gen)
+    if seerrCanAdvanced(m.perms) then seerrRequest("/service/" + m.svc, {}, "onServers", "GET", invalid, m.gen)
+end sub
+
+' ---------- What's picked ----------
+
+function statusOf(entry as object) as integer
+    s = safeInt(entry.status)
+    if m.is4k then s = safeInt(entry.status4k)
+    if s = 1 or s > 6 then s = 0
+    return s
+end function
+
+' The seasons (or films) that can still be requested at this quality.
+function openKeys() as object
+    out = []
+    if m.films <> invalid
+        for each f in m.films
+            if statusOf(f) = 0 then out.Push(safeStr(f.tmdbId))
+        end for
+    else
+        for each s in m.seasons
+            if statusOf(s) = 0 then out.Push(safeInt(s.num).ToStr())
+        end for
+    end if
+    return out
+end function
+
+' Everything open is checked, or only the season picked on Request Details.
+sub defaultChecks()
+    m.checked = {}
+    open = openKeys()
+    pick = safeInt(m.req.pickSeason).ToStr()
+    if m.films = invalid and safeInt(m.req.pickSeason) > 0
+        for each k in open
+            if k = pick then m.checked[k] = true
+        end for
+        if m.checked.Count() > 0 then return
+    end if
+    for each k in open
+        m.checked[k] = true
+    end for
+end sub
+
+function checkedKeys() as object
+    out = []
+    for each k in openKeys()
+        if isTrue(m.checked[k]) then out.Push(k)
+    end for
+    return out
+end function
+
+function noteFor(st as integer) as string
+    if st = 2 then return "Requested"
+    if st = 3 then return "Downloading"
+    if st = 4 then return "Partly here"
+    if st = 5 then return "On your server"
+    if st = 6 then return "Blocked"
+    return ""
+end function
+
+' How many Requests the button sends, and what it says.
+function sendCount() as integer
+    if m.films <> invalid or m.seasons.Count() > 0 then return checkedKeys().Count()
+    st = safeInt(m.req.status)
+    if m.is4k then st = safeInt(m.req.status4k)
+    if st = 1 or st > 6 then st = 0
+    ' A series with no season list yet, or one that's partly here, still asks.
+    if st = 0 or (m.isTv and st = 4) then return 1
+    return 0
+end function
+
+function buttonLabel() as string
+    if m.sending then return "Sending..."
+    n = sendCount()
+    if n = 0 then return "Nothing left to request"
+    if m.films <> invalid
+        if n = 1 then return "Request 1 film"
+        return "Request " + n.ToStr() + " films"
+    end if
+    if m.seasons.Count() > 0
+        keys = checkedKeys()
+        if n = 1 then return "Request season " + keys[0]
+        if n = m.seasons.Count() then return "Request all seasons"
+        return "Request " + n.ToStr() + " seasons"
+    end if
+    return "Request"
+end function
+
+' ---------- Rows ----------
+
+sub buildRows()
+    rows = []
+    open = openKeys()
+    if m.films <> invalid
+        for each f in m.films
+            st = statusOf(f)
+            k = safeStr(f.tmdbId)
+            label = safeStr(f.title)
+            if safeStr(f.year) <> "" then label = label + " (" + safeStr(f.year) + ")"
+            rows.Push({ id: "k" + k, key: k, kind: "check", label: label, value: noteFor(st), checked: st <> 0 or isTrue(m.checked[k]), enabled: st = 0 and not m.sending })
+        end for
+    else if m.seasons.Count() > 0
+        allOn = open.Count() > 0 and checkedKeys().Count() = open.Count()
+        allLabel = "All seasons"
+        if open.Count() < m.seasons.Count() then allLabel = "All remaining seasons"
+        rows.Push({ id: "all", kind: "check", label: allLabel, checked: allOn, enabled: open.Count() > 0 and not m.sending })
+        for each s in m.seasons
+            st = statusOf(s)
+            k = safeInt(s.num).ToStr()
+            rows.Push({ id: "k" + k, key: k, kind: "check", label: "Season " + k, value: noteFor(st), checked: st <> 0 or isTrue(m.checked[k]), enabled: st = 0 and not m.sending })
+        end for
+    end if
+    if m.allow4k
+        q = "HD"
+        if m.is4k then q = "4K"
+        rows.Push({ id: "quality", kind: "choice", label: "Quality", value: q, enabled: not m.sending })
+    end if
+    if m.servers.Count() > 0
+        rows.Push({ id: "advanced", kind: "heading", label: "Advanced" })
+        rows.Push({ id: "server", kind: "choice", label: "Server", value: safeStr(m.servers[m.serverIdx].name), enabled: not m.sending })
+        if m.profiles.Count() > 0 then rows.Push({ id: "profile", kind: "choice", label: "Quality profile", value: safeStr(m.profiles[m.profileIdx].name), enabled: not m.sending })
+        if m.folders.Count() > 0 then rows.Push({ id: "folder", kind: "choice", label: "Folder", value: safeStr(m.folders[m.folderIdx].path), enabled: not m.sending })
+    end if
+    rows.Push({ id: "send", kind: "button", label: buttonLabel(), enabled: sendCount() > 0 and not m.sending })
+    ' Keep the focus on the same row when rows come and go.
+    oldId = ""
+    if m.index >= 0 and m.index < m.rows.Count() then oldId = m.rows[m.index].id
+    m.rows = rows
+    m.index = rows.Count() - 1
+    for i = 0 to rows.Count() - 1
+        if rows[i].id = oldId then m.index = i
+    end for
+end sub
+
+sub draw()
+    t = th()
+    head = safeStr(m.req.title)
+    lines = []
+    if m.quotaLine <> "" then lines.Push({ text: m.quotaLine, color: m.quotaColor })
+    if m.message <> ""
+        lines.Push({ text: m.message, color: m.messageColor })
+    else if sendCount() > 0
+        dest = "Radarr"
+        if m.isTv then dest = "Sonarr"
+        approval = "needs an admin to approve"
+        if seerrAutoApproves(m.perms, m.isTv, m.is4k) then approval = "approved automatically"
+        lines.Push({ text: "Goes to " + dest + " " + Chr(183) + " " + approval, color: t.meta })
+    end if
+    m.first = drawSheet(m.layer, head, lines, m.rows, m.index, m.first)
+end sub
+
+sub redraw()
+    buildRows()
+    draw()
+end sub
+
+' ---------- Quota ----------
+
+sub onQuota(event as object)
+    res = event.getData()
+    if res.tag <> m.gen or not res.ok or not isValid(res.data) then return
+    q = res.data.movie
+    if m.isTv then q = res.data.tv
+    m.quota = q
+    m.quotaLine = quotaText(q, m.isTv)
+    m.quotaColor = th().muted
+    if isValid(q)
+        if safeInt(q.limit) > 0 and safeInt(q.remaining) <= 0 then m.quotaColor = th().warn
+    end if
+    draw()
+end sub
+
+' ---------- Advanced: server, quality profile, folder ----------
+
+sub onServers(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    if not res.ok or type(res.data) <> "roArray"
+        print "[Matinee] request sheet: no servers from Seerr (HTTP "; res.code; ")"
+        return
+    end if
+    m.allServers = res.data
+    pickServers()
+end sub
+
+' The servers for the chosen quality, starting on Seerr's default.
+sub pickServers()
+    m.servers = []
+    m.serverIdx = 0
+    for each sv in m.allServers
+        if isTrue(sv.is4k) = m.is4k then m.servers.Push(sv)
+    end for
+    for i = 0 to m.servers.Count() - 1
+        if isTrue(m.servers[i].isDefault) then m.serverIdx = i
+    end for
+    m.profiles = []
+    m.folders = []
+    m.advChanged = false
+    if m.servers.Count() > 0 then loadServerDetails()
+    redraw()
+end sub
+
+sub loadServerDetails()
+    m.detailGen = m.detailGen + 1
+    m.profiles = []
+    m.folders = []
+    sv = m.servers[m.serverIdx]
+    seerrRequest("/service/" + m.svc + "/" + safeStr(sv.id), {}, "onServerDetails", "GET", invalid, { gen: m.gen, detail: m.detailGen })
+end sub
+
+sub onServerDetails(event as object)
+    res = event.getData()
+    tag = res.tag
+    if tag = invalid then return
+    if tag.gen <> m.gen or tag.detail <> m.detailGen then return
+    if not res.ok or not isValid(res.data) then return
+    d = res.data
+    sv = m.servers[m.serverIdx]
+    if isValid(d.server) then sv = d.server
+    if type(d.profiles) = "roArray" then m.profiles = d.profiles
+    if type(d.rootFolders) = "roArray" then m.folders = d.rootFolders
+    m.profileIdx = 0
+    for i = 0 to m.profiles.Count() - 1
+        if safeInt(m.profiles[i].id) = safeInt(sv.activeProfileId) then m.profileIdx = i
+    end for
+    m.folderIdx = 0
+    for i = 0 to m.folders.Count() - 1
+        if safeStr(m.folders[i].path) = safeStr(sv.activeDirectory) then m.folderIdx = i
+    end for
+    redraw()
+end sub
+
+' Left or Right on a choice row: dirn is 1 or -1.
+sub changeChoice(rowId as string, dirn as integer)
+    if rowId = "quality"
+        m.is4k = not m.is4k
+        defaultChecks()
+        if m.allServers.Count() > 0 then pickServers()
+    else if rowId = "server"
+        m.serverIdx = wrapIndex(m.serverIdx + dirn, m.servers.Count())
+        m.advChanged = true
+        loadServerDetails()
+    else if rowId = "profile"
+        m.profileIdx = wrapIndex(m.profileIdx + dirn, m.profiles.Count())
+        m.advChanged = true
+    else if rowId = "folder"
+        m.folderIdx = wrapIndex(m.folderIdx + dirn, m.folders.Count())
+        m.advChanged = true
+    end if
+    m.message = ""
+    redraw()
+end sub
+
+function wrapIndex(i as integer, count as integer) as integer
+    if count <= 0 then return 0
+    if i < 0 then return count - 1
+    if i >= count then return 0
+    return i
+end function
+
+' ---------- Sending ----------
+
+function requestBody(tmdbId as integer) as object
+    body = { "mediaType": "movie", "mediaId": tmdbId, "is4k": m.is4k }
+    if m.isTv
+        body.mediaType = "tv"
+        if m.seasons.Count() > 0
+            nums = []
+            for each k in checkedKeys()
+                nums.Push(k.ToInt())
+            end for
+            body.seasons = nums
+        else
+            body.seasons = "all"
+        end if
+    end if
+    ' Seerr's own defaults apply unless someone changed them here.
+    if m.advChanged and m.servers.Count() > 0
+        body.serverId = safeInt(m.servers[m.serverIdx].id)
+        if m.profiles.Count() > 0 then body.profileId = safeInt(m.profiles[m.profileIdx].id)
+        if m.folders.Count() > 0 then body.rootFolder = safeStr(m.folders[m.folderIdx].path)
+    end if
+    return body
+end function
+
+sub send()
+    if m.sending or sendCount() = 0 then return
+    m.queue = []
+    if m.films <> invalid
+        for each k in checkedKeys()
+            m.queue.Push(k.ToInt())
+        end for
+    else
+        m.queue.Push(safeInt(m.req.tmdbId))
+    end if
+    m.okCount = 0
+    m.failCode = 0
+    m.total = m.queue.Count()
+    m.sending = true
+    m.message = "Sending your request..."
+    m.messageColor = th().meta
+    redraw()
+    sendNext()
+end sub
+
+' One at a time, so a collection doesn't flood Seerr.
+sub sendNext()
+    if m.queue.Count() = 0
+        finishSending()
+        return
+    end if
+    id = m.queue.Shift()
+    seerrRequest("/request", {}, "onRequested", "POST", requestBody(id), m.gen)
+end sub
+
+sub onRequested(event as object)
+    res = event.getData()
+    if res.tag <> m.gen then return
+    print "[Matinee] request sheet: HTTP "; res.code
+    if res.ok
+        m.okCount = m.okCount + 1
+    else
+        m.failCode = res.code
+        if res.code = 401
+            m.queue = []
+        end if
+    end if
+    sendNext()
+end sub
+
+sub finishSending()
+    m.sending = false
+    if m.okCount > 0
+        text = "Requested"
+        if m.films <> invalid and m.total > 1
+            text = "Requested " + m.okCount.ToStr() + " films"
+            if m.okCount < m.total then text = "Requested " + m.okCount.ToStr() + " of " + m.total.ToStr() + " films"
+        end if
+        showToast(text, "check")
+        finish({ action: "requested", count: m.okCount, is4k: m.is4k })
+        return
+    end if
+    c = m.failCode
+    if c = 403
+        m.message = "Your Seerr account can" + Chr(8217) + "t request this, or has no requests left. Ask an Administrator."
+    else if c = 409
+        m.message = "Someone has already requested this."
+    else if c = 401
+        m.message = "Your Seerr sign-in has expired. Sign in again in Discover."
+    else
+        m.message = "The request didn" + Chr(8217) + "t go through (error " + c.ToStr() + ")."
+    end if
+    m.messageColor = th().error
+    redraw()
+end sub
+
+sub finish(result as object)
+    m.top.open = false
+    m.top.done = result
+end sub
+
+' ---------- Keys ----------
+
+sub choose()
+    if m.rows.Count() = 0 then return
+    r = m.rows[m.index]
+    if not sheetRowOn(r) then return
+    if r.id = "send"
+        send()
+    else if r.id = "all"
+        open = openKeys()
+        allOn = checkedKeys().Count() = open.Count()
+        for each k in open
+            m.checked[k] = not allOn
+        end for
+        m.message = ""
+        redraw()
+    else if r.kind = "check"
+        m.checked[r.key] = not isTrue(m.checked[r.key])
+        m.message = ""
+        redraw()
+    else if r.kind = "choice"
+        changeChoice(r.id, 1)
+    end if
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    ' The sheet takes every key while it's open.
+    if not m.top.open then return false
+    if not press then return true
+    r = invalid
+    if m.index < m.rows.Count() then r = m.rows[m.index]
+    if key = "up" or key = "down"
+        dirn = 1
+        if key = "up" then dirn = -1
+        n = sheetStep(m.rows, m.index, dirn)
+        ' At the top, show the rows that can't be changed too.
+        if n = m.index and dirn < 0 then m.first = 0
+        m.index = n
+        draw()
+    else if key = "OK"
+        choose()
+    else if (key = "left" or key = "right") and r <> invalid
+        if r.kind = "choice" and sheetRowOn(r)
+            dirn = 1
+            if key = "left" then dirn = -1
+            changeChoice(r.id, dirn)
+        else if key = "left"
+            finish({ action: "close" })
+        end if
+    else if key = "back" or key = "options"
+        finish({ action: "close" })
+    end if
+    return true
+end function
