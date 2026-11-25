@@ -168,7 +168,7 @@ sub choose()
     if r.id = "cancel"
         finish({ action: "close" })
     else if r.id = "request" or r.id = "requestDetails"
-        finish({ action: "requestDetails", card: c })
+        finish({ action: "requestDetails", card: c, sheet: r.id = "request" })
     else if r.id = "start"
         finish({ action: "play", itemId: id, startSeconds: 0 })
     else if r.id = "show"

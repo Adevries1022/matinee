@@ -77,6 +77,8 @@ sub init()
     m.data = invalid
     m.isTv = false
     m.perms = 0
+    m.meDone = false
+    m.autoSheet = false
     m.settings = invalid
     m.noteText = ""
     m.itemRatings = invalid
@@ -100,6 +102,7 @@ sub load()
     md = m.top.media
     if md = invalid then return
     m.isTv = (safeStr(md.mediaType) = "tv")
+    m.autoSheet = isTrue(md.sheet)
     m.path = "/" + safeStr(md.mediaType) + "/" + safeStr(md.tmdbId)
     seerrRequest(m.path, {}, "onTitle")
     seerrRequest("/auth/me", {}, "onMe")
@@ -109,6 +112,7 @@ end sub
 
 sub onMe(event as object)
     res = event.getData()
+    m.meDone = true
     if res.ok and isValid(res.data)
         m.perms = safeInt(res.data.permissions)
         if m.data <> invalid then buildButtons()
@@ -169,7 +173,7 @@ sub onTitle(event as object)
     if m.isTv then buildSeasons()
     buildButtons()
     if not m.isTv then loadCollection()
-    if m.top.isInFocusChain() then restoreFocus()
+    if screenOwnsFocus() then restoreFocus()
 end sub
 
 function mediaKind() as string
@@ -587,9 +591,23 @@ sub buildButtons()
         else
             m.zone = "back"
         end if
-        if m.top.isInFocusChain() then restoreFocus()
+        if screenOwnsFocus() then restoreFocus()
     end if
     paintAll()
+    autoSheet()
+end sub
+
+' Came from a "Request" button: open the Request Sheet once the title, the
+' person's permissions and Seerr's settings are in, if it can be requested.
+sub autoSheet()
+    if not m.autoSheet or m.data = invalid or not m.meDone or m.settings = invalid then return
+    m.autoSheet = false
+    for each a in m.actions
+        if a = "request"
+            openSheet(false)
+            return
+        end if
+    end for
 end sub
 
 sub addButton(opts as object, action as string)
@@ -772,7 +790,7 @@ sub onCollection(event as object)
     if m.zone = "collection" and count = 0 then m.zone = "buttons"
     buildButtons()
     placeLower()
-    if m.top.isInFocusChain() then restoreFocus()
+    if screenOwnsFocus() then restoreFocus()
 end sub
 
 ' A collection of two or more films with one that can still be requested.
@@ -836,7 +854,7 @@ sub onSimilar(event as object)
     m.cards.visible = count > 0
     m.rowLabel.visible = count > 0
     placeLower()
-    if m.top.isInFocusChain() then restoreFocus()
+    if screenOwnsFocus() then restoreFocus()
 end sub
 
 ' The season pills and line take the space above "More like this" for

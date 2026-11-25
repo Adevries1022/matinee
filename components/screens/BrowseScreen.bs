@@ -875,8 +875,9 @@ sub heroButton(index as integer)
     if index < 0 or index >= m.heroActions.Count() then return
     action = m.heroActions[index]
     if isSeerrCard(c)
-        ' Request and Details both go to its Request Details.
-        m.top.navigate = seerrNav(c)
+        ' Request and Details both go to its Request Details; Request
+        ' (the Play slot) opens the Request Sheet there too.
+        m.top.navigate = seerrNav(c, action = "play")
     else if action = "play"
         if c.itemType = "Series"
             playSeries(c.itemId)

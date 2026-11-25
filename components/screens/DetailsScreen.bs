@@ -182,7 +182,7 @@ sub onItem(event as object)
         loadSimilar(item)
     end if
     buildButtons()
-    if m.top.isInFocusChain() then restoreFocus()
+    if screenOwnsFocus() then restoreFocus()
 end sub
 
 ' The meta line, then IMDb and Rotten Tomatoes scores after it.
@@ -449,7 +449,7 @@ sub showCards(root as object, cell as object, top as integer, jump as integer)
         m.zone = "buttons"
         paintAll()
     end if
-    if m.top.isInFocusChain() then restoreFocus()
+    if screenOwnsFocus() then restoreFocus()
 end sub
 
 sub onCardSelected(event as object)

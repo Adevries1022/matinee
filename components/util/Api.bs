@@ -966,10 +966,11 @@ end function
 
 ' Where OK on a Seerr title goes: its Detail when it's all on the server,
 ' otherwise its Request Details. card is the Card, so a request made there
-' can update its badge.
-function seerrNav(c as object) as object
+' can update its badge. withSheet opens the Request Sheet there too, for a
+' "Request" button.
+function seerrNav(c as object, withSheet = false as boolean) as object
     if c.requestStatus = 5 and c.jellyfinId <> "" then return { action: "details", itemId: c.jellyfinId }
-    return { action: "requestDetails", tmdbId: c.tmdbId, mediaType: Mid(c.itemType, 7), card: c }
+    return { action: "requestDetails", tmdbId: c.tmdbId, mediaType: Mid(c.itemType, 7), card: c, sheet: withSheet }
 end function
 
 ' Convert a Seerr movie or show result into a Card.
@@ -1186,4 +1187,16 @@ function cellSize(landscape as boolean) as object
     t = th()
     if landscape then return [t.landW + t.cellPadX * 2, t.landH + t.cellPadY * 2]
     return [t.posterW + t.cellPadX * 2, t.posterH + t.cellPadY * 2]
+end function
+' True when this screen holds focus itself, not through an open overlay
+' laid on it (Request Sheet, Title Options, Report a problem). A late
+' response that restores the screen's focus must not pull it from one.
+function screenOwnsFocus() as boolean
+    if not m.top.isInFocusChain() then return false
+    for each kid in m.top.getChildren(-1, 0)
+        if kid.hasField("open") and kid.isInFocusChain()
+            if kid.open = true then return false
+        end if
+    end for
+    return true
 end function

@@ -855,7 +855,7 @@ function sectionRows(key as string) as object
         rows = []
         for each hr in homeRowsFor(p)
             note = ""
-            if Left(hr.id, 5) = "seerr" then note = "Needs Seerr"
+            if Left(hr.id, 5) = "seerr" and m.global.seerrState <> "ready" then note = "Needs Seerr"
             rows.Push({ label: hr.label, value: note, kind: "homeRow", key: hr.id, on: hr.on })
         end for
         rows.Push({ label: "Reset to default", value: "The usual Rows in the usual order", kind: "reset", key: "homeReset" })

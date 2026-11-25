@@ -85,7 +85,7 @@ sub onOptionsDone()
         m.top.navigate = { action: "details", itemId: r.itemId, seasonId: r.seasonId }
     else if r.action = "requestDetails"
         ' Its Request Details, or its Detail when it's all on the server.
-        m.top.navigate = seerrNav(r.card)
+        m.top.navigate = seerrNav(r.card, isTrue(r.sheet))
     end if
 end sub
 

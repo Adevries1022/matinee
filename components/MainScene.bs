@@ -841,7 +841,7 @@ sub navigateTo(nav as dynamic)
         rd.backLabel = screenLabel(m.stack.Peek())
         if isValid(nav.card) then rd.card = nav.card
         pushScreen(rd)
-        rd.media = { tmdbId: nav.tmdbId, mediaType: nav.mediaType }
+        rd.media = { tmdbId: nav.tmdbId, mediaType: nav.mediaType, sheet: isTrue(nav.sheet) }
     else if a = "discoverCategory"
         dg = CreateObject("roSGNode", "DiscoverCategoryScreen")
         dg.backLabel = screenLabel(m.stack.Peek())

@@ -175,7 +175,7 @@ sub onChildren(event as object)
             m.status.visible = true
         end if
     end if
-    if m.top.isInFocusChain() then restoreFocus()
+    if screenOwnsFocus() then restoreFocus()
 end sub
 
 sub onLogoStatus()
