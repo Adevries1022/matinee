@@ -1,7 +1,10 @@
 ' One Discover category: a streaming service or a genre, laid out like
-' Discover (a Hero and Rows, from DiscoverHost.bs). A service gets popular,
-' newest and top rated Rows for both movies and series; a genre gets popular,
-' new, top rated and coming soon. Back returns to Discover.
+' Discover (a Hero and Rows, from DiscoverHost.bs). A service is browsed
+' like the service itself: popular, new and top rated, then Rows by genre
+' (Crime series, Anime, Documentaries...), each filtered to that service.
+' A genre gets popular, new, top rated and coming soon. Rows Seerr has too
+' few titles for are left out, and no title repeats. Back returns to
+' Discover.
 
 sub init()
     m.heroLayer = m.top.findNode("heroLayer")
@@ -12,6 +15,8 @@ sub init()
     m.top.observeField("focusedChild", "onFocusChanged")
     m.top.observeField("backLabel", "onBackLabel")
     discoverInit()
+    m.minRow = 6
+    m.dedupe = true
 end sub
 
 sub onBackLabel()
@@ -28,12 +33,17 @@ sub onCategory()
     defs = []
     if cat.kind = "service"
         q = { "watchProviders": safeStr(cat.id), "watchRegion": safeStr(cat.region) }
-        addRow(defs, "Popular movies", "movie", q, {})
         addRow(defs, "Popular series", "tv", q, {})
-        addRow(defs, "New movies", "movie", q, recentQuery("movie"))
+        addRow(defs, "Popular movies", "movie", q, {})
         addRow(defs, "New series", "tv", q, recentQuery("tv"))
-        addRow(defs, "Top rated movies", "movie", q, topQuery())
+        addRow(defs, "New movies", "movie", q, recentQuery("movie"))
         addRow(defs, "Top rated series", "tv", q, topQuery())
+        for each g in serviceGenreRows()
+            extra = { "genre": g.id }
+            if g.id = "" then extra = { "keywords": g.keyword }
+            addRow(defs, g.title, g.mt, q, extra)
+        end for
+        addRow(defs, "Top rated movies", "movie", q, topQuery())
     else
         mt = safeStr(cat.mediaType)
         kind = "movies"
@@ -47,6 +57,27 @@ sub onCategory()
     end if
     fetchRows(defs)
 end sub
+
+' A service's Rows by genre. TMDB genre ids (the movie and TV lists
+' differ); 210024 is TMDB's anime keyword.
+function serviceGenreRows() as object
+    return [
+        { title: "Crime series", mt: "tv", id: "80" }
+        { title: "Comedy movies", mt: "movie", id: "35" }
+        { title: "Anime", mt: "tv", id: "", keyword: "210024" }
+        { title: "Action movies", mt: "movie", id: "28" }
+        { title: "Sci-fi and fantasy series", mt: "tv", id: "10765" }
+        { title: "Thrillers", mt: "movie", id: "53" }
+        { title: "Comedy series", mt: "tv", id: "35" }
+        { title: "Documentaries", mt: "movie", id: "99" }
+        { title: "Docuseries", mt: "tv", id: "99" }
+        { title: "Drama series", mt: "tv", id: "18" }
+        { title: "Horror movies", mt: "movie", id: "27" }
+        { title: "Kids", mt: "tv", id: "10762" }
+        { title: "Reality TV", mt: "tv", id: "10764" }
+        { title: "Romance movies", mt: "movie", id: "10749" }
+    ]
+end function
 
 sub addRow(defs as object, title as string, mediaType as string, base as object, extra as object)
     q = { "page": "1" }

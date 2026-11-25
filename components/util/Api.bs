@@ -35,14 +35,23 @@ sub seerrRequest(path as string, query as object, callback as string, method = "
     ' When the TV can't look up Seerr's name, go through the Jellyfin
     ' machine's address and name Seerr in the Host header (see MainScene).
     via = m.global.seerrVia
+    fallback = invalid
     if via <> invalid and via <> ""
         base = via
         headers["Host"] = urlHost(m.global.seerrUrl)
+    else
+        ' The name can stop resolving at any time (the home DNS hiccups), so
+        ' a request that can't look it up tries once through that address.
+        seerrHost = urlHost(base)
+        jfHost = urlHost(m.global.serverUrl)
+        if not isIpHost(seerrHost) and isIpHost(jfHost)
+            fallback = { via: swapHost(base, jfHost), host: seerrHost }
+        end if
     end if
-    startRequest(base + "/api/v1", path, query, callback, method, body, tag, "", headers)
+    startRequest(base + "/api/v1", path, query, callback, method, body, tag, "", headers, fallback)
 end sub
 
-sub startRequest(base as string, path as string, query as object, callback as string, method as string, body as dynamic, tag as dynamic, auth as string, headers as object)
+sub startRequest(base as string, path as string, query as object, callback as string, method as string, body as dynamic, tag as dynamic, auth as string, headers as object, fallback = invalid as dynamic)
     task = CreateObject("roSGNode", "ApiTask")
     bodyJson = ""
     if body <> invalid then bodyJson = FormatJson(body)
@@ -55,6 +64,7 @@ sub startRequest(base as string, path as string, query as object, callback as st
         server: base,
         auth: auth,
         headers: headers,
+        fallback: fallback,
         verify: readSetting("allowSelfSigned", "true") <> "true"
     }
     task.observeField("response", callback)

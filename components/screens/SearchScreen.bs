@@ -324,11 +324,20 @@ sub onSeerrResults(event as object)
     m.seerrItems = []
     if res.ok and isValid(res.data)
         if isValid(res.data.results)
+            ' Titles already fully on the server show up above. Ones with
+            ' no artwork at all (usually obscure) go last.
+            bare = []
             for each r in res.data.results
                 mt = safeStr(r.mediaType)
-                ' Titles already fully on the server show up above.
-                if (mt = "movie" or mt = "tv") and seerrStatus(r) <> 5 then m.seerrItems.Push(r)
+                if (mt = "movie" or mt = "tv") and seerrStatus(r) <> 5
+                    if safeStr(r.backdropPath) = "" and safeStr(r.posterPath) = ""
+                        bare.Push(r)
+                    else
+                        m.seerrItems.Push(r)
+                    end if
+                end if
             end for
+            m.seerrItems.Append(bare)
         end if
     else if res.code = 401 or res.code = 403
         m.top.navigate = { action: "seerrSignedOut" }
@@ -349,7 +358,9 @@ sub render()
     end for
     for each r in m.seerrItems
         c = seerrToContent(r)
-        c.HDPosterUrl = tmdbImage(r.backdropPath, "w500")
+        img = tmdbImage(r.backdropPath, "w500")
+        if img = "" then img = tmdbImage(r.posterPath, "w342")
+        c.HDPosterUrl = img
         c.cardW = 340
         c.cardH = 191
         c.subtitle = "Not on your server " + Chr(183) + " Request it"

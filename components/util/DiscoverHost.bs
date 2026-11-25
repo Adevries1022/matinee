@@ -12,6 +12,9 @@ sub discoverInit()
     m.heroItem = invalid
     m.heroRatings = invalid
     m.eyebrowPrefix = ""
+    ' A category screen hides thin Rows and repeats no title (see buildRows).
+    m.minRow = 1
+    m.dedupe = false
     ratingsInit()
     buildHero()
     styleRows()
@@ -239,11 +242,24 @@ sub buildRows()
     root = CreateObject("roSGNode", "ContentNode")
     sizes = []
     heights = []
+    seen = {}
     for i = 0 to m.rowDefs.Count() - 1
         items = m.rowResults[i]
         d = m.rowDefs[i]
+        if items <> invalid and m.dedupe and d.tiles = ""
+            fresh = []
+            for each c in items
+                if not seen.DoesExist(c.itemType + c.tmdbId) then fresh.Push(c)
+            end for
+            if fresh.Count() >= m.minRow
+                for each c in fresh
+                    seen[c.itemType + c.tmdbId] = true
+                end for
+            end if
+            items = fresh
+        end if
         if items <> invalid
-            if items.Count() > 0
+            if items.Count() >= m.minRow and items.Count() > 0
                 row = root.CreateChild("ContentNode")
                 row.title = d.title
                 for each c in items

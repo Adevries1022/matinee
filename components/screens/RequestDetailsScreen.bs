@@ -88,6 +88,10 @@ sub init()
     m.collectionId = 0
     m.collectionName = ""
     m.collectionFilms = []
+    ' A show's Episodes Row (in the collection Row's place): the season it
+    ' shows and each season's episodes once fetched, by season number.
+    m.epSeason = -1
+    m.epCache = {}
     m.sheet = invalid
     m.report = invalid
     ratingsInit()
@@ -138,6 +142,7 @@ sub onTitle(event as object)
             m.top.navigate = { action: "seerrSignedOut" }
             return
         end if
+        print "[Matinee] request details: "; m.path; " failed, HTTP "; res.code
         m.status.text = "Couldn" + Chr(8217) + "t load this title."
         m.status.visible = true
         return
@@ -361,6 +366,7 @@ sub buildSeasons()
     end if
     refreshSeasonStatus()
     drawPills()
+    loadEpisodes()
 end sub
 
 sub refreshSeasonStatus()
@@ -809,7 +815,89 @@ sub onCollectionSelected(event as object)
     idx = event.getData()
     c = m.collCards.content.getChild(0).getChild(idx[1])
     if c = invalid then return
-    m.top.navigate = seerrNav(c)
+    if m.isTv
+        episodePicked()
+    else
+        m.top.navigate = seerrNav(c)
+    end if
+end sub
+
+' ---------- Episodes (shows) ----------
+
+' The picked season's episodes, or the first season's under All seasons.
+sub loadEpisodes()
+    if not m.isTv or m.seasonList.Count() = 0 then return
+    i = m.pick - 1
+    if i < 0 then i = 0
+    num = m.seasonList[i].num
+    if num = m.epSeason then return
+    m.epSeason = num
+    key = num.ToStr()
+    if m.epCache.DoesExist(key)
+        showEpisodes(num, m.epCache[key])
+    else
+        seerrRequest(m.path + "/season/" + key, {}, "onEpisodes", "GET", invalid, num)
+    end if
+end sub
+
+sub onEpisodes(event as object)
+    res = event.getData()
+    num = safeInt(res.tag)
+    eps = []
+    if res.ok and isValid(res.data)
+        if type(res.data.episodes) = "roArray" then eps = res.data.episodes
+        m.epCache[num.ToStr()] = eps
+    else
+        print "[Matinee] request details: season "; num; " failed, HTTP "; res.code
+    end if
+    if num = m.epSeason then showEpisodes(num, eps)
+end sub
+
+sub showEpisodes(num as integer, eps as object)
+    root = CreateObject("roSGNode", "ContentNode")
+    row = root.CreateChild("ContentNode")
+    sep = " " + Chr(183) + " "
+    for each e in eps
+        c = newContent()
+        c.itemType = "seerr-episode"
+        n = safeInt(e.episodeNumber)
+        c.heading = safeStr(e.name)
+        if c.heading = "" then c.heading = "Episode " + n.ToStr()
+        c.subtitle = "S" + num.ToStr() + sep + "E" + n.ToStr()
+        c.description = safeStr(e.overview)
+        ' Small stills keep memory light on entry-level TVs.
+        c.HDPosterUrl = tmdbImage(e.stillPath, "w300")
+        setCardSize(c, true)
+        row.appendChild(c)
+    end for
+    t = th()
+    count = row.getChildCount()
+    m.collLabel.text = "Episodes" + sep + "Season " + num.ToStr()
+    m.collCards.itemSize = [1920 - m.x + t.cellPadX, t.landH + t.cellPadY * 2]
+    m.collCards.rowItemSize = [[t.landW + t.cellPadX * 2, t.landH + t.cellPadY * 2]]
+    m.collCards.rowItemSpacing = [[0, 0]]
+    m.collCards.content = root
+    m.collCards.visible = count > 0
+    m.collLabel.visible = count > 0
+    if m.zone = "collection" and count = 0 then m.zone = "seasons"
+    placeLower()
+    if screenOwnsFocus() then restoreFocus()
+end sub
+
+' OK on an episode: pick its season and open the Request Sheet for it.
+sub episodePicked()
+    for i = 0 to m.seasonList.Count() - 1
+        if m.seasonList[i].num = m.epSeason then m.pick = i + 1
+    end for
+    m.noteText = ""
+    drawPills()
+    buildButtons()
+    for each a in m.actions
+        if a = "request"
+            openSheet(false)
+            return
+        end if
+    end for
 end sub
 
 sub onLogoStatus()
@@ -1010,6 +1098,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
                 drawSeasonLine()
                 m.noteText = ""
                 buildButtons()
+                loadEpisodes()
             end if
         else if key = "OK"
             if m.buttons.Count() > 0 then setZone("buttons")

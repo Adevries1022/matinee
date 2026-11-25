@@ -9,13 +9,33 @@ sub execute()
         warmHls(req)
         return
     end if
+    result = send(req, req.server, req.headers)
+    ' Seerr's name didn't resolve: try once through the Jellyfin machine's
+    ' address, naming Seerr in the Host header, and keep using it if it
+    ' answers (see seerrRequest).
+    fb = req.fallback
+    if result.code = -6 and fb <> invalid
+        headers = {}
+        if req.headers <> invalid then headers.Append(req.headers)
+        headers["Host"] = fb.host
+        again = send(req, fb.via + "/api/v1", headers)
+        if again.code > 0
+            if m.global.seerrVia = "" then print "[Matinee] Seerr's name stopped resolving; going through "; fb.via
+            m.global.seerrVia = fb.via
+            result = again
+        end if
+    end if
+    m.top.response = result
+end sub
+
+function send(req as object, server as string, extra as dynamic) as object
     result = { ok: false, code: 0, data: invalid, error: "", tag: req.tag, cookie: "" }
 
     xfer = CreateObject("roUrlTransfer")
     port = CreateObject("roMessagePort")
     xfer.SetMessagePort(port)
 
-    url = req.server + req.path
+    url = server + req.path
     q = req.query
     if q <> invalid
         if q.Count() > 0
@@ -45,7 +65,6 @@ sub execute()
     if req.auth <> invalid
         if req.auth <> "" then xfer.AddHeader("Authorization", req.auth)
     end if
-    extra = req.headers
     if extra <> invalid
         for each k in extra
             xfer.AddHeader(k, toStr(extra[k]))
@@ -69,8 +88,7 @@ sub execute()
 
     if not started
         result.error = "request did not start"
-        m.top.response = result
-        return
+        return result
     end if
 
     msg = wait(20000, port)
@@ -91,8 +109,8 @@ sub execute()
         xfer.AsyncCancel()
         result.error = "timeout"
     end if
-    m.top.response = result
-end sub
+    return result
+end function
 
 function toStr(v as dynamic) as string
     t = type(v)
