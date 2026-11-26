@@ -259,7 +259,9 @@ sub buildRows()
             items = fresh
         end if
         if items <> invalid
-            if items.Count() >= m.minRow and items.Count() > 0
+            need = m.minRow
+            if d.tiles <> "" then need = 1
+            if items.Count() >= need and items.Count() > 0
                 row = root.CreateChild("ContentNode")
                 row.title = d.title
                 for each c in items
@@ -333,4 +335,102 @@ function seerrRegion(settings as dynamic) as string
         end for
     end if
     return "US"
+end function
+
+' ---------- Row queries (Discover and its categories) ----------
+
+' The streaming services offered as tiles, in this order, when Seerr's
+' region has them. Ids are TMDB watch providers.
+function serviceList() as object
+    return [
+        { id: 8, name: "Netflix" }
+        { id: 9, name: "Prime Video" }
+        { id: 337, name: "Disney+" }
+        { id: 1899, name: "Max" }
+        { id: 15, name: "Hulu" }
+        { id: 350, name: "Apple TV+" }
+        { id: 531, name: "Paramount+" }
+        { id: 386, name: "Peacock" }
+    ]
+end function
+
+' A service's Rows by genre. TMDB genre ids (the movie and TV lists
+' differ); 210024 is TMDB's anime keyword.
+function serviceGenreRows() as object
+    return [
+        { title: "Crime series", mt: "tv", id: "80" }
+        { title: "Comedy movies", mt: "movie", id: "35" }
+        { title: "Anime", mt: "tv", id: "", keyword: "210024" }
+        { title: "Action movies", mt: "movie", id: "28" }
+        { title: "Sci-fi and fantasy series", mt: "tv", id: "10765" }
+        { title: "Thrillers", mt: "movie", id: "53" }
+        { title: "Comedy series", mt: "tv", id: "35" }
+        { title: "Documentaries", mt: "movie", id: "99" }
+        { title: "Docuseries", mt: "tv", id: "99" }
+        { title: "Drama series", mt: "tv", id: "18" }
+        { title: "Horror movies", mt: "movie", id: "27" }
+        { title: "Kids", mt: "tv", id: "10762" }
+        { title: "Reality TV", mt: "tv", id: "10764" }
+        { title: "Romance movies", mt: "movie", id: "10749" }
+    ]
+end function
+
+sub addRow(defs as object, title as string, mediaType as string, base as object, extra as object)
+    q = { "page": "1" }
+    q.Append(base)
+    q.Append(extra)
+    path = "/discover/movies"
+    if mediaType = "tv" then path = "/discover/tv"
+    defs.Push({ title: title, path: path, query: q, mediaType: mediaType, tiles: "" })
+end sub
+
+' "2026-11-22", days from today.
+function isoDay(days as integer) as string
+    d = CreateObject("roDateTime")
+    d.FromSeconds(d.AsSeconds() + days * 86400)
+    return Left(d.ToISOString(), 10)
+end function
+
+function dateKey(mediaType as string) as string
+    if mediaType = "tv" then return "firstAirDate"
+    return "primaryReleaseDate"
+end function
+
+' The newest releases up to today, among titles a few people have scored
+' (sorting by popularity would only repeat the Popular Row).
+function recentQuery(mediaType as string) as object
+    q = { "voteCountGte": "20" }
+    q[dateKey(mediaType) + "Lte"] = isoDay(0)
+    if mediaType = "tv"
+        q["sortBy"] = "first_air_date.desc"
+    else
+        q["sortBy"] = "primary_release_date.desc"
+    end if
+    return q
+end function
+
+' Best scored, among titles enough people have scored.
+function topQuery() as object
+    return { "sortBy": "vote_average.desc", "voteCountGte": "300" }
+end function
+
+function upcomingQuery(mediaType as string) as object
+    q = {}
+    q[dateKey(mediaType) + "Gte"] = isoDay(1)
+    return q
+end function
+
+' Released between two years, best known first.
+function decadeQuery(mediaType as string, fromYear as string, toYear as string) as object
+    q = { "voteCountGte": "100" }
+    q[dateKey(mediaType) + "Gte"] = fromYear + "-01-01"
+    q[dateKey(mediaType) + "Lte"] = toYear + "-12-31"
+    return q
+end function
+
+' Well loved and from before 1990.
+function classicsQuery(mediaType as string) as object
+    q = { "sortBy": "vote_average.desc", "voteCountGte": "200" }
+    q[dateKey(mediaType) + "Lte"] = "1989-12-31"
+    return q
 end function

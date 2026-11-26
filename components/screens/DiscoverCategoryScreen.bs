@@ -2,9 +2,9 @@
 ' Discover (a Hero and Rows, from DiscoverHost.bs). A service is browsed
 ' like the service itself: popular, new and top rated, then Rows by genre
 ' (Crime series, Anime, Documentaries...), each filtered to that service.
-' A genre gets popular, new, top rated and coming soon. Rows Seerr has too
-' few titles for are left out, and no title repeats. Back returns to
-' Discover.
+' A genre gets popular, new, top rated and coming soon, then Rows of that
+' genre on each streaming service and by decade. Rows Seerr has too few
+' titles for are left out, and no title repeats. Back returns to Discover.
 
 sub init()
     m.heroLayer = m.top.findNode("heroLayer")
@@ -50,79 +50,37 @@ sub onCategory()
         if mt = "tv" then kind = "series"
         m.eyebrowPrefix = name + " " + kind
         q = { "genre": safeStr(cat.id) }
-        addRow(defs, "Popular", mt, q, {})
-        addRow(defs, "New", mt, q, recentQuery(mt))
-        addRow(defs, "Top rated", mt, q, topQuery())
-        addRow(defs, "Coming soon", mt, q, upcomingQuery(mt))
+        region = safeStr(cat.region)
+        if region = "" then region = "US"
+        ' The genre on each service, mixed in with the general Rows and
+        ' the decades, like a service's own genre page.
+        svcRows = []
+        for each sv in serviceList()
+            sq = { "watchProviders": sv.id.ToStr(), "watchRegion": region }
+            svcRows.Push({ title: "On " + sv.name, extra: sq })
+        end for
+        general = [
+            { title: "Popular", extra: {} }
+            { title: "New", extra: recentQuery(mt) }
+            { title: "Top rated", extra: topQuery() }
+            { title: "From the 2010s", extra: decadeQuery(mt, "2010", "2019") }
+            { title: "Coming soon", extra: upcomingQuery(mt) }
+            { title: "From the 2000s", extra: decadeQuery(mt, "2000", "2009") }
+            { title: "From the " + Chr(8217) + "90s", extra: decadeQuery(mt, "1990", "1999") }
+            { title: "Classics", extra: classicsQuery(mt) }
+        ]
+        for i = 0 to general.Count() - 1
+            g = general[i]
+            addRow(defs, g.title, mt, q, g.extra)
+            ' After the first two general Rows, one service Row after each.
+            if i >= 1 and i - 1 < svcRows.Count() then addRow(defs, svcRows[i - 1].title, mt, q, svcRows[i - 1].extra)
+        end for
+        for j = general.Count() - 1 to svcRows.Count() - 1
+            addRow(defs, svcRows[j].title, mt, q, svcRows[j].extra)
+        end for
     end if
     fetchRows(defs)
 end sub
-
-' A service's Rows by genre. TMDB genre ids (the movie and TV lists
-' differ); 210024 is TMDB's anime keyword.
-function serviceGenreRows() as object
-    return [
-        { title: "Crime series", mt: "tv", id: "80" }
-        { title: "Comedy movies", mt: "movie", id: "35" }
-        { title: "Anime", mt: "tv", id: "", keyword: "210024" }
-        { title: "Action movies", mt: "movie", id: "28" }
-        { title: "Sci-fi and fantasy series", mt: "tv", id: "10765" }
-        { title: "Thrillers", mt: "movie", id: "53" }
-        { title: "Comedy series", mt: "tv", id: "35" }
-        { title: "Documentaries", mt: "movie", id: "99" }
-        { title: "Docuseries", mt: "tv", id: "99" }
-        { title: "Drama series", mt: "tv", id: "18" }
-        { title: "Horror movies", mt: "movie", id: "27" }
-        { title: "Kids", mt: "tv", id: "10762" }
-        { title: "Reality TV", mt: "tv", id: "10764" }
-        { title: "Romance movies", mt: "movie", id: "10749" }
-    ]
-end function
-
-sub addRow(defs as object, title as string, mediaType as string, base as object, extra as object)
-    q = { "page": "1" }
-    q.Append(base)
-    q.Append(extra)
-    path = "/discover/movies"
-    if mediaType = "tv" then path = "/discover/tv"
-    defs.Push({ title: title, path: path, query: q, mediaType: mediaType, tiles: "" })
-end sub
-
-' "2026-11-22", days from today.
-function isoDay(days as integer) as string
-    d = CreateObject("roDateTime")
-    d.FromSeconds(d.AsSeconds() + days * 86400)
-    return Left(d.ToISOString(), 10)
-end function
-
-function dateKey(mediaType as string) as string
-    if mediaType = "tv" then return "firstAirDate"
-    return "primaryReleaseDate"
-end function
-
-' The newest releases up to today, among titles a few people have scored
-' (sorting by popularity would only repeat the Popular Row).
-function recentQuery(mediaType as string) as object
-    q = { "voteCountGte": "20" }
-    q[dateKey(mediaType) + "Lte"] = isoDay(0)
-    if mediaType = "tv"
-        q["sortBy"] = "first_air_date.desc"
-    else
-        q["sortBy"] = "primary_release_date.desc"
-    end if
-    return q
-end function
-
-' Best scored, among titles enough people have scored.
-function topQuery() as object
-    return { "sortBy": "vote_average.desc", "voteCountGte": "300" }
-end function
-
-function upcomingQuery(mediaType as string) as object
-    q = {}
-    q[dateKey(mediaType) + "Gte"] = isoDay(1)
-    return q
-end function
 
 function makeTiles(_d as object, _data as dynamic) as object
     return []

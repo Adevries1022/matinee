@@ -1,7 +1,9 @@
 ' Discover: browse Seerr for things to request (Search is for a title you
 ' already know). A Hero shows the Focused title; Rows below hold trending,
-' popular and coming-soon titles, then streaming services and genres, which
-' open a Discover category of their own. OK on a title opens its Request
+' popular, coming-soon and top rated titles, streaming services, Rows by
+' genre (Crime series, Anime...) and genre tiles; services and genres open
+' a Discover category of their own. Thin Rows are left out and no title
+' repeats. OK on a title opens its Request
 ' Details. The Hero and Rows live in DiscoverHost.bs.
 
 sub init()
@@ -13,6 +15,8 @@ sub init()
     m.empty.translation = [t.leftPad, 270]
 
     discoverInit()
+    m.minRow = 6
+    m.dedupe = true
     m.top.observeField("focusedChild", "onFocusChanged")
     m.global.observeField("seerrState", "onSeerrState")
 
@@ -40,21 +44,6 @@ sub onRefresh()
     if m.global.seerrState = "ready" and not m.loaded then start()
 end sub
 
-' The streaming services offered as tiles, in this order, when Seerr's
-' region has them. Ids are TMDB watch providers.
-function serviceList() as object
-    return [
-        { id: 8, name: "Netflix" }
-        { id: 9, name: "Prime Video" }
-        { id: 337, name: "Disney+" }
-        { id: 1899, name: "Max" }
-        { id: 15, name: "Hulu" }
-        { id: 350, name: "Apple TV+" }
-        { id: 531, name: "Paramount+" }
-        { id: 386, name: "Peacock" }
-    ]
-end function
-
 sub onSettings(event as object)
     res = event.getData()
     settings = invalid
@@ -63,11 +52,18 @@ sub onSettings(event as object)
     m.region = region
     defs = []
     defs.Push({ title: "Trending", path: "/discover/trending", query: {}, mediaType: "", tiles: "" })
-    defs.Push({ title: "Popular movies", path: "/discover/movies", query: {}, mediaType: "movie", tiles: "" })
     defs.Push({ title: "Popular series", path: "/discover/tv", query: {}, mediaType: "tv", tiles: "" })
+    defs.Push({ title: "Popular movies", path: "/discover/movies", query: {}, mediaType: "movie", tiles: "" })
     defs.Push({ title: "Streaming services", path: "/watchproviders/movies", query: { "watchRegion": region }, tiles: "services", mediaType: "" })
     defs.Push({ title: "Coming soon: movies", path: "/discover/movies/upcoming", query: {}, mediaType: "movie", tiles: "" })
     defs.Push({ title: "Coming soon: series", path: "/discover/tv/upcoming", query: {}, mediaType: "tv", tiles: "" })
+    addRow(defs, "Top rated series", "tv", {}, topQuery())
+    addRow(defs, "Top rated movies", "movie", {}, topQuery())
+    for each g in serviceGenreRows()
+        extra = { "genre": g.id }
+        if g.id = "" then extra = { "keywords": g.keyword }
+        addRow(defs, g.title, g.mt, {}, extra)
+    end for
     defs.Push({ title: "Movie genres", path: "/discover/genreslider/movie", query: {}, tiles: "genres", mediaType: "movie" })
     defs.Push({ title: "Series genres", path: "/discover/genreslider/tv", query: {}, tiles: "genres", mediaType: "tv" })
     fetchRows(defs)
@@ -183,7 +179,7 @@ sub tileSelected(c as object)
     if c.itemType = "discover-service"
         m.top.navigate = { action: "discoverCategory", category: { kind: "service", id: c.itemId, name: c.heading, region: m.region } }
     else if Left(c.itemType, 15) = "discover-genre-"
-        m.top.navigate = { action: "discoverCategory", category: { kind: "genre", id: c.itemId, name: c.heading, mediaType: Mid(c.itemType, 16) } }
+        m.top.navigate = { action: "discoverCategory", category: { kind: "genre", id: c.itemId, name: c.heading, mediaType: Mid(c.itemType, 16), region: m.region } }
     end if
 end sub
 
